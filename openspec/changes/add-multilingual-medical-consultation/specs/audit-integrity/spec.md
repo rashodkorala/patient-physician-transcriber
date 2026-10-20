@@ -7,7 +7,7 @@ Guarantees that transcripts, amendments, sign-offs, and accesses cannot be alter
 ## ADDED Requirements
 
 ### Requirement: Append-only audit trail
-The system SHALL record every consent event, transcript creation, amendment, reattribution, sign-off, export, deletion, and access as an append-only audit entry with actor, action, target, and timestamp.
+The system SHALL record every consent event, transcript creation, amendment, reattribution, human interpreter hand-off, sign-off, export, deletion, and access as an append-only audit entry with actor, action, target, and timestamp.
 
 #### Scenario: Amendment recorded
 - **WHEN** a patient amends a segment
@@ -32,7 +32,7 @@ The system SHALL compute a content fingerprint for each finalised transcript and
 - **THEN** the system reports whether it matches the finalised record
 
 ### Requirement: Patient-visible access log
-The system SHALL show the patient a list of every person and system that viewed, exported, or processed their visit data, with role and time.
+The system SHALL show the patient, in their language, a list of every person and system that viewed, exported, or processed their visit data, including human interpreters and translation processors, with role and time.
 
 #### Scenario: Viewing the access log
 - **WHEN** the patient opens the access log for a visit

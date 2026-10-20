@@ -1,13 +1,17 @@
 schema: spec-driven
 
 context: |
-  Product: trust-first AI transcription for patient and physician consultations.
-  Baseline benchmark: Abridge (Linked Evidence). Research: docs/product-research.md.
-  Core principle: the patient is a verifier of the record, not a passive subject.
-  Every statement in a clinical note must be traceable to who said it (patient, physician, companion) or marked as AI inference.
-  Compliance: HIPAA (US), PHIPA and PIPEDA (Canada), GDPR and UK GDPR. Vendors handling PHI need a BAA or DPA.
+  Product: AI medical interpreter and verified record for patient and physician consultations across a language barrier.
+  Primary market: Canada (high immigration and linguistic diversity). English and French are official languages; French-language service rights apply in Quebec, New Brunswick, and designated areas of Ontario and elsewhere.
+  First-version languages: English, French, Mandarin, Cantonese, Punjabi, Urdu, Arabic, Farsi, Tagalog, Spanish, Portuguese, Sinhala, and Tamil.
+  In-room setup: a large shared screen (TV or monitor) shows live bilingual captions to both parties; translated speech is also spoken aloud.
+  Baseline benchmarks: Abridge (Linked Evidence) for the record; No Barrier and Care to Translate for interpretation. Research: docs/product-research.md.
+  Core principle: the patient is a verifier of the record, in their own language, not a passive subject.
+  Every statement in a clinical note must be traceable to who said it, in which language, and how it was translated, or marked as AI inference.
+  Machine translation quality varies by language; low-resource languages and high-risk moments must offer a qualified human interpreter.
+  Compliance: PIPEDA, PHIPA (Ontario), Quebec Law 25, and other provincial health privacy acts; HIPAA, GDPR, and UK GDPR for later markets. Vendors handling PHI need a DPA or BAA, and Canadian data residency must be available.
   The physician remains the final author of the medical record.
-  Tone coaching output is private to the physician and never shown to the patient or employer by default.
+  Communication feedback is private to the physician and never shown to the patient or employer by default.
   Stack is not yet chosen; designs should name options and trade-offs rather than assume one.
   Write all artifacts in UK English with the Oxford comma; avoid em-dashes.
 

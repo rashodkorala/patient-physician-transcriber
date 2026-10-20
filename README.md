@@ -1,22 +1,25 @@
 # Patient-Physician Transcriber
 
-A trust-first AI transcription product for medical consultations. The patient and the physician can both see who said what, verify their own words, and check that the record has not been altered.
+An AI medical interpreter with a verified record, built first for Canada. A patient and a physician who do not share a language see their conversation live in both languages on a shared in-room screen, hear each translation spoken aloud, and can call in a human interpreter at any time. Afterwards, both verify the bilingual record in their own language.
 
-- Market research and baseline choice (Abridge): [`docs/product-research.md`](docs/product-research.md)
+- Market research, language data, and baseline choices: [`docs/product-research.md`](docs/product-research.md)
 - Project context and constraints: [`openspec/config.yaml`](openspec/config.yaml)
-- First change under review: [`openspec/changes/add-trust-first-transcription`](openspec/changes/add-trust-first-transcription)
+- First change under review: [`openspec/changes/add-multilingual-medical-consultation`](openspec/changes/add-multilingual-medical-consultation)
+
+First-version languages: English, French, Mandarin, Cantonese, Punjabi, Urdu, Arabic, Farsi, Tagalog, Spanish, Portuguese, Sinhala, and Tamil.
 
 ## Core capabilities
 
 | Capability | What it guarantees |
 |---|---|
-| `consent-management` | Per-visit, granular, revocable consent; off-the-record pause; retention notice |
-| `speaker-attributed-transcription` | Every segment labelled patient, physician, companion, or unknown, with confidence |
-| `patient-verification` | Patient confirms or corrects their words; physician signs off; originals preserved |
-| `note-provenance` | Every note sentence linked to its source and tagged as stated or AI inference |
+| `medical-interpretation` | Live two-way interpretation on a shared screen; glossary; read-back of doses; comprehension check; human interpreter hand-off |
+| `consent-management` | Consent and retention notice in the patient's language; granular, revocable; off-the-record pause |
+| `speaker-attributed-transcription` | Bilingual segments with speaker role, original text, translation, and confidence |
+| `patient-verification` | Patient verifies in their own language via back-translation; physician signs off; originals preserved |
+| `note-provenance` | Every note sentence linked to original speech and translation, tagged as stated or AI inference |
 | `audit-integrity` | Hash-chained audit trail, verifiable copies, patient-visible access log |
-| `tone-coaching` | Private, opt-in, post-visit communication feedback for physicians |
-| `patient-summary` | Plain-language summary in the patient's language with a "questions answered" list |
+| `communication-coaching` | Private, opt-in feedback on what was lost or misunderstood in translation |
+| `patient-summary` | Plain-language summary in the patient's language, read aloud on request, with exact doses |
 
 ## Spec-driven workflow (OpenSpec)
 
@@ -30,5 +33,6 @@ npx @fission-ai/openspec@1.14.3 validate <change> --strict
 
 In Claude Code:
 - `/opsx:propose "<idea>"` creates a new change (proposal, specs, design, tasks).
+- `/opsx:update` revises an existing change and keeps its artifacts coherent.
 - `/opsx:apply` implements the tasks of an agreed change.
 - `/opsx:archive` merges the change's specs into `openspec/specs/` once shipped.
