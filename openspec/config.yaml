@@ -1,0 +1,43 @@
+schema: spec-driven
+
+context: |
+  Product: trust-first AI transcription for patient and physician consultations.
+  Baseline benchmark: Abridge (Linked Evidence). Research: docs/product-research.md.
+  Core principle: the patient is a verifier of the record, not a passive subject.
+  Every statement in a clinical note must be traceable to who said it (patient, physician, companion) or marked as AI inference.
+  Compliance: HIPAA (US), PHIPA and PIPEDA (Canada), GDPR and UK GDPR. Vendors handling PHI need a BAA or DPA.
+  The physician remains the final author of the medical record.
+  Tone coaching output is private to the physician and never shown to the patient or employer by default.
+  Stack is not yet chosen; designs should name options and trade-offs rather than assume one.
+  Write all artifacts in UK English with the Oxford comma; avoid em-dashes.
+
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+# Example:
+#   context: |
+#     Designs and tasks must cover Windows, macOS, and Linux
+#     Write all artifacts in Spanish
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
