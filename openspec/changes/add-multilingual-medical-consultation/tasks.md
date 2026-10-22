@@ -1,20 +1,38 @@
 # Tasks
 
+> Parked roadmap: do not apply until a human unparks it after a successful demo night and group 0 is complete. The current product is `demo-night-mvp`; its TDRs do not bind this change.
+
+## 0. Product decision gate
+
+TDRs: none accepted for this change yet
+
+- [ ] 0.0 After demo night, a human decides whether the demo worked well enough to unpark this change; verify the decision is recorded in this file
+- [ ] 0.1 Draft product TDRs for architecture, live session channel, storage, pipeline orchestration, LLM provider and models, and knowledge base retrieval, each listing `add-multilingual-medical-consultation` in `related_changes`; verify `python3 scripts/check_tdr.py` passes
+- [ ] 0.2 Draft CDRs for every boundary between screens and server; verify each references its parent ADR
+- [ ] 0.3 A human decision owner accepts or rejects each record; verify the review queue shows none of them pending
+- [ ] 0.4 Replace the `TDRs:` line of every task group below with the accepted record ids; verify no group still says pending
+
 ## 1. Foundation
 
-- [ ] 1.1 Choose the stack per design decision 9, scaffold the repository (shared screen, physician controller, patient portal, backend, database migrations), and verify the app boots locally and CI runs an empty test suite
+TDRs: pending product records (group 0)
+
+- [ ] 1.1 Scaffold the repository per the accepted product architecture TDR (shared screen, physician controller, patient portal, backend, database migrations), and verify the app boots locally and CI runs an empty test suite
 - [ ] 1.2 Define the core data model (patient, physician, visit, consent, bilingual segment, amendment, note sentence, summary, audit entry, interpreter hand-off) and verify migrations apply cleanly to an empty database
 - [ ] 1.3 Add authentication with patient and physician roles and verify role-based access tests pass
 - [ ] 1.4 Add internationalisation for all thirteen languages including right-to-left rendering, and verify UI snapshots for English, Arabic, Punjabi, and Sinhala
 
 ## 2. Language benchmark and tiers
 
+TDRs: pending product records (group 0)
+
 - [ ] 2.1 Write a fixed set of consultation scripts covering history, examination, diagnosis, medications, and consent, and verify clinical review sign-off
-- [ ] 2.2 Benchmark at least two speech recognition, translation, and speech synthesis options per language with a bilingual clinician panel, and record scores in docs/language-benchmark.md
+- [ ] 2.2 Benchmark at least two speech recognition, translation, and speech synthesis options per language with a bilingual clinician panel, record scores in docs/language-benchmark.md, and draft the product speech vendor TDR from the results for human acceptance before group 5
 - [ ] 2.3 Assign a quality tier and confidence threshold to each language from the benchmark, store them as configuration, and verify each language loads its tier
 - [ ] 2.4 Build the medical glossary for each language pair from the benchmark scripts and verify glossary terms are used in translation tests
 
 ## 3. Audit integrity
+
+TDRs: pending product records (group 0)
 
 - [ ] 3.1 Implement the append-only, hash-chained audit log and verify tests show an intact chain passes and an altered or deleted entry is detected
 - [ ] 3.2 Implement content fingerprints and the "verify my copy" endpoint, and verify matching and modified copies are reported correctly
@@ -24,12 +42,16 @@
 
 ## 4. Consent management
 
+TDRs: pending product records (group 0)
+
 - [ ] 4.1 Build the language picker and consent screen with scope options and retention notice in all thirteen languages, with read-aloud, and verify consent cannot be given before the notice is shown
 - [ ] 4.2 Gate capture on a valid consent record and verify capture cannot start without one
 - [ ] 4.3 Implement the off-the-record pause with the bilingual paused notice on the shared screen, and verify no audio is transmitted during a pause
 - [ ] 4.4 Implement the four consent scopes, including interpret-only with no retention, and revocation, and verify data is removed and audit entries are written
 
 ## 5. Live medical interpretation
+
+TDRs: pending product records (group 0)
 
 - [ ] 5.1 Build the shared screen view with side-by-side bilingual captions, speaker labels, and correct script and direction, and verify readability at 3 metres on a 40-inch display
 - [ ] 5.2 Build the physician controller (start, pause, mark high risk, comprehension check, call interpreter) and verify each control updates the shared screen
@@ -42,12 +64,16 @@
 
 ## 6. Bilingual transcription
 
+TDRs: pending product records (group 0)
+
 - [ ] 6.1 Implement per-segment language identification, diarisation, and role assignment (patient, physician, companion, interpreter, unknown), and verify on a three-person fixture
 - [ ] 6.2 Store original text, translation, back-translation, and all confidences per segment, and verify an unexpected language is flagged
 - [ ] 6.3 Implement low-confidence flagging with tier thresholds and the finalisation block, and verify a flagged segment prevents finalisation
 - [ ] 6.4 Build the transcript view with each viewer's language first and verify patient and physician see the same segments
 
 ## 7. Patient verification
+
+TDRs: pending product records (group 0)
 
 - [ ] 7.1 Build patient review in the patient's language with back-translation, confirm, correct, and add-context actions, and verify amendments never overwrite originals
 - [ ] 7.2 Build physician review of translations with back-translation and amendment, and verify a corrected translation is sent to the patient
@@ -56,6 +82,8 @@
 
 ## 8. Note provenance
 
+TDRs: pending product records (group 0)
+
 - [ ] 8.1 Implement grounded note generation in English or French with citations and provenance tags, and verify output schema validation
 - [ ] 8.2 Implement the citation post-check and translation-unverified marking, and verify with adversarial fixtures
 - [ ] 8.3 Build the note view with click-to-source showing original and translation, and verify links resolve correctly
@@ -63,17 +91,23 @@
 
 ## 9. Patient summary
 
+TDRs: pending product records (group 0)
+
 - [ ] 9.1 Generate the summary in the patient's language with reading level, language switch, and read-aloud, and verify output for Mandarin, Punjabi, and Arabic
 - [ ] 9.2 Implement deterministic critical value matching and verify a summary with a mismatched dose is refused
 - [ ] 9.3 Implement the "questions answered" list, source links, and physician approval with back-translation, and verify a pending summary is hidden from the patient
 
 ## 10. Communication coaching
 
+TDRs: pending product records (group 0)
+
 - [ ] 10.1 Implement physician opt-in and the private feedback store, and verify another user is denied access
 - [ ] 10.2 Implement poor-translation, lost-tone, misunderstanding, and speaking-balance signals linked to segments, and verify on a fixture consultation
 - [ ] 10.3 Build the feedback view and verify feedback is absent from note and summary exports
 
 ## 11. Integration and pilot readiness
+
+TDRs: pending product records (group 0)
 
 - [ ] 11.1 Run an end-to-end test from language choice and consent through live interpretation, escalation, transcript, patient review, sign-off, note export, and summary release, and verify the audit chain is intact
 - [ ] 11.2 Run a per-language translation and hallucination audit on pilot-like sessions and record rates against the success metrics

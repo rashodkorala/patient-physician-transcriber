@@ -2,7 +2,9 @@
 
 ## Context
 
-Greenfield project with no existing code. Motivation is in `proposal.md` (Why) and `docs/product-research.md`. Requirements live in the eight spec deltas under `specs/`. The stack is not yet chosen, so decisions below name the preferred option and the alternatives.
+> **Status: parked roadmap.** The current product is `demo-night-mvp`. Do not apply this change yet. It moves to product only if the demo works really well: after demo night (19 November 2026), a human decides whether to unpark it, and the demo's records may then be proposed again as product TDRs, with rehearsal and demo-night evidence. The accepted decision records in `openspec/tdr/` are scoped to `demo-night-mvp` (their `related_changes`) and do **not** bind this change, and this change has no accepted records of its own. The decisions below are design intent, not settled choices: before any task beyond group 0 starts, each technical choice must be recorded as a product TDR listing this change and accepted by a human (see task group 0).
+
+Motivation is in `proposal.md` (Why) and `docs/product-research.md`. Requirements live in the eight spec deltas under `specs/`. Stack, vendor, and storage choices are deliberately left open (see Open Questions); the demo's choices may be proposed again as product TDRs, but they are not inherited.
 
 Constraints that shape the design:
 - Personal health information throughout: every processor needs a DPA (and a BAA for any US processing), and Canadian data residency must be available.
@@ -45,7 +47,7 @@ The system translates after each utterance ends, detected by voice activity and 
 3. Translation uses an LLM constrained by the medical glossary for the language pair, returning the translation plus a back-translation.
 4. Confidence combines recognition confidence, a back-translation similarity score, and critical value agreement between original and translation.
 5. Text-to-speech speaks the translation once checks pass or the speaker has confirmed read-back.
-- *Options for speech recognition:* Azure Speech, Google Chirp, AWS Transcribe, Deepgram, AssemblyAI, or self-hosted Whisper. *For translation:* a frontier LLM with glossary prompting, Google Translation LLM, or DeepL, chosen per language by benchmark. *For speech:* Azure Neural TTS or Google TTS; both cover all thirteen languages, but Sinhala voice quality must be checked.
+- *Vendors:* not decided here. Speech recognition, translation, and speech synthesis vendors per language are a product TDR drafted from the benchmark in task group 2 and accepted before task group 5 (see Open Questions).
 - *Why:* separating stages lets us choose the best vendor per language and insert safety checks.
 
 ### 4. Language quality tiers from our own benchmark
@@ -69,8 +71,8 @@ Each audit entry stores the hash of the previous entry; finalised transcripts, n
 - *Alternative considered:* a blockchain. Rejected for cost, latency, and risk; only hashes leave the system.
 
 ### 9. Application shape
-A web application for the shared screen (kiosk), physician controller, and patient portal, plus backend services for live sessions (WebSocket or WebRTC), the interpretation pipeline, note and summary generation, and audit. Postgres for relational data, object storage for audio, both in a Canadian region.
-- *Options:* TypeScript (Next.js) front end with a Python backend for the speech pipeline is the leading choice; final choice in the first apply session.
+Surfaces: the shared screen (kiosk), physician controller, and patient portal. Backend responsibilities: live sessions, the interpretation pipeline, note and summary generation, and audit, with all data in a Canadian region.
+- *Not decided here:* languages and frameworks, the live session channel, relational and audio storage, and pipeline orchestration are product TDRs accepted in task group 0 (see Open Questions).
 
 ## Risks / Trade-offs
 
@@ -90,7 +92,15 @@ Not applicable: greenfield. Rollout is a single-clinic pilot in a high-diversity
 
 ## Open Questions
 
-- Which vendor combination performs best per language in our benchmark (decided during apply; does not change the specs).
+**Decisions required as product TDRs before apply** (none of the demo's records carry over automatically):
+- Architecture: languages and frameworks for front end and backend (group 0).
+- Live session channel between screens and server (group 0).
+- Storage: relational data and audio, in a Canadian region (group 0).
+- Translation pipeline orchestration, LLM provider and models, and knowledge base retrieval (group 0).
+- Speech recognition, translation, and synthesis vendors per language, from the benchmark (drafted in group 2, accepted before group 5).
+- Contracts for every boundary between screens and server (CDRs, group 0).
+
+**Other open questions:**
 - Default review window (proposed: 7 days) and starting confidence thresholds per tier, tuned in the pilot.
 - Pilot province and clinic (affects residency and French-language settings, not the specs).
 - Which remote interpreting provider to contract for escalation.

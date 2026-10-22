@@ -1,5 +1,7 @@
 # Proposal
 
+> **Status: parked roadmap.** The current product is `demo-night-mvp`. This change is not bound by the demo's decision records and must not be applied until its own product TDRs are accepted (tasks group 0). It moves to product only if the demo works really well: after demo night (19 November 2026), a human decides whether to unpark it, and the demo's records may then be proposed again as product TDRs, with rehearsal and demo-night evidence.
+
 ## Why
 
 In Canada, most recent immigrants have a mother tongue other than English or French, and few physicians speak the most common non-official languages. Patients often rely on family members, frequently children, to interpret, which leads to misunderstanding, less disclosure, and worse care. AI interpreters exist but leave no verified record, and AI scribes produce a record but do not interpret. See `docs/product-research.md`.

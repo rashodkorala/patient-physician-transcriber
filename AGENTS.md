@@ -41,6 +41,10 @@ This project is built with **spec-driven development** (OpenSpec) and **Decision
 | A component-level algorithm, library, or pattern | IDR |
 | A temporary or experimental choice | TDM (with `expires`) |
 
+## Decision scope
+
+A TDR binds only the OpenSpec changes listed in its `related_changes`. When applying a change, treat as decided only the records that list it. Never carry another change's decisions over silently, and never re-decide them: a missing decision is drafted as a proposed TDR for this change and waits for a human. `add-multilingual-medical-consultation` is a parked roadmap with no accepted records of its own; do not apply it. It moves to product only if the demo works really well, by a human decision after demo night.
+
 ## Before you implement
 
 1. Read `openspec/tdr/index.md`, then the records listed on the task group's `TDRs:` line, top down (MDD, ADR, CDR, EDR, IDR). Use each record's `ai_context`.
