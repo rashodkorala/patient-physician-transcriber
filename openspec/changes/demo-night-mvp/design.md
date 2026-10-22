@@ -29,9 +29,11 @@ Constraints: one demo laptop plus a TV and optionally a phone on the same networ
                          |            -- hash_chain  (IDR-003)
                          |            -- speech_token (ADR-005)
               turn graph (ADR-004)
-     analyse -> retrieve -> translate -> verify --+--> done
+     analyse -> retrieve -> translate -> verify --+--> done (final or readback_required)
                               ^                   |
-                              +--- retry once ----+--> escalate (ADR-003)
+                              +--- retry once ----+--> block (critical value mismatch)
+                                                  |
+                                                  +--> escalate (confidence or tone, ADR-003)
                          |
       knowledge base (ADR-002; retrieval per IDR-002)
       glossary | tone and culture | empathy phrases | condition explainers
@@ -46,7 +48,17 @@ The controller has "Physician speaking" and "Patient speaking" buttons. The brow
 - **analyse**: emotion, certainty, register, intent, and critical values (deterministic extractor for numbers and units, model for medication names).
 - **retrieve**: glossary hits by exact and fuzzy match; tone, culture, and empathy entries for the listener's language by vector search (IDR-002).
 - **translate**: model call with retrieved context and fixed rules: keep certainty, keep warmth, use the respectful register, explain jargon plainly, never change critical values.
-- **verify**: back-translation, deterministic critical value comparison, and a tone check (certainty and warmth preserved). Pass: `final`, or `readback_required` for physician turns with critical values. Fail: retry once, then escalate.
+- **verify**: back-translation, deterministic critical value comparison, and a tone check (certainty and warmth preserved). Any failure triggers one retry (with mismatched values pinned in the prompt); the outcome after that is one of the `TurnResult.status` values in CDR-002:
+
+  | Verify result | Status | Spoken? | What the screens do |
+  |---|---|---|---|
+  | All critical values match, physician turn has critical values | `readback_required` | After physician confirms | Values highlighted in both languages; confirm or reject |
+  | All checks pass, no critical values needing read-back | `final` | Yes | Caption and speech |
+  | Critical value still mismatched after one re-translation | `blocked` | Never | Controller shows mismatched values; speaker asked to repeat or rephrase |
+  | Confidence or tone check still failing after one retry | `escalated` | No | Marked uncertain; human interpreter offered (ADR-003) |
+  | Physician rejects highlighted values at read-back | (turn discarded) | No | Speaker asked to repeat (covers recognition errors) |
+
+  A critical value mismatch never escalates on its own; the interpreter button stays available throughout.
 - Each node emits `turn.status`; the result is a `TurnResult` (CDR-002).
 - Empathy nudges (patient turns with worry, embarrassment, pain, or confusion) come from a separate chain using the empathy bank, sent only to the controller.
 

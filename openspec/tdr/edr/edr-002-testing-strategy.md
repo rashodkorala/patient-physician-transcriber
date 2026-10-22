@@ -39,7 +39,7 @@ Automated tests use mocked models; translation tone quality is checked by the Pu
 
 ## Decision
 
-pytest with a fake chat model for the turn graph (retry and escalate branches, glossary terms reach the prompt, critical values preserved). Deterministic tests for the hash chain and critical value matcher. A tone set of ten scripted physician lines (bad news, reassurance, sensitive questions) rated 1 to 5 by native speakers for accuracy, respect, and warmth each week. Latency logged for every turn; target under 3 seconds.
+pytest with a fake chat model for the turn graph (pass, retry, block, and escalate branches as defined in CDR-002, glossary terms reach the prompt, critical values preserved). Deterministic tests for the hash chain and critical value matcher. A tone set of ten scripted physician lines (bad news, reassurance, sensitive questions) rated 1 to 5 by native speakers for accuracy, respect, and warmth each week. Latency logged for every turn; target under 3 seconds.
 
 ## Alternatives Considered
 
@@ -61,3 +61,4 @@ pytest with a fake chat model for the turn graph (retry and escalate branches, g
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-22, rashodkorala: Amended: turn graph tests cover the block branch. Recorded by Claude (agent) at rashodkorala's explicit request.

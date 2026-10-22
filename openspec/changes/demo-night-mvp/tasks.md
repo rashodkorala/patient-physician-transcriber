@@ -27,10 +27,10 @@ TDRs: ADR-002, ADR-003, ADR-004, ADR-006, IDR-002, CDR-002, EDR-002
 
 - [ ] 2.1 Write knowledge base content for the demo script (glossary, tone guides, empathy bank, condition explainer) with the native speakers; verify each file has a reviewer noted
 - [ ] 2.2 Build the Chroma index and retrieval with exact-match glossary lookup; verify retrieval tests for terms and emotions pass offline
-- [ ] 2.3 Implement the LangGraph turn graph (analyse, retrieve, translate, verify, retry, escalate) with status events; verify graph tests with a mocked model cover pass, retry, and escalate
+- [ ] 2.3 Implement the LangGraph turn graph (analyse, retrieve, translate, verify, retry, block, escalate) with status events; verify graph tests with a mocked model cover pass, retry, block, and escalate (CDR-002 status table)
 - [ ] 2.4 Add tone labels to captions; verify each caption shows at least one label
 - [ ] 2.5 Implement empathy nudges on `/control` only; verify `/screen` never receives `empathy.nudge`
-- [ ] 2.6 Implement critical value read-back; verify a mismatched dose blocks speech in tests and live
+- [ ] 2.6 Implement critical value read-back and blocking; verify a dose still mismatched after one retry is blocked, never spoken, and the speaker is asked to repeat, and a matched dose waits for physician confirmation, in tests and live
 - [ ] 2.7 Run the ten-line tone set with both speakers; record ratings in docs/tone-ratings.md and verify average respect and warmth of 4 or more
 
 ## 3. Week 3 (6 to 12 Nov): remaining demo beats

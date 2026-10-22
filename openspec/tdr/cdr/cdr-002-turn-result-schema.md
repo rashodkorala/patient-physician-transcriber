@@ -18,7 +18,10 @@ ai_context:
     - "Pydantic model TurnResult on the server; matching TypeScript type in web/lib/contracts.ts"
   validation_rules:
     - "criticalValues.matched is deterministic"
-    - "status is readback_required whenever a physician turn has critical values"
+    - "status is readback_required only when a physician turn has critical values and every one matches"
+    - "status is blocked when any critical value is still unmatched after one re-translation"
+    - "blocked turns are never spoken and never trigger automatic escalation"
+    - "status is escalated only for confidence or tone failures after one retry"
 affects: [server/graph/turn_state.py, web/lib/contracts.ts]
 implementation_refs: []
 test_refs: []
@@ -50,6 +53,16 @@ Adopt the schema below as TurnResult version 1.
 
 Produced by the turn graph (ADR-004) for every utterance and carried in `turn.result`. Also returned by `POST /api/turns/{turnId}` for debugging.
 
+Any verify failure triggers one retry, with mismatched critical values pinned in the prompt. The outcome after that is exactly one status:
+
+| Verify result | Status | Spoken? | What the screens do |
+|---|---|---|---|
+| All critical values match, physician turn has critical values | `readback_required` | After physician confirms | Values highlighted in both languages; confirm or reject |
+| All checks pass, no critical values needing read-back | `final` | Yes | Caption and speech |
+| Critical value still mismatched after one re-translation | `blocked` | Never | Controller shows mismatched values; speaker asked to repeat or rephrase |
+| Confidence or tone check still failing after one retry | `escalated` | No | Marked uncertain; human interpreter offered (ADR-003) |
+| Physician rejects highlighted values at read-back | (turn discarded, via `turn.readback_reject` in CDR-001) | No | Speaker asked to repeat (covers recognition errors) |
+
 ## Data Schemas
 
 ```json
@@ -67,19 +80,23 @@ Produced by the turn graph (ADR-004) for every utterance and carried in `turn.re
   "glossaryUsed": [{ "term": "string", "translation": "string", "explanation": "string" }],
   "criticalValues": [{ "kind": "dose | unit | frequency | date | number | medication", "source": "string", "translated": "string", "matched": true }],
   "confidence": 0.0,
-  "status": "final | readback_required | escalated",
+  "status": "final | readback_required | blocked | escalated",
   "attempts": 1
 }
 ```
-`confidence` is 0 to 1. `criticalValues[].matched` is computed deterministically, not by the model.
+`confidence` is 0 to 1. `criticalValues[].matched` is computed deterministically, not by the model. `attempts` is 1 or 2 (one retry at most). When `status` is `blocked`, at least one `criticalValues[].matched` is `false`; otherwise every entry is `true`.
 
 ## Evolution Strategy
 
-Additive fields are non-breaking. Enum changes or removals need a superseding CDR.
+Additive fields are non-breaking. Before the contract is first implemented (`implementation_refs` empty), it may be amended in place with a dated review note from the decision owner. After that, enum changes or removals need a superseding CDR.
 
 ## Testing Requirements
 
-Pydantic validation tests with fixtures; a TypeScript type test against a JSON fixture; a test that a mismatched dose yields `matched: false` and `status: readback_required`.
+Pydantic validation tests with fixtures and a TypeScript type test against a JSON fixture, plus:
+- a dose mismatched on the first attempt and matched on the retry yields `attempts: 2`, all `matched: true`, and `status: readback_required` for a physician turn;
+- a dose mismatched on both attempts yields `matched: false` and `status: blocked`;
+- a `blocked` result never reaches speech synthesis and never emits `interpreter.escalation`;
+- a confidence or tone failure on both attempts yields `status: escalated`.
 
 ## Consequences
 
@@ -95,3 +112,4 @@ Code carries `@contract TurnResult` and `@implements CDR-002: Turn result schema
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-22, rashodkorala: Amended in place before implementation: added `blocked` status and the single outcome table, so a critical value still mismatched after one re-translation is never spoken and the speaker is asked to repeat (previously a mismatch could reach `readback_required`). Recorded by Claude (agent) at rashodkorala's explicit request.

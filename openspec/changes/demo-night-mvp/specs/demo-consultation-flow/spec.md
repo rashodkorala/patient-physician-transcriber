@@ -71,15 +71,26 @@ The system SHALL show the physician, and only the physician, a suggestion with a
 - **THEN** the physician's controller shows a nudge to acknowledge the worry with a suggested phrase, and the shared screen does not show it
 
 ### Requirement: Critical value read-back
-The system SHALL detect numbers, doses, units, frequencies, dates, and medication names in a physician turn, highlight them in both languages, and require the physician to confirm them before the translation is spoken.
+The system SHALL detect numbers, doses, units, frequencies, dates, and medication names in a physician turn, highlight them in both languages, and require the physician to confirm them before the translation is spoken. Read-back SHALL only be offered when every critical value in the translation matches the original.
 
 #### Scenario: Dose confirmed
-- **WHEN** the physician says "take 500 milligrams twice a day" and confirms the highlighted values
+- **WHEN** the physician says "take 500 milligrams twice a day", every value matches, and the physician confirms the highlighted values
 - **THEN** the translation is spoken and the values appear highlighted on the shared screen
 
+#### Scenario: Physician rejects read-back
+- **WHEN** the physician rejects the highlighted values because the original was misheard
+- **THEN** the turn is discarded without being spoken and the physician is asked to repeat
+
+### Requirement: Critical value mismatch blocks speech
+The system SHALL, on any turn, re-translate once when a critical value in the translation does not match the original, and SHALL block the turn if a value still does not match. A blocked turn SHALL never be spoken and SHALL NOT trigger automatic interpreter escalation.
+
+#### Scenario: Mismatch corrected on retry
+- **WHEN** the first translation changes "500 milligrams" and the re-translation matches it
+- **THEN** the turn continues normally, with read-back for a physician turn
+
 #### Scenario: Mismatch blocked
-- **WHEN** a critical value in the translation does not match the original
-- **THEN** the translation is not spoken and the physician is asked to repeat
+- **WHEN** a critical value still does not match the original after one automatic re-translation
+- **THEN** the translation is not spoken, the controller shows the mismatched values in both languages, and the speaker is asked to repeat or rephrase
 
 ### Requirement: Explain-back check
 The system SHALL let the physician ask the patient to explain the plan back, and SHALL show which instructions were matched, missed, or contradicted.
@@ -96,11 +107,11 @@ The system SHALL let either party pause capture, SHALL show a paused notice in b
 - **THEN** the shared screen shows the paused notice in Punjabi and English and no turns are captured until resumed
 
 ### Requirement: Human interpreter offer
-The system SHALL offer a human interpreter when a turn's confidence is low after one retry, and SHALL let either party request one at any time, showing a connecting state in both languages.
+The system SHALL offer a human interpreter when a turn still fails its confidence or tone check after one retry, and SHALL let either party request one at any time, showing a connecting state in both languages. Critical value mismatches are blocked instead (see Critical value mismatch blocks speech).
 
 #### Scenario: Low confidence
-- **WHEN** a translation fails verification twice
-- **THEN** the turn is marked uncertain and a human interpreter is offered in both languages
+- **WHEN** a translation fails its confidence or tone check on the first attempt and again on the retry
+- **THEN** the turn is marked uncertain, not spoken, and a human interpreter is offered in both languages
 
 #### Scenario: Requested
 - **WHEN** the patient presses the human interpreter button

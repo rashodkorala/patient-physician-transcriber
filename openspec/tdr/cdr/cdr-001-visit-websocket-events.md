@@ -58,7 +58,7 @@ Channel: `ws://<server>/ws/visit` (one visit at a time). Server to clients broad
 | `visit.state` | On connect: full current state |
 | `turn.started` | A speaker pressed push-to-talk |
 | `turn.status` | Each graph node starts (`analysing`, `checking_glossary`, `translating`, `verifying`, `retrying`) |
-| `turn.result` | Final translation for a turn (CDR-002 payload) |
+| `turn.result` | Outcome of a turn (CDR-002 payload). With `status: blocked` the controller shows the mismatched values and asks the speaker to repeat; nothing is spoken |
 | `turn.readback_required` | Critical values need speaker confirmation before speaking |
 | `empathy.nudge` | Private suggestion for the physician controller only |
 | `visit.paused` / `visit.resumed` | Off-the-record toggled |
@@ -69,7 +69,7 @@ Channel: `ws://<server>/ws/visit` (one visit at a time). Server to clients broad
 | Command (client to server) | Sender |
 |---|---|
 | `turn.submit` (speaker, language, recognised text, recognition confidence) | Controller |
-| `turn.readback_confirm` / `turn.readback_reject` | Controller |
+| `turn.readback_confirm` / `turn.readback_reject` (reject discards the turn unspoken and asks the speaker to repeat) | Controller |
 | `visit.pause` / `visit.resume` | Any screen |
 | `interpreter.request` | Any screen |
 | `segment.confirm` / `segment.amend` | Review screen |
@@ -108,3 +108,4 @@ Code carries `@contract ws:/ws/visit` and `@implements CDR-001: Visit WebSocket 
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-22, rashodkorala: Clarified, no schema change: meaning of `turn.result` with `status: blocked` and of `turn.readback_reject`. Recorded by Claude (agent) at rashodkorala's explicit request.

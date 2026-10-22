@@ -13,7 +13,7 @@ related_specs: []
 related_changes: [demo-night-mvp]
 ai_context:
   implementation_priorities:
-    - "Per-turn graph: analyse, retrieve, translate, verify, retry once, escalate"
+    - "Per-turn graph: analyse, retrieve, translate, verify, retry once, then done, block, or escalate"
     - "Stream node status events to the screens"
   framework_hints:
     - "langgraph StateGraph with a TypedDict state for one turn"
@@ -35,19 +35,19 @@ Use a LangGraph state graph for the live translation turn because it branches an
 
 ## Context
 
-- **Technical drivers**: verification can pass, retry, or escalate; status should stream to the UI.
+- **Technical drivers**: verification can pass, retry, block, or escalate; status should stream to the UI.
 - **Quality attributes**: clarity, testability, latency.
 - **Constraints**: under 3 seconds per turn.
 
 ## Decision
 
-Implement `server/graph/turn_graph.py` as a LangGraph `StateGraph` with nodes analyse, retrieve, translate, verify, and escalate, with conditional edges from verify (done, retry once, escalate). Use LCEL chains for note, summary, explain-back, and empathy nudges.
+Implement `server/graph/turn_graph.py` as a LangGraph `StateGraph` with nodes analyse, retrieve, translate, verify, block, and escalate, with conditional edges from verify: done (`final` or `readback_required`), retry once (any failure, with mismatched critical values pinned), block (critical value still mismatched), and escalate (confidence or tone still failing). Outcomes follow the status table in CDR-002. Use LCEL chains for note, summary, explain-back, and empathy nudges.
 
 ## Alternatives Considered
 
 | Option | Pros | Cons | Why not chosen |
 |---|---|---|---|
-| Plain LangChain LCEL only | Fewer dependencies | Retry and escalate logic becomes ad-hoc code | Harder to follow and test |
+| Plain LangChain LCEL only | Fewer dependencies | Retry, block, and escalate logic becomes ad-hoc code | Harder to follow and test |
 | Hand-written Python pipeline | No framework | Loses streaming, tracing, and the user's chosen tooling | User asked for LangChain |
 | Multi-agent graph | Flexible | Slower, less predictable | Overkill for one turn |
 
@@ -65,3 +65,4 @@ Implement `server/graph/turn_graph.py` as a LangGraph `StateGraph` with nodes an
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-22, rashodkorala: Amended: verify gains a block edge for critical value mismatches after one retry, aligned with CDR-002. Recorded by Claude (agent) at rashodkorala's explicit request.

@@ -38,7 +38,7 @@ The system offers a qualified human interpreter whenever translation confidence 
 
 ## Decision
 
-The turn pipeline escalates when verification fails after one retry or confidence is below threshold; the physician can mark a moment as high risk; either party can request a human at any time. For the demo the call is simulated.
+The turn pipeline escalates when the confidence or tone check still fails after one retry; a critical value mismatch is blocked and the speaker asked to repeat instead of escalating (CDR-002); the physician can mark a moment as high risk; either party can request a human at any time. For the demo the call is simulated.
 
 ## Alternatives Considered
 
@@ -60,3 +60,4 @@ Escalate node in the turn graph (ADR-004); escalation event in CDR-001; interpre
 ## Review Notes
 
 - 2026-10-22, rashodkorala: Accepted by the project lead in the planning conversation.
+- 2026-10-22, rashodkorala: Amended: automatic escalation covers confidence and tone failures only; critical value mismatches are blocked per CDR-002. Recorded by Claude (agent) at rashodkorala's explicit request.
