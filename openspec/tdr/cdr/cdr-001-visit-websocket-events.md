@@ -20,7 +20,8 @@ ai_context:
     - "Shared event names in server/contracts.py and web/lib/contracts.ts"
   validation_rules:
     - "Every event has type, visitId, seq, ts, payload"
-    - "empathy.nudge never reaches /screen or /review"
+    - "turn.analysis, turn.readback_required, and empathy.nudge never reach /screen or /review"
+    - "turn.result carries the public TurnCaption only"
 affects: [server/main.py, web/lib/socket.ts]
 implementation_refs: []
 test_refs: []
@@ -51,16 +52,17 @@ Adopt the event and command set below as version 1 of the visit channel.
 
 ## Contract Specification
 
-Channel: `ws://<server>/ws/visit` (one visit at a time). Server to clients broadcasts every event; clients send commands.
+Channel: `ws://<server>/ws/visit` (one visit at a time). Each connection declares its role on connect (`controller`, `screen`, or `review`). Events marked *controller only* are never sent to `screen` or `review` connections; all other events go to every connection. Clients send commands.
 
 | Event (server to clients) | When |
 |---|---|
 | `visit.state` | On connect: full current state |
 | `turn.started` | A speaker pressed push-to-talk |
-| `turn.status` | Each graph node starts (`analysing`, `checking_glossary`, `translating`, `verifying`, `retrying`) |
-| `turn.result` | Outcome of a turn (CDR-002 payload). With `status: blocked` the controller shows the mismatched values and asks the speaker to repeat; nothing is spoken |
-| `turn.readback_required` | Critical values need speaker confirmation before speaking |
-| `empathy.nudge` | Private suggestion for the physician controller only |
+| `turn.status` | Each graph node starts (`analysing`, `checking_glossary`, `translating`, `verifying`, `retrying`), and `awaiting_readback` while a dose waits for physician confirmation |
+| `turn.analysis` | *Controller only.* Full CDR-002 `TurnResult` (translation, back-translation, emotion, certainty, critical values, status). With `status: blocked` the controller shows the mismatched values and asks the speaker to repeat |
+| `turn.readback_required` | *Controller only.* Critical values need physician confirmation before speaking |
+| `turn.result` | Public CDR-002 `TurnCaption` once a turn is settled (spoken, blocked, or escalated). Never carries an unspoken translation, emotion, certainty, or back-translation |
+| `empathy.nudge` | *Controller only.* Private suggestion for the physician |
 | `visit.paused` / `visit.resumed` | Off-the-record toggled |
 | `interpreter.escalation` | Human interpreter offered or requested |
 | `segment.amended` | A segment was confirmed or corrected in review |
@@ -72,6 +74,7 @@ Channel: `ws://<server>/ws/visit` (one visit at a time). Server to clients broad
 | `turn.readback_confirm` / `turn.readback_reject` (reject discards the turn unspoken and asks the speaker to repeat) | Controller |
 | `visit.pause` / `visit.resume` | Any screen |
 | `interpreter.request` | Any screen |
+| `visit.mark_high_risk` (optional `turnId`, optional note) | Controller; server records it and emits `interpreter.escalation` with reason `high_risk` |
 | `segment.confirm` / `segment.amend` | Review screen |
 
 ## Data Schemas
@@ -80,8 +83,10 @@ Every message: `{ "type": string, "visitId": string, "seq": integer, "ts": ISO-8
 
 - `turn.started.payload`: `{ turnId, speaker: "patient"|"physician"|"companion", language: BCP-47 }`
 - `turn.status.payload`: `{ turnId, stage: string }`
-- `turn.result.payload`: CDR-002 `TurnResult`
-- `empathy.nudge.payload`: `{ turnId, emotion, suggestion, phrase, phraseLanguage }` (sent only to controller connections)
+- `turn.analysis.payload`: CDR-002 `TurnResult` (controller only)
+- `turn.result.payload`: CDR-002 `TurnCaption`
+- `empathy.nudge.payload`: `{ turnId, emotion, suggestion, phrase, phraseLanguage }` (controller only)
+- `visit.mark_high_risk` command payload: `{ turnId?: string, note?: string }`
 - `interpreter.escalation.payload`: `{ reason: "low_confidence"|"tone_failure"|"high_risk"|"requested", turnId?: string }`. `low_confidence` means recognition or translation confidence stayed below threshold after one retry; `tone_failure` means the tone check (certainty or warmth not preserved) still failed after one retry; when both fail, `low_confidence` is used
 - `segment.amended.payload`: `{ segmentId, by: "patient"|"physician", action: "confirm"|"amend", newText?: string }`
 - `record.integrity.payload`: `{ status: "verified"|"broken", headHash, brokenAt?: segmentId }`
@@ -92,7 +97,7 @@ Version in the URL path once a second version exists (`/ws/v2/visit`). Additive 
 
 ## Testing Requirements
 
-Server contract tests assert each event shape; a front-end test replays a recorded event log and checks the screens render; a test asserts `empathy.nudge` is only sent to controller connections.
+Server contract tests assert each event shape; a front-end test replays a recorded event log and checks the screens render; tests assert `turn.analysis`, `turn.readback_required`, and `empathy.nudge` reach controller connections only, that no `screen` or `review` connection ever receives `emotion`, `certainty`, `backTranslation`, or the translation of a `blocked` or `escalated` turn, and that `visit.mark_high_risk` yields `interpreter.escalation` with reason `high_risk`.
 
 ## Consequences
 
@@ -110,3 +115,4 @@ Code carries `@contract ws:/ws/visit` and `@implements CDR-001: Visit WebSocket 
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Clarified, no schema change: meaning of `turn.result` with `status: blocked` and of `turn.readback_reject`. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended (additive, before implementation): added `tone_failure` escalation reason so tone failures are distinguishable from low confidence. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-22, rashodkorala: Amended before implementation: role-based routing; new controller-only `turn.analysis` carries the full TurnResult while `turn.result` carries the public TurnCaption; `turn.readback_required` is controller-only; new `visit.mark_high_risk` command so the `high_risk` reason has a source. Recorded by Claude (agent) at rashodkorala's explicit request.

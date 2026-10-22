@@ -14,7 +14,7 @@ The system SHALL record every consent event, transcript creation, amendment, rea
 - **THEN** an audit entry is appended identifying the patient, the segment, and the time
 
 ### Requirement: Tamper evidence
-The system SHALL chain audit entries cryptographically so that any modification or removal of a past entry is detectable.
+The system SHALL chain audit entries cryptographically so that any modification or removal of a past entry is detectable. Entries SHALL hold content fingerprints, not content, so that content deleted under a consent revocation leaves a valid chain.
 
 #### Scenario: Integrity check passes
 - **WHEN** an integrity check runs over an unmodified audit trail
@@ -30,6 +30,14 @@ The system SHALL compute a content fingerprint for each finalised transcript and
 #### Scenario: Patient verifies a downloaded copy
 - **WHEN** the patient submits a previously downloaded transcript for verification
 - **THEN** the system reports whether it matches the finalised record
+
+#### Scenario: Copy checked after revocation
+- **WHEN** the patient submits a downloaded copy of a visit whose content was deleted after revocation
+- **THEN** the system reports whether the copy matches the fingerprint recorded before deletion and states that the content itself was deleted at the patient's request
+
+#### Scenario: Interpret-only visit
+- **WHEN** a patient asks to verify a copy from an interpret-only visit
+- **THEN** the system explains that no record was kept for that visit
 
 ### Requirement: Patient-visible access log
 The system SHALL show the patient, in their language, a list of every person and system that viewed, exported, or processed their visit data, including human interpreters and translation processors, with role and time.

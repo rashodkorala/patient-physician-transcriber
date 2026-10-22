@@ -58,7 +58,10 @@ The controller has "Physician speaking" and "Patient speaking" buttons. The brow
   | Confidence or tone check still failing after one retry | `escalated` | No | Marked uncertain; human interpreter offered (ADR-003) with reason `low_confidence` or `tone_failure` (CDR-001) |
   | Physician rejects highlighted values at read-back | (turn discarded) | No | Speaker asked to repeat (covers recognition errors) |
 
-  A critical value mismatch never escalates on its own; the interpreter button stays available throughout.
+  When more than one row applies, the first in this order wins: `blocked`, then `escalated`, then `readback_required`, then `final`. A turn whose critical values match but whose confidence or tone check still fails is `escalated`: it is never read back or spoken. A critical value mismatch never escalates on its own; the interpreter button stays available throughout.
+
+  Shared screens (`/screen`, `/review`) only ever render a translation after it has been spoken. A `blocked` or `escalated` turn shows the original text and a notice, never its translation or translated values. Emotion, certainty, and back-translations go to the controller only (CDR-001 `turn.analysis`); the shared screen gets the public `TurnCaption` (CDR-002) with a translation-register tone label.
+- **mark high risk**: a controller button sends `visit.mark_high_risk`; the server records it and offers a human interpreter with reason `high_risk` (ADR-003, CDR-001).
 - Each node emits `turn.status`; the result is a `TurnResult` (CDR-002).
 - Empathy nudges (patient turns with worry, embarrassment, pain, or confusion) come from a separate chain using the empathy bank, sent only to the controller.
 

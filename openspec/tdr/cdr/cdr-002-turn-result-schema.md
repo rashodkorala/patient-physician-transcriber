@@ -22,6 +22,8 @@ ai_context:
     - "status is blocked when any critical value is still unmatched after one re-translation"
     - "blocked turns are never spoken and never trigger automatic escalation"
     - "status is escalated only for confidence or tone failures after one retry"
+    - "precedence when several rows apply: blocked, escalated, readback_required, final"
+    - "TurnResult is controller-only; shared screens receive TurnCaption, which never carries emotion, certainty, back-translation, or an unspoken translation"
 affects: [server/graph/turn_state.py, web/lib/contracts.ts]
 implementation_refs: []
 test_refs: []
@@ -31,7 +33,7 @@ test_refs: []
 
 ## Summary
 
-Defines the TurnResult object for one translated utterance: translation, back-translation, tone, glossary terms used, critical values, confidence, and status.
+Defines two shapes for one translated utterance: the full `TurnResult` (controller and server only) and the public `TurnCaption` projection sent to shared screens.
 
 ## Context
 
@@ -63,8 +65,13 @@ Any verify failure triggers one retry, with mismatched critical values pinned in
 | Confidence or tone check still failing after one retry | `escalated` | No | Marked uncertain; human interpreter offered (ADR-003) with reason `low_confidence` or `tone_failure` (CDR-001) |
 | Physician rejects highlighted values at read-back | (turn discarded, via `turn.readback_reject` in CDR-001) | No | Speaker asked to repeat (covers recognition errors) |
 
+When more than one row applies, the first in this order wins: `blocked`, then `escalated`, then `readback_required`, then `final`. A turn whose critical values match but whose confidence or tone check still fails is `escalated`: it is never read back or spoken.
+
+Shared screens (`/screen`, `/review`) only ever render a translation after it has been spoken. A `blocked` or `escalated` turn shows the original text and a notice, never its translation or translated values.
+
 ## Data Schemas
 
+**TurnResult** (full; server and physician controller only, via `turn.analysis` in CDR-001):
 ```json
 {
   "turnId": "string",
@@ -86,6 +93,24 @@ Any verify failure triggers one retry, with mismatched critical values pinned in
 ```
 `confidence` is 0 to 1. `criticalValues[].matched` is computed deterministically, not by the model. `attempts` is 1 or 2 (one retry at most). When `status` is `blocked`, at least one `criticalValues[].matched` is `false`; otherwise every entry is `true`.
 
+**TurnCaption** (public projection; every screen, via `turn.result` in CDR-001):
+```json
+{
+  "turnId": "string",
+  "speaker": "patient | physician | companion",
+  "sourceLanguage": "pa-IN | fr-CA | en-CA",
+  "targetLanguage": "pa-IN | fr-CA | en-CA",
+  "sourceText": "string",
+  "status": "final | blocked | escalated",
+  "translation": "string | null",
+  "toneLabel": "respectful | reassuring | empathetic | neutral | null",
+  "glossaryUsed": [{ "term": "string", "translation": "string", "explanation": "string" }],
+  "criticalValues": [{ "kind": "string", "source": "string", "translated": "string" }],
+  "readbackConfirmed": false
+}
+```
+A `TurnCaption` is emitted once a turn is settled: after it is spoken (`final`, with `readbackConfirmed: true` if the physician confirmed values), or when it is `blocked` or `escalated`. For `blocked` and `escalated`, `translation` and `toneLabel` are `null` and `criticalValues` is empty. It never contains `emotion`, `certainty`, `backTranslation`, `confidence`, or `toneTags` values outside the four register labels.
+
 ## Evolution Strategy
 
 Additive fields are non-breaking. Before the contract is first implemented (`implementation_refs` empty), it may be amended in place with a dated review note from the decision owner. After that, enum changes or removals need a superseding CDR.
@@ -96,7 +121,9 @@ Pydantic validation tests with fixtures and a TypeScript type test against a JSO
 - a dose mismatched on the first attempt and matched on the retry yields `attempts: 2`, all `matched: true`, and `status: readback_required` for a physician turn;
 - a dose mismatched on both attempts yields `matched: false` and `status: blocked`;
 - a `blocked` result never reaches speech synthesis and never emits `interpreter.escalation`;
-- a confidence failure on both attempts yields `status: escalated` and an escalation with reason `low_confidence`; a tone-only failure on both attempts yields `status: escalated` and reason `tone_failure`.
+- a confidence failure on both attempts yields `status: escalated` and an escalation with reason `low_confidence`; a tone-only failure on both attempts yields `status: escalated` and reason `tone_failure`;
+- a physician turn whose dose matches but whose tone check fails twice yields `status: escalated`, never `readback_required`;
+- the `TurnCaption` for a `blocked` or `escalated` turn has `translation: null` and no translated values, and no `TurnCaption` ever carries `emotion`, `certainty`, or `backTranslation`.
 
 ## Consequences
 
@@ -106,7 +133,7 @@ Pydantic validation tests with fixtures and a TypeScript type test against a JSO
 
 ## Implementation
 
-Code carries `@contract TurnResult` and `@implements CDR-002: Turn result schema`.
+Code carries `@contract TurnResult` or `@contract TurnCaption` and `@implements CDR-002: Turn result schema`.
 
 ## Review Notes
 
@@ -114,3 +141,4 @@ Code carries `@contract TurnResult` and `@implements CDR-002: Turn result schema
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended in place before implementation: added `blocked` status and the single outcome table, so a critical value still mismatched after one re-translation is never spoken and the speaker is asked to repeat (previously a mismatch could reach `readback_required`). Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended to reference the new `tone_failure` escalation reason in CDR-001. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-22, rashodkorala: Amended in place before implementation: status precedence (blocked, escalated, readback_required, final); public `TurnCaption` projection so emotion, certainty, back-translations, and unspoken or blocked translations never reach shared screens. Recorded by Claude (agent) at rashodkorala's explicit request.

@@ -39,6 +39,17 @@ The system SHALL let the patient choose one consent scope per visit: interpret a
 - **WHEN** the patient chooses no AI
 - **THEN** the system does not capture audio and offers to connect a human interpreter
 
+### Requirement: Capabilities follow the consent scope
+The system SHALL enable other capabilities only as the visit's scope allows: full scope enables all; transcript only enables all except audio playback; interpret only enables live interpretation and captions, plus consent and access audit entries; no AI enables only the consent audit entry and human interpreter hand-off. The matrix in design.md is normative.
+
+#### Scenario: Interpret-only visit ends
+- **WHEN** a visit with the interpret-only scope ends
+- **THEN** no transcript review, clinical note, patient summary, coaching feedback, or verify-my-copy is offered, and only consent and access events remain in the audit trail
+
+#### Scenario: Transcript-only note
+- **WHEN** a physician follows a note sentence's source in a transcript-only visit
+- **THEN** the source transcript text is shown and no audio playback is offered
+
 ### Requirement: Retention and sharing notice
 The system SHALL show the patient, before consent, a plain-language statement of what is captured, who can access it, which processors are used, where data is stored, and how long each item is retained.
 
@@ -63,3 +74,7 @@ The system SHALL let the patient revoke consent for a visit at any time, after w
 #### Scenario: Revocation after the visit
 - **WHEN** the patient revokes consent for a completed visit
 - **THEN** the system deletes audio and transcript that are not legally required, stops any pending AI processing, records the revocation in the audit trail, and notifies the physician
+
+#### Scenario: Revocation keeps a fingerprint tombstone
+- **WHEN** content is deleted after revocation
+- **THEN** the audit trail keeps a tombstone entry with the content fingerprint but no content, so the chain still verifies

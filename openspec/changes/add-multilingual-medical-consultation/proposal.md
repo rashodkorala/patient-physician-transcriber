@@ -16,7 +16,7 @@ We will build an AI medical interpreter that shows the conversation live in both
 - Consent, retention notice, and off-the-record pause presented in the patient's language.
 - A speaker-attributed transcript in which every segment keeps the original speech, its translation, and translation confidence.
 - Patient verification of their own statements in their own language, physician sign-off, and amendments that preserve originals.
-- Clinical note sentences linked to original-language speech and its translation, tagged as patient-stated, physician-stated, or AI inference.
+- Clinical note sentences linked to original-language speech and its translation, tagged as patient-stated, physician-stated, companion-stated, interpreter-stated, or AI inference.
 - Tamper-evident audit trail and patient-visible access log.
 - Private, opt-in feedback to the physician on what was lost or misunderstood in translation.
 - A plain-language visit summary in the patient's language with a "questions answered" list.

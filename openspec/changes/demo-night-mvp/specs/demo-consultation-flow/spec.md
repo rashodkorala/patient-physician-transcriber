@@ -32,11 +32,15 @@ The system SHALL capture each utterance through a speaker-specific control, so e
 - **THEN** the turn is recorded with speaker patient and language Punjabi
 
 ### Requirement: Bilingual captions on the shared screen
-The system SHALL show each turn on the shared screen with the speaker label, the original text, and the translation side by side, readable from across the room.
+The system SHALL show each spoken turn on the shared screen with the speaker label, the original text, and the translation side by side, readable from across the room. A translation SHALL appear on the shared screen only once it is spoken.
 
 #### Scenario: Caption appears
-- **WHEN** a turn's translation is ready
-- **THEN** the shared screen shows speaker, original, and translation together within 3 seconds of the end of speech in normal conditions
+- **WHEN** a turn without critical values passes its checks
+- **THEN** the shared screen shows speaker, original, and translation together as it is spoken, within 3 seconds of the end of speech in normal conditions
+
+#### Scenario: Dose awaiting confirmation
+- **WHEN** a physician turn is waiting for read-back confirmation
+- **THEN** the shared screen shows the original and a "checking the dose" notice in both languages, but not the translation
 
 ### Requirement: Translation is spoken aloud
 The system SHALL speak each final translation aloud in the listener's language.
@@ -57,11 +61,18 @@ The system SHALL translate using approved medical terms and a respectful registe
 - **THEN** the translation uses the approved term and the shared screen shows a plain-language explanation beside it
 
 ### Requirement: Tone labels
-The system SHALL show a tone label on each caption (for example reassuring, respectful, or empathetic).
+The system SHALL show on each spoken caption one label describing the register of the translation: respectful, reassuring, empathetic, or neutral. Labels SHALL describe the translation, never the speaker's emotion.
 
 #### Scenario: Label shown
-- **WHEN** a caption appears on the shared screen
-- **THEN** it carries at least one tone label
+- **WHEN** a spoken caption appears on the shared screen
+- **THEN** it carries one translation-register label
+
+### Requirement: Patient emotion stays with the physician
+The system SHALL send detected emotion, certainty, and back-translations only to the physician's controller, never to the shared screen or review screens.
+
+#### Scenario: Embarrassed patient
+- **WHEN** a patient turn is analysed as embarrassed
+- **THEN** the physician's controller may show it, and no shared or review screen receives that analysis
 
 ### Requirement: Empathy nudge
 The system SHALL show the physician, and only the physician, a suggestion with a ready phrase when a patient turn expresses worry, embarrassment, pain, or confusion.
@@ -90,7 +101,14 @@ The system SHALL, on any turn, re-translate once when a critical value in the tr
 
 #### Scenario: Mismatch blocked
 - **WHEN** a critical value still does not match the original after one automatic re-translation
-- **THEN** the translation is not spoken, the controller shows the mismatched values in both languages, and the speaker is asked to repeat or rephrase
+- **THEN** the translation is not spoken, the controller shows the mismatched values in both languages, the speaker is asked to repeat or rephrase, and the shared screen shows only the original and a repeat notice, never the mismatched translation
+
+### Requirement: Turn outcome precedence
+The system SHALL give each turn exactly one outcome, choosing in this order: blocked, then escalated, then read-back, then final. A turn whose critical values match but whose confidence or tone check still fails SHALL be escalated, never read back or spoken.
+
+#### Scenario: Matched dose with failed tone check
+- **WHEN** a dose matches after verification but the tone check fails on both attempts
+- **THEN** the turn is escalated, the dose is not offered for read-back, and nothing is spoken
 
 ### Requirement: Explain-back check
 The system SHALL let the physician ask the patient to explain the plan back, and SHALL show which instructions were matched, missed, or contradicted.
@@ -107,11 +125,15 @@ The system SHALL let either party pause capture, SHALL show a paused notice in b
 - **THEN** the shared screen shows the paused notice in Punjabi and English and no turns are captured until resumed
 
 ### Requirement: Human interpreter offer
-The system SHALL offer a human interpreter when a turn still fails its confidence or tone check after one retry, and SHALL let either party request one at any time, showing a connecting state in both languages. Critical value mismatches are blocked instead (see Critical value mismatch blocks speech).
+The system SHALL offer a human interpreter when a turn still fails its confidence or tone check after one retry or when the physician marks a moment as high risk, and SHALL let either party request one at any time, showing a connecting state in both languages. Critical value mismatches are blocked instead (see Critical value mismatch blocks speech).
 
 #### Scenario: Low confidence
 - **WHEN** a translation fails its confidence or tone check on the first attempt and again on the retry
-- **THEN** the turn is marked uncertain, not spoken, and a human interpreter is offered in both languages
+- **THEN** the turn is marked uncertain, not spoken, its translation is not shown on the shared screen, and a human interpreter is offered in both languages
+
+#### Scenario: Physician marks high risk
+- **WHEN** the physician presses "mark high risk" before explaining a procedure that needs consent
+- **THEN** a human interpreter is offered in both languages and the mark is recorded in the transcript
 
 #### Scenario: Requested
 - **WHEN** the patient presses the human interpreter button
@@ -125,10 +147,10 @@ The system SHALL show the bilingual, speaker-labelled transcript after the visit
 - **THEN** the turn shows the correction and its translation, and the original remains visible in its history
 
 ### Requirement: Note with provenance tags
-The system SHALL generate an English clinical note in which every sentence is tagged patient-said, physician-said, or AI inference and links to its source turns.
+The system SHALL generate an English clinical note in which every sentence carries exactly one provenance tag (patient-stated, physician-stated, companion-stated, interpreter-stated, or AI inference) and links to its source turns.
 
 #### Scenario: Following a source
-- **WHEN** the physician selects a note sentence tagged patient-said
+- **WHEN** the physician selects a note sentence tagged patient-stated
 - **THEN** the source turn is highlighted with its original Punjabi and its translation
 
 ### Requirement: Patient summary

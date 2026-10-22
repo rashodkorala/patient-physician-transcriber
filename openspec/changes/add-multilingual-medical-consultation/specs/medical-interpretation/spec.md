@@ -61,15 +61,29 @@ The system SHALL translate clinical terms using a maintained medical glossary fo
 - **THEN** the patient's translation uses the glossary term for the patient's language and the display shows a plain-language explanation beside it
 
 ### Requirement: Read-back of critical values
-The system SHALL detect numbers, doses, units, frequencies, dates, and medication names in an utterance, and SHALL highlight them on screen and ask the speaker to confirm them before the translation is final.
+The system SHALL detect numbers, doses, units, frequencies, dates, and medication names in a physician utterance, highlight them in both languages, and SHALL NOT speak or show the translation until the physician confirms them. No automated check can stand in for this confirmation.
 
 #### Scenario: Dose instruction
 - **WHEN** the physician says "take 500 milligrams twice a day"
-- **THEN** the display highlights the dose, unit, and frequency in both languages and the physician confirms them before the translation is marked final
+- **THEN** the physician sees the dose, unit, and frequency highlighted in both languages, and the translation is spoken only after the physician confirms them
 
 #### Scenario: Correction during read-back
 - **WHEN** the speaker rejects a highlighted value during read-back
 - **THEN** the system discards that translation and asks the speaker to repeat the utterance
+
+### Requirement: Critical value mismatch blocks speech
+The system SHALL, on any turn, re-translate once when a critical value in the translation does not match the original, and SHALL block the turn if a value still does not match. A blocked turn SHALL never be spoken or shown on a shared screen.
+
+#### Scenario: Mismatch blocked
+- **WHEN** a dose still does not match the original after one re-translation
+- **THEN** nothing is spoken, the physician sees the mismatched values, and the speaker is asked to repeat or rephrase
+
+### Requirement: Turn outcome precedence
+The system SHALL give each turn one outcome, choosing in this order: blocked, then escalated, then read-back, then final. A turn whose critical values match but whose confidence or tone check fails SHALL be escalated, never read back or spoken.
+
+#### Scenario: Matched dose with failed tone check
+- **WHEN** a dose matches but the tone check fails after one retry
+- **THEN** the turn is escalated and the dose is not offered for read-back
 
 ### Requirement: Comprehension check
 The system SHALL let the physician start a comprehension check in which the patient explains the plan back in their own language, and SHALL show the physician the translation alongside the original instructions.
@@ -94,14 +108,14 @@ The system SHALL offer a human interpreter whenever translation or speech recogn
 
 #### Scenario: Uncertain translation
 - **WHEN** an utterance's translation confidence falls below the threshold
-- **THEN** the display marks the translation as uncertain in both languages and offers a human interpreter
+- **THEN** the translation is not spoken or shown as final, the display shows that the turn is uncertain in both languages, and a human interpreter is offered
 
 ### Requirement: High-risk escalation
-The system SHALL offer a human interpreter when the visit involves consent to a procedure, a serious diagnosis, end-of-life care, mental health crisis, or safeguarding concerns, either when the physician marks the visit or the moment as high risk or when the system detects such content.
+The system SHALL let the physician mark the visit or a moment as high risk (for example consent to a procedure, a serious diagnosis, end-of-life care, a mental health crisis, or a safeguarding concern), and SHALL then offer a human interpreter and record the mark. Automatic detection of such moments is not specified until ADR-008 is decided.
 
 #### Scenario: Consent to a procedure
-- **WHEN** the physician begins explaining a procedure that needs informed consent
-- **THEN** the system prompts the physician to bring in a human interpreter before consent is taken
+- **WHEN** the physician marks the moment as high risk before explaining a procedure that needs informed consent
+- **THEN** the system offers a human interpreter in both languages before consent is taken and records the mark in the transcript
 
 ### Requirement: Human interpreter hand-off
 The system SHALL let either participant request a human interpreter at any time, SHALL connect a qualified interpreter for the patient's language by phone or video, and SHALL record the hand-off in the transcript and audit trail.
@@ -114,9 +128,13 @@ The system SHALL let either participant request a human interpreter at any time,
 - **WHEN** a human interpreter is connected
 - **THEN** the interpreter's segments are labelled interpreter in the transcript and AI translation is shown as secondary
 
-### Requirement: Family members are not relied on
-The system SHALL record when a family member or companion interprets for the patient, and SHALL offer AI or human interpretation instead.
+### Requirement: Companion interpreting is flagged
+The system SHALL record when a family member or companion interprets for the patient and SHALL offer AI or human interpretation instead. If the visit continues with the companion interpreting, the physician SHALL choose a reason (patient preference, urgent, or other). The visit is never blocked.
+
+#### Scenario: Adult companion continues
+- **WHEN** the physician indicates an adult companion is interpreting and continues with them
+- **THEN** the system records the companion as interpreter, the offer of alternatives, and the physician's reason in the transcript
 
 #### Scenario: Child interpreting
-- **WHEN** the physician indicates a companion is interpreting
-- **THEN** the system records this in the transcript and offers interpretation so the companion does not need to
+- **WHEN** the physician indicates the companion interpreting is a child
+- **THEN** the system offers AI or a human interpreter, and continuing with the child requires the physician to record a reason, which is shown in the transcript

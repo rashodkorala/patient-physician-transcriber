@@ -46,7 +46,7 @@ The system translates after each utterance ends, detected by voice activity and 
 2. Critical value extraction (numbers, doses, units, frequencies, dates, medications) runs on the original.
 3. Translation uses an LLM constrained by the medical glossary for the language pair, returning the translation plus a back-translation.
 4. Confidence combines recognition confidence, a back-translation similarity score, and critical value agreement between original and translation.
-5. Text-to-speech speaks the translation once checks pass or the speaker has confirmed read-back.
+5. Text-to-speech speaks the translation only when checks pass and, for any physician turn with critical values, after the physician confirms them. Outcome order, as in the demo: blocked (critical value still mismatched after one re-translation), then escalated (confidence or tone still failing), then read-back, then final. A passing automated check never skips physician confirmation of a dose, and unspoken translations are never shown on shared screens.
 - *Vendors:* not decided here. Speech recognition, translation, and speech synthesis vendors per language are a product TDR drafted from the benchmark in task group 2 and accepted before task group 5 (see Open Questions).
 - *Why:* separating stages lets us choose the best vendor per language and insert safety checks.
 
@@ -67,7 +67,21 @@ Every artefact references transcript segments by stable identifier. Each segment
 The LLM receives bilingual segments with identifiers and must return each note sentence with cited segment identifiers and a provenance tag. A post-check confirms citations exist and tags match speakers; failures downgrade to AI inference. Patient summaries reuse the same mechanism, and a deterministic check compares every critical value in the summary to the verified record.
 
 ### 8. Hash-chained audit log with external anchoring
-Each audit entry stores the hash of the previous entry; finalised transcripts, notes, and summaries get a SHA-256 content fingerprint. The chain head is periodically anchored to a write-once store outside the main database.
+Each audit entry stores the hash of the previous entry and the fingerprint of any content it refers to, never the content itself; finalised transcripts, notes, and summaries get a SHA-256 content fingerprint. Content lives in separate storage, so revocation deletes the content and appends a tombstone entry with its fingerprint: the chain stays valid and a downloaded copy can still be checked. The chain head is periodically anchored to a write-once store outside the main database. Retaining fingerprints of deleted content needs privacy review before launch.
+
+### 8a. Capabilities by consent scope (normative for consent-management)
+
+| Capability | Full | Transcript only | Interpret only | No AI |
+|---|---|---|---|---|
+| medical-interpretation | Yes | Yes | Yes (live only) | Human interpreter only |
+| speaker-attributed-transcription | Yes | Yes | During the visit only; discarded at end | No |
+| patient-verification | Yes | Yes | No | No |
+| note-provenance | Yes, with audio playback | Yes, text links only | No AI note | No AI note |
+| audit-integrity | Yes, incl. verify-my-copy | Yes, incl. verify-my-copy | Consent and access events only; no verify-my-copy | Consent event only |
+| communication-coaching | Yes (if opted in) | Yes (if opted in) | No | No |
+| patient-summary | Yes | Yes | No | No |
+
+Revocation of any scope deletes content not legally required and leaves fingerprint tombstones in the audit chain.
 - *Alternative considered:* a blockchain. Rejected for cost, latency, and risk; only hashes leave the system.
 
 ### 9. Application shape
@@ -99,6 +113,8 @@ Not applicable: greenfield. Rollout is a single-clinic pilot in a high-diversity
 - Translation pipeline orchestration, LLM provider and models, and knowledge base retrieval (group 0).
 - Speech recognition, translation, and synthesis vendors per language, from the benchmark (drafted in group 2, accepted before group 5).
 - Contracts for every boundary between screens and server (CDRs, group 0).
+
+- Automatic detection of high-risk moments (consent, serious diagnosis, end-of-life, crisis, safeguarding): drafted as ADR-008 (proposed); detection may only suggest a mark to the physician, never escalate or label on its own.
 
 **Other open questions:**
 - Default review window (proposed: 7 days) and starting confidence thresholds per tier, tuned in the pilot.

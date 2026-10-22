@@ -15,7 +15,7 @@ A nine-beat demo for Punjabi to English and French to English, run locally on on
 5. **Explain-back**: the patient repeats the plan in their language; the physician sees what matched and what was missed.
 6. **Off-the-record pause** and a **human interpreter** button (simulated connection; also offered automatically on low confidence).
 7. **Transcript review**: speaker-labelled, bilingual; patient confirms or corrects by re-speaking; originals kept.
-8. **Note and summary**: English note with each sentence tagged patient-said, physician-said, or AI inference; Punjabi or French summary read aloud.
+8. **Note and summary**: English note with each sentence tagged patient-stated, physician-stated, companion-stated, interpreter-stated, or AI inference (only the first two and AI inference occur, since the demo captures patient and physician turns only); Punjabi or French summary read aloud.
 9. **Record verified** badge, with a tamper demonstration that turns it red.
 
 Also: a replay mode that plays a recorded session through the same screens if the network fails.

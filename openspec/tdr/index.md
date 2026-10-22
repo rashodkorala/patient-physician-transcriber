@@ -16,6 +16,7 @@ Only a human decides a status; an agent may record an explicit human verdict (ED
 | [ADR-005](adr/adr-005-speech-provider.md) | Speech: Azure Speech primary, Google Speech backup | ADR | accepted | rashodkorala | demo-night-mvp |
 | [ADR-006](adr/adr-006-llm-models.md) | LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary | ADR | accepted | rashodkorala | demo-night-mvp |
 | [ADR-007](adr/adr-007-in-memory-state-websocket.md) | In-memory visit state with WebSocket updates; no database for the demo | ADR | accepted | rashodkorala | demo-night-mvp |
+| [ADR-008](adr/adr-008-automatic-high-risk-detection.md) | Automatic high-risk moment detection: suggest only | ADR | proposed | rashodkorala | add-multilingual-medical-consultation |
 | [CDR-001](cdr/cdr-001-visit-websocket-events.md) | Visit WebSocket event contract | CDR | accepted | rashodkorala | demo-night-mvp |
 | [CDR-002](cdr/cdr-002-turn-result-schema.md) | Turn result schema | CDR | accepted | rashodkorala | demo-night-mvp |
 | [EDR-001](edr/edr-001-agent-working-rules.md) | Agent working rules: TDR gates, annotations, commits, and reviews | EDR | accepted | rashodkorala | add-multilingual-medical-consultation, demo-night-mvp |

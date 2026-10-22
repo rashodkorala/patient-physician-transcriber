@@ -8,6 +8,7 @@ TDRs: none accepted for this change yet
 
 - [ ] 0.0 After demo night, a human decides whether the demo worked well enough to unpark this change; verify the decision is recorded in this file
 - [ ] 0.1 Draft product TDRs for architecture, live session channel, storage, pipeline orchestration, LLM provider and models, and knowledge base retrieval, each listing `add-multilingual-medical-consultation` in `related_changes`; verify `python3 scripts/check_tdr.py` passes
+- [ ] 0.1a Decide ADR-008 (automatic high-risk detection, proposed); verify its status is accepted or rejected before group 5
 - [ ] 0.2 Draft CDRs for every boundary between screens and server; verify each references its parent ADR
 - [ ] 0.3 A human decision owner accepts or rejects each record; verify the review queue shows none of them pending
 - [ ] 0.4 Replace the `TDRs:` line of every task group below with the accepted record ids; verify no group still says pending
