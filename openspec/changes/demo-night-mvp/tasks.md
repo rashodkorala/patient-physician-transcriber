@@ -7,7 +7,8 @@ TDRs: ADR-004, ADR-005, ADR-006, ADR-007, CDR-001, CDR-002, EDR-002, IDR-001, ID
 - [x] 0.1 Project lead reviews ADR-004, ADR-005, ADR-006, and ADR-007 and sets each to accepted or rejected; verify `python3 scripts/check_tdr.py` shows no pending ADRs
 - [x] 0.2 Project lead and front-end and back-end owners review CDR-001 and CDR-002; verify both are accepted or replaced (2026-10-22: the project lead reviewed and accepted both as sole reviewer)
 - [x] 0.3 A second team member reviews EDR-002, IDR-001, IDR-002, and IDR-003; TDM-001 is acknowledged; verify the review queue in `scripts/check_tdr.py` is empty (2026-10-22: no second reviewer available, so the project lead reviewed and accepted all records)
-- [ ] 0.4 Write the demo script (lines for both speakers, featured condition, dose) and verify both native speakers sign it off in docs/demo-script.md
+- [ ] 0.4 Write the demo script (lines for both speakers, featured condition, dose) and verify both native speakers and a clinician sign it off in docs/demo-script.md (draft written 2026-10-22; sign-offs pending)
+- [ ] 0.5 Decide TDM-002 (presenter mismatch control); if accepted, add the presenter-only `demo.inject_mismatch` command to CDR-001 as an additive amendment; verify `python3 scripts/check_tdr.py` passes
 
 ## 1. Week 1 (22 to 29 Oct): live loop
 
@@ -55,6 +56,13 @@ TDRs: TDM-001, EDR-002
 - [ ] 4.3 Dress rehearsal 1 on 17 Nov with both speakers on the real TV and microphone; record issues in docs/rehearsals.md
 - [ ] 4.4 Dress rehearsal 2 on 18 Nov; record the backup video; verify all nine beats pass for both languages
 - [ ] 4.5 Fill `implementation_refs` and `test_refs` in every TDR used; verify `python3 scripts/check_tdr.py` passes
+
+## 5. Demo safety beat (presenter mismatch control)
+
+TDRs: TDM-002, ADR-004, CDR-001, CDR-002
+
+- [ ] 5.1 Implement the presenter-only `demo.inject_mismatch` command and the one-turn injection in the turn graph; verify tests show the injected turn is blocked on both attempts, the following turn is unaffected, and no screen or review connection receives the injection
+- [ ] 5.2 Record injections in the transcript as demo injections and add the simulated interpreter connection close; verify both in a scripted run of docs/demo-script.md beats 5 and 6
 
 ## Workflow follow-up
 

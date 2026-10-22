@@ -139,6 +139,17 @@ The system SHALL offer a human interpreter when a turn still fails its confidenc
 - **WHEN** the patient presses the human interpreter button
 - **THEN** a connecting state is shown and the request is recorded in the transcript
 
+#### Scenario: Simulated connection ends
+- **WHEN** a simulated interpreter connection has shown its connecting state for a few seconds
+- **THEN** it closes with "Interpreter would join here (simulated)" in both languages and the consultation continues
+
+### Requirement: Presenter mismatch control
+The system SHALL provide a presenter-only control that makes the next physician turn's translation alter one critical value on both attempts, so the turn is blocked under the normal mismatch rule. The control SHALL exist only in presenter mode, SHALL never appear on shared or review screens, and the injection SHALL be recorded in the transcript as a demo injection.
+
+#### Scenario: Injected mismatch is blocked
+- **WHEN** the presenter activates the control and the physician then states a dose
+- **THEN** the turn is blocked, nothing is spoken, the speaker is asked to repeat, and the repeated turn proceeds to read-back normally
+
 ### Requirement: Transcript review
 The system SHALL show the bilingual, speaker-labelled transcript after the visit, and SHALL let the patient confirm or correct their own turns while keeping the original text.
 

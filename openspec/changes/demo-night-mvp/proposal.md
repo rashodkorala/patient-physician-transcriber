@@ -18,7 +18,7 @@ A nine-beat demo for Punjabi to English and French to English, run locally on on
 8. **Note and summary**: English note with each sentence tagged patient-stated, physician-stated, companion-stated, interpreter-stated, or AI inference (only the first two and AI inference occur, since the demo captures patient and physician turns only); Punjabi or French summary read aloud.
 9. **Record verified** badge, with a tamper demonstration that turns it red.
 
-Also: a replay mode that plays a recorded session through the same screens if the network fails.
+Also: a replay mode that plays a recorded session through the same screens if the network fails, and a presenter-only mismatch control that forces one blocked dose on stage (TDM-002, proposed). The full stage script is `docs/demo-script.md`.
 
 ## Capabilities
 
