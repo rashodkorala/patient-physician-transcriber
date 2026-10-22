@@ -2,7 +2,7 @@
 
 ## Context
 
-> **Status: parked roadmap.** The current product is `demo-night-mvp`. Do not apply this change yet. It moves to product only if the demo works really well: after demo night (19 November 2026), a human decides whether to unpark it, and the demo's records may then be proposed again as product TDRs, with rehearsal and demo-night evidence. The accepted decision records in `openspec/tdr/` are scoped to `demo-night-mvp` (their `related_changes`) and do **not** bind this change, and this change has no accepted records of its own. The decisions below are design intent, not settled choices: before any task beyond group 0 starts, each technical choice must be recorded as a product TDR listing this change and accepted by a human (see task group 0).
+> **Status: parked roadmap.** The current product is `demo-night-mvp`. Do not apply this change yet. It moves to product only if the demo works really well: after demo night (19 November 2026), a human decides whether to unpark it, and the demo's records may then be proposed again as product TDRs, with rehearsal and demo-night evidence. The only accepted records that bind this change are MDD-001, MDD-002, ADR-003, and EDR-001 (they list it in `related_changes`). ADR-003's escalation rules apply here, except its demo-only sentence that the interpreter call is simulated. All stack, vendor, state, and contract records remain scoped to `demo-night-mvp` and do **not** bind this change. The decisions below are design intent, not settled choices: before any task beyond group 0 starts, each technical choice must be recorded as a product TDR listing this change and accepted by a human (see task group 0).
 
 Motivation is in `proposal.md` (Why) and `docs/product-research.md`. Requirements live in the eight spec deltas under `specs/`. Stack, vendor, and storage choices are deliberately left open (see Open Questions); the demo's choices may be proposed again as product TDRs, but they are not inherited.
 
@@ -77,7 +77,7 @@ Each audit entry stores the hash of the previous entry and the fingerprint of an
 | speaker-attributed-transcription | Yes | Yes | During the visit only; discarded at end | No |
 | patient-verification | Yes | Yes | No | No |
 | note-provenance | Yes, with audio playback | Yes, text links only | No AI note | No AI note |
-| audit-integrity | Yes, incl. verify-my-copy | Yes, incl. verify-my-copy | Consent and access events only; no verify-my-copy | Consent event only |
+| audit-integrity | Yes, incl. verify-my-copy | Yes, incl. verify-my-copy | Consent, interpreter hand-off, and access events; no content; no verify-my-copy | Consent, interpreter hand-off, and access events; no content; no verify-my-copy |
 | communication-coaching | Yes (if opted in) | Yes (if opted in) | No | No |
 | patient-summary | Yes | Yes | No | No |
 

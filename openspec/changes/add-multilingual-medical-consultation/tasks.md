@@ -1,10 +1,10 @@
 # Tasks
 
-> Parked roadmap: do not apply until a human unparks it after a successful demo night and group 0 is complete. The current product is `demo-night-mvp`; its TDRs do not bind this change.
+> Parked roadmap: do not apply until a human unparks it after a successful demo night and group 0 is complete. The current product is `demo-night-mvp`. Only MDD-001, MDD-002, ADR-003 (escalation rules, not its simulated-call sentence), and EDR-001 bind this change; all other records are demo-only.
 
 ## 0. Product decision gate
 
-TDRs: none accepted for this change yet
+TDRs: MDD-001, MDD-002, ADR-003, EDR-001 (accepted); product records pending
 
 - [ ] 0.0 After demo night, a human decides whether the demo worked well enough to unpark this change; verify the decision is recorded in this file
 - [ ] 0.1 Draft product TDRs for architecture, live session channel, storage, pipeline orchestration, LLM provider and models, and knowledge base retrieval, each listing `add-multilingual-medical-consultation` in `related_changes`; verify `python3 scripts/check_tdr.py` passes

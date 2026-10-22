@@ -40,11 +40,11 @@ The system SHALL let the patient choose one consent scope per visit: interpret a
 - **THEN** the system does not capture audio and offers to connect a human interpreter
 
 ### Requirement: Capabilities follow the consent scope
-The system SHALL enable other capabilities only as the visit's scope allows: full scope enables all; transcript only enables all except audio playback; interpret only enables live interpretation and captions, plus consent and access audit entries; no AI enables only the consent audit entry and human interpreter hand-off. The matrix in design.md is normative.
+The system SHALL enable other capabilities only as the visit's scope allows: full scope enables all; transcript only enables all except audio playback; interpret only enables live interpretation and captions; no AI enables only human interpreter hand-off. Both keep audit entries for consent, interpreter hand-off, and access, none holding content. The matrix in design.md is normative.
 
 #### Scenario: Interpret-only visit ends
 - **WHEN** a visit with the interpret-only scope ends
-- **THEN** no transcript review, clinical note, patient summary, coaching feedback, or verify-my-copy is offered, and only consent and access events remain in the audit trail
+- **THEN** no transcript review, clinical note, patient summary, coaching feedback, or verify-my-copy is offered, and only consent, interpreter hand-off, and access events remain in the audit trail, with no content
 
 #### Scenario: Transcript-only note
 - **WHEN** a physician follows a note sentence's source in a transcript-only visit

@@ -29,7 +29,7 @@ TDRs: ADR-002, ADR-003, ADR-004, ADR-006, IDR-002, CDR-002, EDR-002
 - [ ] 2.2 Build the Chroma index and retrieval with exact-match glossary lookup; verify retrieval tests for terms and emotions pass offline
 - [ ] 2.3 Implement the LangGraph turn graph (analyse, retrieve, translate, verify, retry, block, escalate) with status events; verify graph tests with a mocked model cover pass, retry, block, and escalate (CDR-002 status table)
 - [ ] 2.4 Add translation-register tone labels to spoken captions; verify each spoken caption shows one label and no shared or review screen ever receives emotion, certainty, or back-translation (CDR-001 routing test)
-- [ ] 2.5 Implement empathy nudges on `/control` only; verify `/screen` never receives `empathy.nudge`
+- [ ] 2.5 Implement empathy nudges on `/control` only; verify `/screen` never receives `empathy.nudge`, including through a `visit.state` snapshot when the TV connects mid read-back
 - [ ] 2.6 Implement critical value read-back and blocking; verify a dose still mismatched after one retry is blocked, never spoken or shown on the shared screen, and the speaker is asked to repeat; a matched dose waits for physician confirmation; a matched dose with a failed tone check is escalated, not read back; in tests and live
 - [ ] 2.7 Run the ten-line tone set with both speakers; record ratings in docs/tone-ratings.md and verify average respect and warmth of 4 or more
 

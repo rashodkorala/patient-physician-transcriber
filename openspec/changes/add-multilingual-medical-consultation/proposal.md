@@ -1,6 +1,6 @@
 # Proposal
 
-> **Status: parked roadmap.** The current product is `demo-night-mvp`. This change is not bound by the demo's decision records and must not be applied until its own product TDRs are accepted (tasks group 0). It moves to product only if the demo works really well: after demo night (19 November 2026), a human decides whether to unpark it, and the demo's records may then be proposed again as product TDRs, with rehearsal and demo-night evidence.
+> **Status: parked roadmap.** The current product is `demo-night-mvp`. The only accepted records that bind this change are MDD-001, MDD-002, ADR-003, and EDR-001 (they list it in `related_changes`). ADR-003's escalation rules apply here, except its demo-only sentence that the interpreter call is simulated. All stack, vendor, state, and contract records remain scoped to `demo-night-mvp` and do **not** bind this change. It must not be applied until its own product TDRs are accepted (tasks group 0). It moves to product only if the demo works really well: after demo night (19 November 2026), a human decides whether to unpark it, and the demo's records may then be proposed again as product TDRs, with rehearsal and demo-night evidence.
 
 ## Why
 

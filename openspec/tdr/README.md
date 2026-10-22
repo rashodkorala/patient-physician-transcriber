@@ -30,7 +30,7 @@ Hierarchy: MDD, then ADR, then CDR, EDR, and IDR. A child record lists its paren
 
 - Agents may draft records (`proposed_by: agent`) but never decide a status. They may record a status change only for an explicit verdict a named human gave in the same session and asked them to record; the Review Notes name the human (EDR-001 rule 7).
 - A task in an OpenSpec change may start only when every TDR listed for its task group is `accepted`.
-- Scope: a TDR binds only the changes in its `related_changes`. All current stack, vendor, and state records are scoped to `demo-night-mvp`; the parked roadmap `add-multilingual-medical-consultation` needs its own product records (its task group 0) before it can be applied.
+- Scope: a TDR binds only the changes in its `related_changes`. All stack, vendor, state, and contract records are scoped to `demo-night-mvp`. The parked roadmap `add-multilingual-medical-consultation` is bound only by MDD-001, MDD-002, ADR-003 (escalation rules, not the demo-only simulated call), and EDR-001, and needs its own product records (its task group 0) before it can be applied.
 - Superseded records move to `archived/` and the new record lists them in `related_decisions`.
 - A TDM lapses on its `expires` date unless renewed or promoted to another type.
 

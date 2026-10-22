@@ -36,7 +36,7 @@ The system SHALL translate each utterance from the speaker's language into the l
 - **THEN** the English translation is spoken aloud and shown on the shared screen
 
 ### Requirement: Shared bilingual screen
-The system SHALL show the live conversation on a large shared display with each utterance in its original language and its translation side by side, labelled by speaker, readable from across a consulting room.
+The system SHALL show the live conversation on a large shared display with each utterance in its original language and its translation side by side, labelled by speaker, readable from across a consulting room. A translation SHALL appear on a shared screen only once it has been spoken.
 
 #### Scenario: Both parties read along
 - **WHEN** an utterance is translated
@@ -108,7 +108,7 @@ The system SHALL offer a human interpreter whenever translation or speech recogn
 
 #### Scenario: Uncertain translation
 - **WHEN** an utterance's translation confidence falls below the threshold
-- **THEN** the translation is not spoken or shown as final, the display shows that the turn is uncertain in both languages, and a human interpreter is offered
+- **THEN** the translation is neither spoken nor shown on any shared screen; the display shows the original and an "uncertain, interpreter offered" notice in both languages, and a human interpreter is offered
 
 ### Requirement: High-risk escalation
 The system SHALL let the physician mark the visit or a moment as high risk (for example consent to a procedure, a serious diagnosis, end-of-life care, a mental health crisis, or a safeguarding concern), and SHALL then offer a human interpreter and record the mark. Automatic detection of such moments is not specified until ADR-008 is decided.

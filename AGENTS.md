@@ -43,7 +43,7 @@ This project is built with **spec-driven development** (OpenSpec) and **Decision
 
 ## Decision scope
 
-A TDR binds only the OpenSpec changes listed in its `related_changes`. When applying a change, treat as decided only the records that list it. Never carry another change's decisions over silently, and never re-decide them: a missing decision is drafted as a proposed TDR for this change and waits for a human. `add-multilingual-medical-consultation` is a parked roadmap with no accepted records of its own; do not apply it. It moves to product only if the demo works really well, by a human decision after demo night.
+A TDR binds only the OpenSpec changes listed in its `related_changes`. When applying a change, treat as decided only the records that list it. Never carry another change's decisions over silently, and never re-decide them: a missing decision is drafted as a proposed TDR for this change and waits for a human. `add-multilingual-medical-consultation` is a parked roadmap; do not apply it. The only accepted records that bind it are MDD-001, MDD-002, ADR-003 (its escalation rules, not the demo-only simulated call), and EDR-001; all stack, vendor, state, and contract records are demo-only. It moves to product only if the demo works really well, by a human decision after demo night.
 
 ## Before you implement
 
