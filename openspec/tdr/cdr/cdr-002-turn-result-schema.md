@@ -60,7 +60,7 @@ Any verify failure triggers one retry, with mismatched critical values pinned in
 | All critical values match, physician turn has critical values | `readback_required` | After physician confirms | Values highlighted in both languages; confirm or reject |
 | All checks pass, no critical values needing read-back | `final` | Yes | Caption and speech |
 | Critical value still mismatched after one re-translation | `blocked` | Never | Controller shows mismatched values; speaker asked to repeat or rephrase |
-| Confidence or tone check still failing after one retry | `escalated` | No | Marked uncertain; human interpreter offered (ADR-003) |
+| Confidence or tone check still failing after one retry | `escalated` | No | Marked uncertain; human interpreter offered (ADR-003) with reason `low_confidence` or `tone_failure` (CDR-001) |
 | Physician rejects highlighted values at read-back | (turn discarded, via `turn.readback_reject` in CDR-001) | No | Speaker asked to repeat (covers recognition errors) |
 
 ## Data Schemas
@@ -96,7 +96,7 @@ Pydantic validation tests with fixtures and a TypeScript type test against a JSO
 - a dose mismatched on the first attempt and matched on the retry yields `attempts: 2`, all `matched: true`, and `status: readback_required` for a physician turn;
 - a dose mismatched on both attempts yields `matched: false` and `status: blocked`;
 - a `blocked` result never reaches speech synthesis and never emits `interpreter.escalation`;
-- a confidence or tone failure on both attempts yields `status: escalated`.
+- a confidence failure on both attempts yields `status: escalated` and an escalation with reason `low_confidence`; a tone-only failure on both attempts yields `status: escalated` and reason `tone_failure`.
 
 ## Consequences
 
@@ -113,3 +113,4 @@ Code carries `@contract TurnResult` and `@implements CDR-002: Turn result schema
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended in place before implementation: added `blocked` status and the single outcome table, so a critical value still mismatched after one re-translation is never spoken and the speaker is asked to repeat (previously a mismatch could reach `readback_required`). Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-22, rashodkorala: Amended to reference the new `tone_failure` escalation reason in CDR-001. Recorded by Claude (agent) at rashodkorala's explicit request.

@@ -82,7 +82,7 @@ Every message: `{ "type": string, "visitId": string, "seq": integer, "ts": ISO-8
 - `turn.status.payload`: `{ turnId, stage: string }`
 - `turn.result.payload`: CDR-002 `TurnResult`
 - `empathy.nudge.payload`: `{ turnId, emotion, suggestion, phrase, phraseLanguage }` (sent only to controller connections)
-- `interpreter.escalation.payload`: `{ reason: "low_confidence"|"high_risk"|"requested", turnId?: string }`
+- `interpreter.escalation.payload`: `{ reason: "low_confidence"|"tone_failure"|"high_risk"|"requested", turnId?: string }`. `low_confidence` means recognition or translation confidence stayed below threshold after one retry; `tone_failure` means the tone check (certainty or warmth not preserved) still failed after one retry; when both fail, `low_confidence` is used
 - `segment.amended.payload`: `{ segmentId, by: "patient"|"physician", action: "confirm"|"amend", newText?: string }`
 - `record.integrity.payload`: `{ status: "verified"|"broken", headHash, brokenAt?: segmentId }`
 
@@ -109,3 +109,4 @@ Code carries `@contract ws:/ws/visit` and `@implements CDR-001: Visit WebSocket 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Clarified, no schema change: meaning of `turn.result` with `status: blocked` and of `turn.readback_reject`. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-22, rashodkorala: Amended (additive, before implementation): added `tone_failure` escalation reason so tone failures are distinguishable from low confidence. Recorded by Claude (agent) at rashodkorala's explicit request.

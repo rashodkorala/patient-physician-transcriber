@@ -55,7 +55,7 @@ The controller has "Physician speaking" and "Patient speaking" buttons. The brow
   | All critical values match, physician turn has critical values | `readback_required` | After physician confirms | Values highlighted in both languages; confirm or reject |
   | All checks pass, no critical values needing read-back | `final` | Yes | Caption and speech |
   | Critical value still mismatched after one re-translation | `blocked` | Never | Controller shows mismatched values; speaker asked to repeat or rephrase |
-  | Confidence or tone check still failing after one retry | `escalated` | No | Marked uncertain; human interpreter offered (ADR-003) |
+  | Confidence or tone check still failing after one retry | `escalated` | No | Marked uncertain; human interpreter offered (ADR-003) with reason `low_confidence` or `tone_failure` (CDR-001) |
   | Physician rejects highlighted values at read-back | (turn discarded) | No | Speaker asked to repeat (covers recognition errors) |
 
   A critical value mismatch never escalates on its own; the interpreter button stays available throughout.
