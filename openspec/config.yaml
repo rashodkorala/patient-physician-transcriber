@@ -12,36 +12,34 @@ context: |
   Compliance: PIPEDA, PHIPA (Ontario), Quebec Law 25, and other provincial health privacy acts; HIPAA, GDPR, and UK GDPR for later markets. Vendors handling PHI need a DPA or BAA, and Canadian data residency must be available.
   The physician remains the final author of the medical record.
   Communication feedback is private to the physician and never shown to the patient or employer by default.
-  Stack is not yet chosen; designs should name options and trade-offs rather than assume one.
+  Technical decisions live as DDSE records in openspec/tdr/ (index.md); designs cite them and do not decide silently.
   Write all artifacts in UK English with the Oxford comma; avoid em-dashes.
 
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
+# Rules binding OpenSpec (what) to the DDSE decision layer in openspec/tdr/ (why and how).
+rules:
+  proposal:
+    - 'List the TDRs the change relies on by id (for example ADR-004), and any decisions that still need a TDR'
+    - 'State what is out of scope'
+  specs:
+    - 'Describe observable behaviour only; vendor, library, and framework names belong in TDRs, not specs'
+  design:
+    - 'Every technical choice cites the TDR that makes it (for example "per ADR-004")'
+    - 'A choice without an accepted TDR goes under Open Questions, with a proposed TDR drafted from openspec/tdr/templates/'
+  tasks:
+    - 'Every task group starts with a line "TDRs: <ids>" listing the decisions it depends on'
+    - 'Group 0 is a human decision review gate for every proposed TDR the change relies on'
+    - 'Every task names its verification (test, command, or observable behaviour)'
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
-
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+operations:
+  apply:
+    guidance:
+      - 'Read openspec/tdr/index.md and the TDRs listed for the task group first, starting from MDD, then ADR, then CDR, EDR, and IDR; use each record''s ai_context'
+      - 'Run python3 scripts/check_tdr.py; do not start a task whose TDRs are not accepted'
+      - 'When a new architectural, contract, vendor, data, safety, or privacy choice is needed, draft a proposed TDR from openspec/tdr/templates/ with proposed_by agent, add it to openspec/tdr/index.md, and stop for human review'
+      - 'Never change a TDR status to accepted, rejected, or superseded; only humans do that'
+      - 'Annotate governed code with "@implements <TDR-ID>: <title>", "@contract <endpoint or schema>" for CDR-governed code, and "@see <path>"'
+      - 'Reference TDR ids in commit messages, for example "feat: live turn graph (ADR-004, CDR-002)"'
+  archive:
+    guidance:
+      - 'Confirm every TDR cited by the change is accepted or superseded'
+      - 'Fill implementation_refs and test_refs in each cited TDR before archiving'

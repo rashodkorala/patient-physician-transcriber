@@ -4,7 +4,9 @@ An AI medical interpreter with a verified record, built first for Canada. A pati
 
 - Market research, language data, and baseline choices: [`docs/product-research.md`](docs/product-research.md)
 - Project context and constraints: [`openspec/config.yaml`](openspec/config.yaml)
-- First change under review: [`openspec/changes/add-multilingual-medical-consultation`](openspec/changes/add-multilingual-medical-consultation)
+- Product roadmap change: [`openspec/changes/add-multilingual-medical-consultation`](openspec/changes/add-multilingual-medical-consultation)
+- Demo night (19 November 2026) change: [`openspec/changes/demo-night-mvp`](openspec/changes/demo-night-mvp)
+- Decision registry: [`openspec/tdr/index.md`](openspec/tdr/index.md)
 
 First-version languages: English, French, Mandarin, Cantonese, Punjabi, Urdu, Arabic, Farsi, Tagalog, Spanish, Portuguese, Sinhala, and Tamil.
 
@@ -21,9 +23,28 @@ First-version languages: English, French, Mandarin, Cantonese, Punjabi, Urdu, Ar
 | `communication-coaching` | Private, opt-in feedback on what was lost or misunderstood in translation |
 | `patient-summary` | Plain-language summary in the patient's language, read aloud on request, with exact doses |
 
-## Spec-driven workflow (OpenSpec)
+## How we work: spec-driven and decision-driven
 
-This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec). No code is written until its spec is agreed.
+AI agents build; humans decide and review.
+
+| Layer | Answers | Lives in |
+|---|---|---|
+| Specs ([OpenSpec](https://github.com/Fission-AI/OpenSpec)) | What must the system do? | `openspec/specs/`, `openspec/changes/` |
+| Decisions ([DDSE v1.1](https://github.com/ddse-foundation/ddse-foundation)) | Why is it built this way, and which choices are allowed? | `openspec/tdr/` (MDD, ADR, CDR, EDR, IDR, TDM) |
+| Rules | How do the two bind together? | `openspec/config.yaml`, [`AGENTS.md`](AGENTS.md) |
+
+```
+ decision needed --> TDR drafted (proposed) --> HUMAN accepts --> change specs, design, tasks cite it
+        --> agent implements (/opsx:apply, code carries @implements) --> HUMAN reviews PR --> archive
+```
+
+```bash
+python3 scripts/check_tdr.py    # validate decisions and show the human review queue
+```
+
+## OpenSpec commands
+
+No code is written until its spec is agreed and its decisions are accepted.
 
 ```bash
 npx @fission-ai/openspec@1.14.3 list                 # changes in flight
