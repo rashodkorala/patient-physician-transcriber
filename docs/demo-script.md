@@ -4,7 +4,7 @@
 > - Every Punjabi and French line below is Claude's draft. The native speakers must rewrite each one in the words they would naturally say, then sign off.
 > - A clinician must check the medical content before rehearsals.
 > - Patients and doctors are fictional. Nothing here is medical advice.
-> - Beat 5's forced mismatch depends on TDM-002, which is still **proposed**. If it is rejected, play beat 5 without the injection (see beat 5 fallback).
+> - Beat 5's forced mismatch uses TDM-002 (accepted): it multiplies the first dose number by 10 (0.4 mg becomes 4 mg) on the next physician turn with a dose.
 
 ## At a glance
 
@@ -23,7 +23,7 @@
 - Two clip-on microphones (physician, patient) or one close-talk microphone passed between them.
 - Phone hotspot as primary network; venue wifi as backup.
 - Replay log and backup video loaded (TDM-001).
-- Presenter mode on the laptop (tamper control; mismatch control if TDM-002 is accepted).
+- Presenter mode on the laptop (tamper control; mismatch control, TDM-002).
 
 ## Fallbacks
 
@@ -85,7 +85,7 @@
 
 | # | Speaker | Line | Notes |
 |---|---|---|---|
-| 5.1 | Presenter | presses the hidden mismatch control (TDM-002) | Not visible on the TV |
+| 5.1 | Presenter | arms the hidden mismatch control (TDM-002); the controller shows "armed" | Not visible on the TV or review screen |
 | 5.2 | Physician | "Use the nitroglycerin spray: 0.4 milligrams, one spray under your tongue when the chest pain starts." | The injected mismatch survives the retry, so the turn is **blocked** |
 | 5.3 | Physician | repeats 5.2 exactly | Values match; controller shows 0.4 mg, one spray, highlighted in both languages; physician confirms; translation spoken |
 | 5.4 | Physician | "If the pain is not better after 5 minutes, call 911." | Read-back on "5 minutes" and "911"; confirm; spoken |
@@ -93,8 +93,8 @@
 
 - **TV:** during 5.2, the original English and a "please repeat" notice in both languages, never the wrong translation. During read-back, "checking the dose" in both languages, then the spoken caption with values highlighted.
 - **Controller:** after 5.2, the mismatched value shown in both languages and "ask the speaker to repeat".
-- **Narrator:** after 5.2: "We forced a translation error there. The system caught that the dose had changed and refused to say it. A wrong dose is never spoken and never shown." After 5.3: "No dose reaches the patient until the doctor confirms it."
-- **Fallback if TDM-002 is rejected:** skip 5.1 and 5.2; the narrator explains the rule while 5.3 runs normally.
+- **Narrator:** after 5.2: "We forced a translation error there: 0.4 milligrams would have come out as 4. The system caught that the dose had changed and refused to say it. A wrong dose is never spoken and never shown." After 5.3: "No dose reaches the patient until the doctor confirms it."
+- **Fallback if the control misbehaves:** cancel it, skip 5.2, and the narrator explains the rule while 5.3 runs normally.
 
 ### Beat 6: Mark high risk and the interpreter (Requirement: Human interpreter offer)
 

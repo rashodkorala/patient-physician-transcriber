@@ -25,7 +25,7 @@ Only a human decides a status; an agent may record an explicit human verdict (ED
 | [IDR-002](idr/idr-002-kb-retrieval-chroma.md) | Chroma with local multilingual embeddings plus exact-match glossary lookup | IDR | accepted | rashodkorala | demo-night-mvp |
 | [IDR-003](idr/idr-003-hash-chain-integrity.md) | SHA-256 hash chain for the record-verified badge | IDR | accepted | rashodkorala | demo-night-mvp |
 | [TDM-001](tdm/tdm-001-replay-mode-safety-net.md) | Replay mode and backup video as demo safety net | TDM | accepted | rashodkorala | demo-night-mvp |
-| [TDM-002](tdm/tdm-002-presenter-mismatch-control.md) | Presenter mismatch control for the blocked-dose beat | TDM | proposed | rashodkorala | demo-night-mvp |
+| [TDM-002](tdm/tdm-002-presenter-mismatch-control.md) | Presenter mismatch control for the blocked-dose beat | TDM | accepted | rashodkorala | demo-night-mvp |
 
 ## Hierarchy
 

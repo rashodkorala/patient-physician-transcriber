@@ -144,11 +144,23 @@ The system SHALL offer a human interpreter when a turn still fails its confidenc
 - **THEN** it closes with "Interpreter would join here (simulated)" in both languages and the consultation continues
 
 ### Requirement: Presenter mismatch control
-The system SHALL provide a presenter-only control that makes the next physician turn's translation alter one critical value on both attempts, so the turn is blocked under the normal mismatch rule. The control SHALL exist only in presenter mode, SHALL never appear on shared or review screens, and the injection SHALL be recorded in the transcript as a demo injection.
+The system SHALL provide a presenter-only control that, on the next physician turn containing a critical value, multiplies its first dose number by 10 in the translation on both attempts, so the normal mismatch rule blocks it. The presenter SHALL be able to cancel it before it fires. The injection SHALL be shown only on the controller and in the record view, never on the shared or review screens.
 
 #### Scenario: Injected mismatch is blocked
-- **WHEN** the presenter activates the control and the physician then states a dose
-- **THEN** the turn is blocked, nothing is spoken, the speaker is asked to repeat, and the repeated turn proceeds to read-back normally
+- **WHEN** the presenter arms the control and the physician then says "0.4 milligrams"
+- **THEN** the translation would read 4 milligrams, the turn is blocked, nothing is spoken, the speaker is asked to repeat, and the repeated turn proceeds to read-back normally
+
+#### Scenario: Waits for a critical value
+- **WHEN** the control is armed and the next physician turn contains no critical value
+- **THEN** that turn is unaffected and the control stays armed
+
+#### Scenario: Cancelled before firing
+- **WHEN** the presenter cancels an armed control
+- **THEN** the next dose is translated normally
+
+#### Scenario: Review screen after an injection
+- **WHEN** the patient opens the review screen after an injected turn
+- **THEN** the turn appears as blocked, then repeated, with no wrong translation and no injection label
 
 ### Requirement: Transcript review
 The system SHALL show the bilingual, speaker-labelled transcript after the visit, and SHALL let the patient confirm or correct their own turns while keeping the original text.
