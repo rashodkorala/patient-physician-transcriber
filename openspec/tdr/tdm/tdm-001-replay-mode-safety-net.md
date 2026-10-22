@@ -1,7 +1,7 @@
 ---
 id: tdm-001
 title: "Replay mode and backup video as demo safety net"
-status: proposed
+status: accepted
 date: 2026-10-22
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -59,3 +59,4 @@ Record a full rehearsal's CDR-001 event log and audio; add a server replay mode 
 ## Review Notes
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
+- 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.

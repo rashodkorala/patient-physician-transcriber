@@ -1,7 +1,7 @@
 ---
 id: adr-006
 title: "LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary"
-status: proposed
+status: accepted
 date: 2026-10-22
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -63,3 +63,4 @@ Configure models in `server/config.py`. Use structured outputs for every call. B
 ## Review Notes
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
+- 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.

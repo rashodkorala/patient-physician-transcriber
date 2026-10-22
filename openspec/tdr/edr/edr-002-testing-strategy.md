@@ -1,7 +1,7 @@
 ---
 id: edr-002
 title: "Testing: pytest with mocked LLM, speaker-rated tone set, latency check"
-status: proposed
+status: accepted
 date: 2026-10-22
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -60,3 +60,4 @@ pytest with a fake chat model for the turn graph (retry and escalate branches, g
 ## Review Notes
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
+- 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.

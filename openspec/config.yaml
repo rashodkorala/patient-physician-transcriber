@@ -36,7 +36,7 @@ operations:
       - 'Read openspec/tdr/index.md and the TDRs listed for the task group first, starting from MDD, then ADR, then CDR, EDR, and IDR; use each record''s ai_context'
       - 'Run python3 scripts/check_tdr.py; do not start a task whose TDRs are not accepted'
       - 'When a new architectural, contract, vendor, data, safety, or privacy choice is needed, draft a proposed TDR from openspec/tdr/templates/ with proposed_by agent, add it to openspec/tdr/index.md, and stop for human review'
-      - 'Never change a TDR status to accepted, rejected, or superseded; only humans do that'
+      - 'Never decide a TDR status; humans decide. Change a status only to record an explicit verdict a named human gave in this session and asked you to record, naming them in Review Notes and the commit (EDR-001 rule 7)'
       - 'Annotate governed code with "@implements <TDR-ID>: <title>", "@contract <endpoint or schema>" for CDR-governed code, and "@see <path>"'
       - 'Reference TDR ids in commit messages, for example "feat: live turn graph (ADR-004, CDR-002)"'
   archive:

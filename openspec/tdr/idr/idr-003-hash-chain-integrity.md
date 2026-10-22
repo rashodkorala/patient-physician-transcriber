@@ -1,7 +1,7 @@
 ---
 id: idr-003
 title: "SHA-256 hash chain for the record-verified badge"
-status: proposed
+status: accepted
 date: 2026-10-22
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -58,3 +58,4 @@ Each transcript segment and amendment is appended to a SHA-256 hash chain; the r
 ## Review Notes
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
+- 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.

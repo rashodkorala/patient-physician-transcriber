@@ -1,7 +1,7 @@
 ---
 id: cdr-001
 title: "Visit WebSocket event contract"
-status: proposed
+status: accepted
 date: 2026-10-22
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala", "front-end owner", "back-end owner"]
@@ -107,3 +107,4 @@ Code carries `@contract ws:/ws/visit` and `@implements CDR-001: Visit WebSocket 
 ## Review Notes
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
+- 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.

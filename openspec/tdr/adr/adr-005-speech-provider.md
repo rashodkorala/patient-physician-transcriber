@@ -1,7 +1,7 @@
 ---
 id: adr-005
 title: "Speech: Azure Speech primary, Google Speech backup"
-status: proposed
+status: accepted
 date: 2026-10-22
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -61,3 +61,4 @@ Browser uses the Azure Speech SDK with tokens minted by the server. Week 1 inclu
 ## Review Notes
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
+- 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request. Condition: the week 1 Punjabi accuracy test (demo-night-mvp task 1.4) decides whether to switch to Google Speech.

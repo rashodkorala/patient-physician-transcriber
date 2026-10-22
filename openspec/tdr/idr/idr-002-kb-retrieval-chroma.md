@@ -1,7 +1,7 @@
 ---
 id: idr-002
 title: "Chroma with local multilingual embeddings plus exact-match glossary lookup"
-status: proposed
+status: accepted
 date: 2026-10-22
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -62,3 +62,4 @@ Build the Chroma index at server start from `server/kb/`. Glossary lookup uses n
 ## Review Notes
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
+- 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.

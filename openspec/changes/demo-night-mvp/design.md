@@ -2,7 +2,7 @@
 
 ## Context
 
-Motivation and scope: see `proposal.md` and MDD-003. Behaviour: see `specs/demo-consultation-flow/spec.md`. Every technical choice below cites its TDR in `openspec/tdr/`. Choices marked *(proposed)* rely on a TDR that a human has not yet accepted; their tasks wait at group 0.
+Motivation and scope: see `proposal.md` and MDD-003. Behaviour: see `specs/demo-consultation-flow/spec.md`. Every technical choice below cites its TDR in `openspec/tdr/`. All TDRs cited here were accepted by the project lead on 2026-10-22.
 
 Constraints: one demo laptop plus a TV and optionally a phone on the same network; four weeks; native Punjabi and French speakers available for content review and rehearsals.
 
@@ -25,24 +25,24 @@ Constraints: one demo laptop plus a TV and optionally a phone on the same networ
         \               |                   /
          +----- WebSocket: CDR-001 events ----+
                          |
-                 server/ (FastAPI)  -- visit_store (ADR-007, proposed)
-                         |            -- hash_chain  (IDR-003, proposed)
-                         |            -- speech_token (ADR-005, proposed)
-              turn graph (ADR-004, proposed)
+                 server/ (FastAPI)  -- visit_store (ADR-007)
+                         |            -- hash_chain  (IDR-003)
+                         |            -- speech_token (ADR-005)
+              turn graph (ADR-004)
      analyse -> retrieve -> translate -> verify --+--> done
                               ^                   |
                               +--- retry once ----+--> escalate (ADR-003)
                          |
-      knowledge base (ADR-002; retrieval per IDR-002, proposed)
+      knowledge base (ADR-002; retrieval per IDR-002)
       glossary | tone and culture | empathy phrases | condition explainers
                          |
-      Claude models (ADR-006, proposed)
+      Claude models (ADR-006)
 ```
 
-### Turn capture (IDR-001, proposed)
+### Turn capture (IDR-001)
 The controller has "Physician speaking" and "Patient speaking" buttons. The browser recognises speech (ADR-005) and sends `turn.submit` with speaker, language, text, and recognition confidence (CDR-001).
 
-### Tone-aware turn graph (ADR-004, proposed)
+### Tone-aware turn graph (ADR-004)
 - **analyse**: emotion, certainty, register, intent, and critical values (deterministic extractor for numbers and units, model for medication names).
 - **retrieve**: glossary hits by exact and fuzzy match; tone, culture, and empathy entries for the listener's language by vector search (IDR-002).
 - **translate**: model call with retrieved context and fixed rules: keep certainty, keep warmth, use the respectful register, explain jargon plainly, never change critical values.
@@ -57,11 +57,11 @@ The controller has "Physician speaking" and "Patient speaking" buttons. The brow
 Explain-back comparison, clinical note with provenance tags, and patient summary are plain LangChain chains with structured outputs. The summary passes a deterministic check that every number and dose matches the confirmed turns.
 
 ### State, integrity, and replay
-- Visit state in memory, broadcast over WebSocket (ADR-007, proposed).
-- SHA-256 hash chain over turns and amendments; hidden tamper control for the demo (IDR-003, proposed).
-- Replay mode replays a recorded CDR-001 event log (TDM-001, proposed, expires 2026-11-20).
+- Visit state in memory, broadcast over WebSocket (ADR-007).
+- SHA-256 hash chain over turns and amendments; hidden tamper control for the demo (IDR-003).
+- Replay mode replays a recorded CDR-001 event log (TDM-001, expires 2026-11-20).
 
-### Speech (ADR-005, proposed)
+### Speech (ADR-005)
 Azure Speech SDK in the browser with server-minted tokens; Google as backup. Week 1 includes a Punjabi accuracy test.
 
 ### Code layout
@@ -86,5 +86,4 @@ Not applicable. After demo night, archive TDM-001 and decide which demo TDRs car
 
 ## Open Questions
 
-- Accept or revise the eleven proposed TDRs (task group 0).
 - Exact demo script lines and which medical condition to feature (affects knowledge base content only).

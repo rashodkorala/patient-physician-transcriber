@@ -1,7 +1,7 @@
 ---
 id: idr-001
 title: "Push-to-talk per speaker instead of diarisation"
-status: proposed
+status: accepted
 date: 2026-10-22
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -58,3 +58,4 @@ Use push-to-talk per speaker for the demo. The roadmap's automatic diarisation r
 ## Review Notes
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
+- 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.

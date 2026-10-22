@@ -30,8 +30,7 @@ None.
 
 ## Decisions (TDRs)
 
-- Accepted: MDD-001, MDD-002, MDD-003, ADR-001, ADR-002, ADR-003, EDR-001.
-- Proposed, awaiting human review before the tasks that depend on them: ADR-004 (LangGraph), ADR-005 (speech provider), ADR-006 (models), ADR-007 (in-memory state), CDR-001 (visit events), CDR-002 (turn result), EDR-002 (testing), IDR-001 (push-to-talk), IDR-002 (retrieval), IDR-003 (hash chain), TDM-001 (replay mode).
+- Accepted (all on 2026-10-22 by the project lead): MDD-001, MDD-002, MDD-003, ADR-001, ADR-002, ADR-003, ADR-004 (LangGraph), ADR-005 (speech provider), ADR-006 (models), ADR-007 (in-memory state), CDR-001 (visit events), CDR-002 (turn result), EDR-001, EDR-002 (testing), IDR-001 (push-to-talk), IDR-002 (retrieval), IDR-003 (hash chain), TDM-001 (replay mode).
 - Registry: `openspec/tdr/index.md`.
 
 ## Out of Scope

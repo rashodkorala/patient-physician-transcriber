@@ -1,7 +1,7 @@
 ---
 id: cdr-002
 title: "Turn result schema"
-status: proposed
+status: accepted
 date: 2026-10-22
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala", "front-end owner", "back-end owner"]
@@ -94,3 +94,4 @@ Code carries `@contract TurnResult` and `@implements CDR-002: Turn result schema
 ## Review Notes
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
+- 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.

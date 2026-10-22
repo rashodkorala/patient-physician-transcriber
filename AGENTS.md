@@ -27,7 +27,7 @@ This project is built with **spec-driven development** (OpenSpec) and **Decision
 
 | Who | Does | Never does |
 |---|---|---|
-| AI agent | Drafts proposals, specs, designs, tasks, and proposed TDRs; implements accepted work; writes tests; annotates code | Sets a TDR to accepted, rejected, or superseded; implements against a proposed TDR; makes a silent architectural choice |
+| AI agent | Drafts proposals, specs, designs, tasks, and proposed TDRs; implements accepted work; writes tests; annotates code; records a human's explicit verdict when asked (EDR-001 rule 7) | Decides a TDR status on its own; implements against a proposed TDR; makes a silent architectural choice |
 | Human (decision owner) | Accepts or rejects TDRs; reviews changes and pull requests; merges | Approves work whose TDRs are not accepted |
 
 ## What counts as a decision, and which record

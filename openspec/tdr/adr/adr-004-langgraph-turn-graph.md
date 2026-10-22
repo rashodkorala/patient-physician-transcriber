@@ -1,7 +1,7 @@
 ---
 id: adr-004
 title: "LangGraph for the per-turn translation graph; plain LangChain for single-pass chains"
-status: proposed
+status: accepted
 date: 2026-10-22
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -64,3 +64,4 @@ Implement `server/graph/turn_graph.py` as a LangGraph `StateGraph` with nodes an
 ## Review Notes
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
+- 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.

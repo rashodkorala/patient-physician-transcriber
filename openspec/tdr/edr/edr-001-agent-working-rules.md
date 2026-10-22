@@ -20,7 +20,7 @@ ai_context:
     - "scripts/check_tdr.py before every commit"
   validation_rules:
     - "Never implement a task whose TDRs are not accepted"
-    - "Never set a TDR status to accepted"
+    - "Never decide a TDR status; record a status change only for an explicit verdict a named human gave in the same session and asked the agent to record"
     - "Stop and draft a proposed TDR when a new decision is needed"
 affects: []
 implementation_refs: []
@@ -47,6 +47,7 @@ Rules every AI agent and human follows when building: decision gates, code annot
 4. Tests name the TDR they verify (for example `test_turn_result_schema_cdr_002`).
 5. Commits reference TDR ids: `feat: live turn graph (ADR-004, CDR-002)`.
 6. Pull requests use the template checklist; a human reviews and merges.
+7. Recording human verdicts: an agent never decides a TDR status. It may change a status (accepted, rejected, superseded, or deprecated) only to record a verdict that a named human gave explicitly in the same session and asked the agent to record. The record's Review Notes then state the human, the date, and "Recorded by <agent> at <human>'s explicit request", and the commit message names the human decider.
 
 ## Alternatives Considered
 
@@ -67,3 +68,4 @@ Documented in `AGENTS.md`, enforced by `openspec/config.yaml` apply guidance and
 ## Review Notes
 
 - 2026-10-22, rashodkorala: Accepted by the project lead in the planning conversation.
+- 2026-10-22, rashodkorala: Amended to add rule 7 (agents may record an explicit human verdict). Recorded by Claude (agent) at rashodkorala's explicit request.

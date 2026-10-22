@@ -28,7 +28,7 @@ Hierarchy: MDD, then ADR, then CDR, EDR, and IDR. A child record lists its paren
           \-> rejected
 ```
 
-- Agents may draft records (`proposed_by: agent`) but never set `accepted`.
+- Agents may draft records (`proposed_by: agent`) but never decide a status. They may record a status change only for an explicit verdict a named human gave in the same session and asked them to record; the Review Notes name the human (EDR-001 rule 7).
 - A task in an OpenSpec change may start only when every TDR listed for its task group is `accepted`.
 - Superseded records move to `archived/` and the new record lists them in `related_decisions`.
 - A TDM lapses on its `expires` date unless renewed or promoted to another type.

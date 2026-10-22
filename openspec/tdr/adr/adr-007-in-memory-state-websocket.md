@@ -1,7 +1,7 @@
 ---
 id: adr-007
 title: "In-memory visit state with WebSocket updates; no database for the demo"
-status: proposed
+status: accepted
 date: 2026-10-22
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -60,3 +60,4 @@ Hold the demo visit in server memory and push updates to all screens over a WebS
 ## Review Notes
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
+- 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
