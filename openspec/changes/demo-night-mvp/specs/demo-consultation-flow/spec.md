@@ -7,7 +7,7 @@ Demonstrates, live on demo night, a consultation between a patient and a physici
 ## ADDED Requirements
 
 ### Requirement: Language selection
-The system SHALL list the thirteen roadmap languages in their own scripts and SHALL allow Punjabi and French as live patient languages with English as the physician language, marking the others as coming soon.
+The system SHALL list the thirteen roadmap languages in their own scripts and SHALL allow Punjabi and French as live patient languages with English as the physician language, marking the others as coming soon. Only when the presenter enables test mode SHALL Sinhala and Tamil also be selectable; test mode is never used on stage.
 
 #### Scenario: Choosing Punjabi
 - **WHEN** the physician selects Punjabi as the patient language
@@ -16,6 +16,14 @@ The system SHALL list the thirteen roadmap languages in their own scripts and SH
 #### Scenario: Unavailable language
 - **WHEN** a user selects a language marked coming soon
 - **THEN** the system explains it is not available in this demo and keeps the current selection
+
+#### Scenario: Test languages hidden on stage
+- **WHEN** test mode is off and a user selects Tamil or Sinhala
+- **THEN** the language shows as coming soon and cannot be selected
+
+#### Scenario: Test mode run
+- **WHEN** the presenter enables test mode and selects Sinhala
+- **THEN** the visit interprets between Sinhala and English with all the same checks as Punjabi and French
 
 ### Requirement: Consent in the patient's language
 The system SHALL show a short consent notice in the patient's language and SHALL NOT start the conversation until the patient taps to consent.

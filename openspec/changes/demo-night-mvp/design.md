@@ -62,6 +62,7 @@ The controller has "Physician speaking" and "Patient speaking" buttons. The brow
 
   Shared screens (`/screen`, `/review`) only ever render a translation after it has been spoken. A `blocked` or `escalated` turn shows the original text and a notice, never its translation or translated values. Emotion, certainty, and back-translations go to the controller only (CDR-001 `turn.analysis`); the shared screen gets the public `TurnCaption` (CDR-002) with a translation-register tone label.
 - **presenter mismatch control** (TDM-002): once armed by the presenter, the next physician turn containing a critical value has its first dose number multiplied by 10 in the translation on both attempts, so the normal verify node blocks it for beat 5 of `docs/demo-script.md`. Cancellable before it fires. Marked on the controller and in the record view only; the review screen shows the turn as blocked, then repeated.
+- **test languages** (TDM-003, proposed): a presenter-only test mode makes Sinhala and Tamil selectable for the test scripts `docs/test-script-tamil.md` and `docs/test-script-sinhala.md`; never on stage. Knowledge base adds en-si and en-ta content.
 - **mark high risk**: a controller button sends `visit.mark_high_risk`; the server records it and offers a human interpreter with reason `high_risk` (ADR-003, CDR-001).
 - Each node emits `turn.status`; the result is a `TurnResult` (CDR-002).
 - Empathy nudges (patient turns with worry, embarrassment, pain, or confusion) come from a separate chain using the empathy bank, sent only to the controller.

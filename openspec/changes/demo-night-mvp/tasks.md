@@ -7,7 +7,7 @@ TDRs: ADR-004, ADR-005, ADR-006, ADR-007, CDR-001, CDR-002, EDR-002, IDR-001, ID
 - [x] 0.1 Project lead reviews ADR-004, ADR-005, ADR-006, and ADR-007 and sets each to accepted or rejected; verify `python3 scripts/check_tdr.py` shows no pending ADRs
 - [x] 0.2 Project lead and front-end and back-end owners review CDR-001 and CDR-002; verify both are accepted or replaced (2026-10-22: the project lead reviewed and accepted both as sole reviewer)
 - [x] 0.3 A second team member reviews EDR-002, IDR-001, IDR-002, and IDR-003; TDM-001 is acknowledged; verify the review queue in `scripts/check_tdr.py` is empty (2026-10-22: no second reviewer available, so the project lead reviewed and accepted all records)
-- [ ] 0.4 Write the demo script (lines for both speakers, featured condition, dose) and verify both native speakers and a clinician sign it off in docs/demo-script.md (draft written 2026-10-22; sign-offs pending)
+- [ ] 0.4 Write the demo script (lines for both speakers, featured condition, dose) and verify both native speakers and a clinician sign it off in docs/demo-script.md (draft written 2026-10-22; sign-offs pending). Test scripts docs/test-script-tamil.md and docs/test-script-sinhala.md (drafted 2026-10-23) need the same sign-offs from the Tamil and Sinhala speakers and the clinician
 - [x] 0.5 Decide TDM-002 (presenter mismatch control); if accepted, add the presenter-only `demo.inject_mismatch` command to CDR-001 as an additive amendment; verify `python3 scripts/check_tdr.py` passes (2026-10-22: accepted with clarifications by the project lead; CDR-001 amended)
 
 ## 1. Week 1 (22 to 29 Oct): live loop
@@ -63,6 +63,16 @@ TDRs: TDM-002, ADR-004, CDR-001, CDR-002
 
 - [ ] 5.1 Implement the presenter-only `demo.inject_mismatch` and `demo.cancel_injection` commands, the `demo.injection_state` event, and the one-shot injection in the turn graph; verify tests show the armed flag waits through a turn without critical values, multiplies the first dose number by 10 on the next one, that turn is blocked on both attempts, the following turn is unaffected, cancel works, and no screen or review connection receives injection state, live or via `visit.state`
 - [ ] 5.2 Mark injections on the controller and in the record view only, show the injected turn on the review screen as blocked, then repeated, and add the simulated interpreter connection close; verify all three in a scripted run of docs/demo-script.md beats 5, 6, and 8
+
+## 6. Sinhala and Tamil test runs (test mode only)
+
+TDRs: TDM-003, ADR-002, ADR-005, ADR-006, IDR-002
+
+- [ ] 6.1 Add the presenter-only test mode and let the language list honour it; verify Sinhala and Tamil are selectable only with test mode on, and add "test mode off" to the stage checklist in docs/demo-script.md
+- [ ] 6.2 Check speech recognition and voices for Sinhala and Tamil (ADR-005; Google backup if Azure fails a language); verify a short round trip in each and record the result in docs/speech-test.md
+- [ ] 6.3 Write knowledge base content for en-si and en-ta (glossary, tone and honorifics, empathy phrases, type 2 diabetes and high blood pressure explainers) with the native speakers; verify each file names its reviewer and retrieval tests pass offline
+- [ ] 6.4 Run docs/test-script-tamil.md and docs/test-script-sinhala.md in full at least twice each; verify every test log row is filled in
+- [ ] 6.5 Summarise both runs in docs/language-benchmark.md (latency, retries, blocks, escalations, tone ratings, verdict); verify the project lead has read it before the 17 November rehearsal
 
 ## Workflow follow-up
 
