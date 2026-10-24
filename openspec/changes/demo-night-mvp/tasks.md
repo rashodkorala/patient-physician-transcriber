@@ -26,13 +26,13 @@ TDRs: ADR-001, ADR-005, ADR-006, ADR-007, CDR-001, CDR-002, IDR-001, EDR-002
 
 TDRs: ADR-002, ADR-003, ADR-004, ADR-006, IDR-002, CDR-002, EDR-002
 
-- [ ] 2.1 Write knowledge base content for the demo script (glossary, tone guides, empathy bank, condition explainer) with the native speakers; verify each file has a reviewer noted
-- [ ] 2.2 Build the Chroma index and retrieval with exact-match glossary lookup; verify retrieval tests for terms and emotions pass offline
-- [ ] 2.3 Implement the LangGraph turn graph (analyse, retrieve, translate, verify, retry, block, escalate) with status events; verify graph tests with a mocked model cover pass, retry, block, and escalate (CDR-002 status table)
-- [ ] 2.4 Add translation-register tone labels to spoken captions; verify each spoken caption shows one label and no shared or review screen ever receives emotion, certainty, or back-translation (CDR-001 routing test)
-- [ ] 2.5 Implement empathy nudges on `/control` only; verify `/screen` never receives `empathy.nudge`, including through a `visit.state` snapshot when the TV connects mid read-back
-- [ ] 2.6 Implement critical value read-back and blocking; verify a dose still mismatched after one retry is blocked, never spoken or shown on the shared screen, and the speaker is asked to repeat; a matched dose waits for physician confirmation; a matched dose with a failed tone check is escalated, not read back; in tests and live
-- [ ] 2.7 Run the ten-line tone set with both speakers; record ratings in docs/tone-ratings.md and verify average respect and warmth of 4 or more
+- [ ] 2.1 Write knowledge base content for the demo script (glossary, tone guides, empathy bank, condition explainer) with the native speakers; verify each file has a reviewer noted (drafts in `server/kb/content/` and `web/i18n/` 2026-10-24, all marked `reviewer: pending`; Punjabi and French speaker review pending)
+- [ ] 2.2 Build the Chroma index and retrieval with exact-match glossary lookup; verify retrieval tests for terms and emotions pass offline (built 2026-10-24; `tests/test_kb.py` passes offline with the hashing test embedder; the E5 model could not be downloaded in the build container, so the same tests are pending on the laptop after `uv run python scripts/download_model.py`)
+- [x] 2.3 Implement the LangGraph turn graph (analyse, retrieve, translate, verify, retry, block, escalate) with status events; verify graph tests with a mocked model cover pass, retry, block, and escalate (CDR-002 status table) (2026-10-24: `tests/test_turn_graph.py` covers every CDR-002 row and the precedence order; server suite 52 passed)
+- [x] 2.4 Add translation-register tone labels to spoken captions; verify each spoken caption shows one label and no shared or review screen ever receives emotion, certainty, or back-translation (CDR-001 routing test) (2026-10-24: `tests/test_visit_channel.py` routing tests; `node web/e2e/week2.mjs` checks one label per spoken caption and no private field in any `/screen` frame)
+- [x] 2.5 Implement empathy nudges on `/control` only; verify `/screen` never receives `empathy.nudge`, including through a `visit.state` snapshot when the TV connects mid read-back (2026-10-24: server tests and `node web/e2e/week2.mjs`, which opens a second `/screen` during read-back)
+- [ ] 2.6 Implement critical value read-back and blocking; verify a dose still mismatched after one retry is blocked, never spoken or shown on the shared screen, and the speaker is asked to repeat; a matched dose waits for physician confirmation; a matched dose with a failed tone check is escalated, not read back; in tests and live (built 2026-10-24; verified in server tests and in the browser by `node web/e2e/week2.mjs` with the fake model; live check with Claude and speech pending on the laptop)
+- [ ] 2.7 Run the ten-line tone set with both speakers; record ratings in docs/tone-ratings.md and verify average respect and warmth of 4 or more (needs both speakers and the live model)
 
 ## 3. Week 3 (6 to 12 Nov): remaining demo beats
 

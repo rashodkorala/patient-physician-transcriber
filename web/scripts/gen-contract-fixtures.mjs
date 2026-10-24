@@ -13,6 +13,10 @@ const entries = [
   ["turnCaptionFinal", "turn_caption_final.json", "TurnCaption"],
   ["turnCaptionBlocked", "turn_caption_blocked.json", "TurnCaption"],
   ["visitStatePublic", "visit_state_public.json", "VisitStatePublic"],
+  ["visitStateController", "visit_state_controller.json", "VisitStateController"],
+  ["empathyNudge", "empathy_nudge.json", "EmpathyNudge"],
+  ["interpreterEscalation", "interpreter_escalation.json", "InterpreterEscalation"],
+  ["turnRef", "turn_ref.json", "TurnRef"],
 ];
 
 const body = entries

@@ -116,6 +116,18 @@ export interface TurnStatus {
   stage: string;
 }
 
+export type EscalationReason = "low_confidence" | "tone_failure" | "high_risk" | "requested";
+
+export interface InterpreterEscalation {
+  reason: EscalationReason;
+  turnId?: string | null;
+}
+
+/** turn.readback_required, turn.readback_confirm, and turn.readback_reject. */
+export interface TurnRef {
+  turnId: string;
+}
+
 export interface ErrorPayload {
   message: string;
   command?: string | null;

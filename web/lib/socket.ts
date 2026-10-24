@@ -8,7 +8,7 @@
  * @see openspec/tdr/cdr/cdr-001-visit-websocket-events.md
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type { Envelope, Role } from "./contracts";
 
 export const SERVER_PORT = process.env.NEXT_PUBLIC_SERVER_PORT ?? "8000";
@@ -33,8 +33,8 @@ export type ConnectionState = "connecting" | "open" | "closed";
 export function useVisitSocket(role: Role, onEvent: (event: Envelope) => void) {
   const [state, setState] = useState<ConnectionState>("connecting");
   const wsRef = useRef<WebSocket | null>(null);
-  const handlerRef = useRef(onEvent);
-  handlerRef.current = onEvent;
+  // Always the latest handler, without reconnecting when it changes.
+  const handle = useEffectEvent(onEvent);
 
   useEffect(() => {
     let stopped = false;
@@ -53,7 +53,7 @@ export function useVisitSocket(role: Role, onEvent: (event: Envelope) => void) {
           return;
         }
         lastSeq = event.seq;
-        handlerRef.current(event);
+        handle(event);
       };
       ws.onclose = () => {
         setState("closed");

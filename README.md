@@ -48,16 +48,25 @@ Requirements: Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node 20+.
 
 ```bash
 cp server/.env.example server/.env    # add ANTHROPIC_API_KEY and AZURE_SPEECH_KEY / AZURE_SPEECH_REGION
-(cd server && uv sync) && (cd web && npm install)
+(cd server && uv sync && uv run python scripts/download_model.py) && (cd web && npm install)
 scripts/dev.sh            # development
 scripts/dev.sh --prod     # production build, for rehearsals and demo night
 ```
 
 - Physician laptop: `http://localhost:3000/control`
 - TV: `http://<laptop-ip>:3000/screen` (same network)
-- Without keys, `TRANSLATOR=fake` echoes text with a language tag and nothing is spoken; use the typed turn box.
+- Without keys, `TRANSLATOR=fake` echoes text with a language tag, swaps in approved glossary terms, and speaks nothing; use the typed turn box.
+- Where the embedding model cannot be downloaded, run the server with `EMBEDDINGS=hashing` and `uv sync --no-group embeddings`; retrieval then uses a test embedder and is not fit for rehearsals.
 
-Tests: `cd server && uv run pytest`, `cd web && npm run check:contracts && npm run build`.
+Checks before every commit:
+
+```bash
+(cd server && uv run ruff check . && uv run ruff format --check . && uv run pytest)
+(cd web && npm run lint && npm run check:contracts && npm run build)
+```
+
+Browser checks against `scripts/dev.sh --prod` with `TRANSLATOR=fake`: `node web/e2e/week1.mjs` and `node web/e2e/week2.mjs [baseUrl] [screenshotDir]`.
+In typed turns the fake model treats `(test: mismatch)` as a dose it gets wrong twice (blocked) and `(test: tone)` as a failed tone check (escalated).
 
 ## OpenSpec commands
 

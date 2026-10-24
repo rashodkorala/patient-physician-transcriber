@@ -9,35 +9,147 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Envelope, Speaker, TurnCaption, TurnStarted, TurnStatus, VisitStatePublic } from "@/lib/contracts";
+import type {
+  Envelope,
+  Language,
+  Speaker,
+  TurnCaption,
+  TurnStarted,
+  TurnStatus,
+  VisitStatePublic,
+} from "@/lib/contracts";
+import { bilingual, type NoticeKey } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
 import { useVisitSocket } from "@/lib/socket";
+import Highlighted from "./Highlighted";
 import styles from "./screen.module.css";
 
 interface Pending {
   turnId: string;
   speaker: Speaker;
   stage: string;
+  language?: Language;
+  // Known only from a visit.state snapshot; live events carry no text before a turn settles.
+  sourceText?: string;
 }
 
 const SPEAKER_LABEL: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
 
+function Notice({ notice, first, second }: { notice: NoticeKey; first: Language; second: Language }) {
+  return (
+    <div className={styles.notice} data-testid={`notice-${notice}`}>
+      {bilingual(notice, first, second).map(({ lang, text }) => (
+        <p key={lang} lang={lang}>
+          {text}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function Caption({ c }: { c: TurnCaption }) {
+  const spoken = c.status === "final" && c.translation !== null;
+  return (
+    <article className={`${styles.turn} ${styles[c.speaker]}`} data-testid="caption" data-status={c.status}>
+      <header>{SPEAKER_LABEL[c.speaker]}</header>
+      <div className={styles.pair}>
+        <div lang={c.sourceLanguage}>
+          <span className={styles.lang}>{LANGUAGE_LABELS[c.sourceLanguage].own}</span>
+          <p>
+            <Highlighted text={c.sourceText} values={c.criticalValues.map((v) => v.source)} className={styles.value} />
+          </p>
+        </div>
+        {spoken ? (
+          <div lang={c.targetLanguage}>
+            <span className={styles.lang}>
+              {LANGUAGE_LABELS[c.targetLanguage].own}
+              {c.toneLabel && (
+                <span className={styles.tone} data-testid="tone-label">
+                  {c.toneLabel}
+                </span>
+              )}
+            </span>
+            <p>
+              <Highlighted
+                text={c.translation ?? ""}
+                values={c.criticalValues.map((v) => v.translated)}
+                className={styles.value}
+              />
+            </p>
+            {c.glossaryUsed.length > 0 && (
+              <dl className={styles.glossary} data-testid="glossary">
+                {c.glossaryUsed.map((g) => (
+                  <div key={g.term}>
+                    <dt>{g.translation}</dt>
+                    <dd>{g.explanation}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        ) : (
+          <Notice
+            notice={c.status === "escalated" ? "interpreterOffered" : "pleaseRepeat"}
+            first={c.targetLanguage}
+            second={c.sourceLanguage}
+          />
+        )}
+      </div>
+    </article>
+  );
+}
+
+function PendingTurn({ p, other }: { p: Pending; other: (lang: Language) => Language }) {
+  const source = p.language;
+  const notice: NoticeKey | null =
+    p.stage === "awaiting_readback"
+      ? "checkingDose"
+      : p.stage === "discarded" || p.stage === "failed"
+        ? "pleaseRepeat"
+        : null;
+  return (
+    <article className={`${styles.turn} ${styles.pending} ${styles[p.speaker]}`} data-testid="pending" data-stage={p.stage}>
+      <header>{SPEAKER_LABEL[p.speaker]}</header>
+      <div className={styles.pair}>
+        <div lang={source}>
+          {source && <span className={styles.lang}>{LANGUAGE_LABELS[source].own}</span>}
+          <p>{p.sourceText ?? <span className={styles.working} aria-label="working" />}</p>
+        </div>
+        {notice && source && <Notice notice={notice} first={other(source)} second={source} />}
+      </div>
+    </article>
+  );
+}
+
 export default function SharedScreen() {
   const [captions, setCaptions] = useState<TurnCaption[]>([]);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [languages, setLanguages] = useState<{ patient: Language; physician: Language }>({
+    patient: "pa-IN",
+    physician: "en-CA",
+  });
   const bottom = useRef<HTMLDivElement | null>(null);
 
   const onEvent = useCallback((event: Envelope) => {
     switch (event.type) {
       case "visit.state": {
         const state = event.payload as VisitStatePublic;
+        setLanguages({ patient: state.patientLanguage, physician: state.physicianLanguage });
         setCaptions(state.turns);
-        setPending(state.currentTurn ? { ...state.currentTurn } : null);
+        const current = state.currentTurn;
+        setPending(
+          current
+            ? {
+                ...current,
+                language: current.speaker === "physician" ? state.physicianLanguage : state.patientLanguage,
+              }
+            : null,
+        );
         break;
       }
       case "turn.started": {
         const started = event.payload as TurnStarted;
-        setPending({ turnId: started.turnId, speaker: started.speaker, stage: "listening" });
+        setPending({ turnId: started.turnId, speaker: started.speaker, language: started.language, stage: "listening" });
         break;
       }
       case "turn.status": {
@@ -55,6 +167,7 @@ export default function SharedScreen() {
   }, []);
 
   const { state } = useVisitSocket("screen", onEvent);
+  const other = (lang: Language) => (lang === languages.physician ? languages.patient : languages.physician);
 
   useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [captions, pending]);
 
@@ -63,31 +176,9 @@ export default function SharedScreen() {
       <div className={styles.status} data-testid="connection" data-state={state} aria-label={`connection ${state}`} />
       <div className={styles.captions}>
         {captions.slice(-6).map((c) => (
-          <article key={c.turnId} className={`${styles.turn} ${styles[c.speaker]}`} data-testid="caption">
-            <header>{SPEAKER_LABEL[c.speaker]}</header>
-            <div className={styles.pair}>
-              <p lang={c.sourceLanguage}>
-                <span className={styles.lang}>{LANGUAGE_LABELS[c.sourceLanguage].own}</span>
-                {c.sourceText}
-              </p>
-              {c.status === "final" && c.translation ? (
-                <p lang={c.targetLanguage}>
-                  <span className={styles.lang}>{LANGUAGE_LABELS[c.targetLanguage].own}</span>
-                  {c.translation}
-                  {c.toneLabel && <span className={styles.tone}>{c.toneLabel}</span>}
-                </p>
-              ) : (
-                <p className={styles.notice}>Please repeat · {LANGUAGE_LABELS[c.targetLanguage].own}</p>
-              )}
-            </div>
-          </article>
+          <Caption key={c.turnId} c={c} />
         ))}
-        {pending && (
-          <article className={`${styles.turn} ${styles.pending} ${styles[pending.speaker]}`}>
-            <header>{SPEAKER_LABEL[pending.speaker]}</header>
-            <p className={styles.notice}>{pending.stage === "failed" ? "Please repeat" : "…"}</p>
-          </article>
-        )}
+        {pending && <PendingTurn p={pending} other={other} />}
         <div ref={bottom} />
       </div>
     </main>
