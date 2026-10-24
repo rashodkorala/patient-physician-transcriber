@@ -16,7 +16,7 @@ ai_context:
     - "Glossary terms found by exact and fuzzy match first"
     - "Vector search for tone, empathy, and explainers"
   framework_hints:
-    - "langchain-chroma, sentence-transformers intfloat/multilingual-e5-small"
+    - "chromadb client directly (no LangChain wrapper), sentence-transformers intfloat/multilingual-e5-small"
     - "Index built at server start from server/kb/"
   validation_rules:
     - "Retrieval works offline"
@@ -63,3 +63,4 @@ Build the Chroma index at server start from `server/kb/`. Glossary lookup uses n
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-24, rashodkorala: Amended framework hint: use the chromadb client directly instead of langchain-chroma; decision unchanged. Recorded by Claude (agent) at rashodkorala's explicit request.
