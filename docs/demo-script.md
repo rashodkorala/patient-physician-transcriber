@@ -24,7 +24,7 @@
 - Phone hotspot as primary network; venue wifi as backup.
 - Replay log and backup video loaded (TDM-001).
 - Presenter mode on the laptop (tamper control; mismatch control, TDM-002).
-- Test mode **off** (TDM-003), so only Punjabi and French can be selected on stage.
+- Server started **without** test mode (TDM-003): no test-mode banner on the controller, so only Punjabi and French can be selected on stage.
 
 ## Fallbacks
 

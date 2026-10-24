@@ -2,7 +2,8 @@
 
 > **Status: DRAFT test script. Not for the stage.**
 > - Purpose: run every demo beat in Tamil before 19 November 2026 to see how recognition, translation, tone, safety checks, and latency hold up in a lower-resource language.
-> - Needs TDM-003 (proposed): Tamil is selectable only in test mode. Until TDM-003 is accepted, this script can be rehearsed on paper but not run in the app.
+> - Uses TDM-003 (accepted): Tamil is selectable only when the server is started in test mode.
+> - Privacy: speak only the fictional lines in this script; the speaker agrees before each run; no audio is kept, and the replay log from the run is deleted once the run summary is written.
 > - Every Tamil line is Claude's draft. The Tamil speaker must rewrite each one in the words they would naturally say, then sign off.
 > - A clinician must check the medical content. Patient and doctor are fictional. Nothing here is medical advice.
 > - Uses TDM-002 (presenter mismatch control) in step 7.
@@ -20,7 +21,7 @@
 
 ## Set-up
 
-- Laptop with test mode enabled (TDM-003); `/control` on the laptop, `/screen` on a TV or second monitor, `/review` on a phone.
+- Start the server in test mode (TDM-003, for example `TEST_LANGUAGES=on`) and check the controller shows the test-mode banner; `/control` on the laptop, `/screen` on a TV or second monitor, `/review` on a phone.
 - Microphones as for the demo; presenter mode on (mismatch and tamper controls).
 - Open the test log at the end of this file before starting.
 
@@ -28,8 +29,8 @@
 
 ### 1. Language picker (Requirement: Language selection)
 
-- **Physician:** turns on test mode, then selects தமிழ் (Tamil).
-- **Check:** Tamil is selectable only because test mode is on; with test mode off it shows "coming soon".
+- **Physician:** selects தமிழ் (Tamil).
+- **Check:** Tamil is selectable because the server was started in test mode; a server started normally shows it as "coming soon".
 
 ### 2. Consent (Requirement: Consent in the patient's language)
 

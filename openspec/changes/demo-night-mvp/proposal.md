@@ -18,7 +18,7 @@ A nine-beat demo for Punjabi to English and French to English, run locally on on
 8. **Note and summary**: English note with each sentence tagged patient-stated, physician-stated, companion-stated, interpreter-stated, or AI inference (only the first two and AI inference occur, since the demo captures patient and physician turns only); Punjabi or French summary read aloud.
 9. **Record verified** badge, with a tamper demonstration that turns it red.
 
-Also: a replay mode that plays a recorded session through the same screens if the network fails, and a presenter-only mismatch control that forces one blocked dose on stage (TDM-002). The full stage script is `docs/demo-script.md`. Before demo night, Sinhala and Tamil are tested off stage in a presenter-only test mode (TDM-003, proposed) using `docs/test-script-tamil.md` and `docs/test-script-sinhala.md`.
+Also: a replay mode that plays a recorded session through the same screens if the network fails, and a presenter-only mismatch control that forces one blocked dose on stage (TDM-002). The full stage script is `docs/demo-script.md`. Before demo night, Sinhala and Tamil are tested off stage in a test mode set when the server starts (TDM-003) using `docs/test-script-tamil.md` and `docs/test-script-sinhala.md`.
 
 ## Capabilities
 
@@ -30,7 +30,7 @@ None.
 
 ## Decisions (TDRs)
 
-- Accepted (all on 2026-10-22 by the project lead): MDD-001, MDD-002, MDD-003, ADR-001, ADR-002, ADR-003, ADR-004 (LangGraph), ADR-005 (speech provider), ADR-006 (models), ADR-007 (in-memory state), CDR-001 (visit events), CDR-002 (turn result), EDR-001, EDR-002 (testing), IDR-001 (push-to-talk), IDR-002 (retrieval), IDR-003 (hash chain), TDM-001 (replay mode), TDM-002 (presenter mismatch control, accepted with clarifications).
+- Accepted (all on 2026-10-22 by the project lead): MDD-001, MDD-002, MDD-003, ADR-001, ADR-002, ADR-003, ADR-004 (LangGraph), ADR-005 (speech provider), ADR-006 (models), ADR-007 (in-memory state), CDR-001 (visit events), CDR-002 (turn result), EDR-001, EDR-002 (testing), IDR-001 (push-to-talk), IDR-002 (retrieval), IDR-003 (hash chain), TDM-001 (replay mode), TDM-002 (presenter mismatch control, accepted with clarifications), TDM-003 (Sinhala and Tamil test languages, accepted with clarifications on 2026-10-24).
 - Registry: `openspec/tdr/index.md`.
 
 ## Out of Scope

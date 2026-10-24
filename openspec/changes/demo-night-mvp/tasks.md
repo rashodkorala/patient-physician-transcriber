@@ -68,10 +68,10 @@ TDRs: TDM-002, ADR-004, CDR-001, CDR-002
 
 TDRs: TDM-003, ADR-002, ADR-005, ADR-006, IDR-002
 
-- [ ] 6.1 Add the presenter-only test mode and let the language list honour it; verify Sinhala and Tamil are selectable only with test mode on, and add "test mode off" to the stage checklist in docs/demo-script.md
+- [ ] 6.1 Add test mode as a server start-up setting (off by default, restart to change, no runtime toggle) with a controller-only banner; verify Sinhala and Tamil are selectable only when started in test mode, the shared and review screens show no banner, and the stage checklist in docs/demo-script.md covers it
 - [ ] 6.2 Check speech recognition and voices for Sinhala and Tamil (ADR-005; Google backup if Azure fails a language); verify a short round trip in each and record the result in docs/speech-test.md
 - [ ] 6.3 Write knowledge base content for en-si and en-ta (glossary, tone and honorifics, empathy phrases, type 2 diabetes and high blood pressure explainers) with the native speakers; verify each file names its reviewer and retrieval tests pass offline
-- [ ] 6.4 Run docs/test-script-tamil.md and docs/test-script-sinhala.md in full at least twice each; verify every test log row is filled in
+- [ ] 6.4 Run docs/test-script-tamil.md and docs/test-script-sinhala.md in full at least twice each, with each speaker's agreement and fictional content only; verify every test log row is filled in, no audio is retained, and test-run replay logs are deleted after the summary
 - [ ] 6.5 Summarise both runs in docs/language-benchmark.md (latency, retries, blocks, escalations, tone ratings, verdict); verify the project lead has read it before the 17 November rehearsal
 
 ## Workflow follow-up
