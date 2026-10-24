@@ -17,7 +17,7 @@ ai_context:
     - "Stream node status events to the screens"
   framework_hints:
     - "langgraph StateGraph with a TypedDict state for one turn"
-    - "langchain-anthropic for model calls"
+    - "Model calls inside nodes and chains use the official anthropic Python SDK (structured outputs via messages.parse), not langchain-anthropic"
     - "Note, summary, and explain-back as plain LCEL chains"
   validation_rules:
     - "Graph holds only one turn's state; visit state stays in the server store"
@@ -66,3 +66,4 @@ Implement `server/graph/turn_graph.py` as a LangGraph `StateGraph` with nodes an
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended: verify gains a block edge for critical value mismatches after one retry, aligned with CDR-002. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-24, rashodkorala: Amended framework hint: LangGraph orchestrates the turn graph as decided, and every model call inside a node or chain uses the official anthropic SDK (as the week 1 path does), not langchain-anthropic. Recorded by Claude (agent) at rashodkorala's explicit request.
