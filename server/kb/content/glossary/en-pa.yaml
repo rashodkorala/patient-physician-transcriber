@@ -1,0 +1,63 @@
+# English to Punjabi medical glossary (ADR-002). Drafts: Punjabi speaker to review.
+reviewer: pending
+entries:
+  - en: angina
+    aliases_en: [stable angina]
+    target: ਐਨਜਾਈਨਾ (ਛਾਤੀ ਦਾ ਦਰਦ)
+    aliases_target: [ਐਨਜਾਈਨਾ]
+    explanation_en: Chest pain that happens when the heart muscle does not get enough blood during effort.
+    explanation_target: ਜਦੋਂ ਮਿਹਨਤ ਕਰਨ ਵੇਲੇ ਦਿਲ ਨੂੰ ਪੂਰਾ ਖੂਨ ਨਹੀਂ ਮਿਲਦਾ, ਤਾਂ ਛਾਤੀ ਵਿੱਚ ਦਰਦ ਹੁੰਦਾ ਹੈ।
+  - en: heart attack
+    aliases_en: [myocardial infarction]
+    target: ਦਿਲ ਦਾ ਦੌਰਾ
+    aliases_target: [ਦਿਲ ਦੇ ਦੌਰੇ]
+    explanation_en: Damage to the heart muscle when its blood supply is suddenly blocked.
+    explanation_target: ਜਦੋਂ ਦਿਲ ਨੂੰ ਖੂਨ ਪਹੁੰਚਣਾ ਅਚਾਨਕ ਬੰਦ ਹੋ ਜਾਵੇ ਤਾਂ ਦਿਲ ਨੂੰ ਨੁਕਸਾਨ ਹੁੰਦਾ ਹੈ।
+  - en: nitroglycerin spray
+    aliases_en: [nitro spray, nitroglycerin]
+    target: ਨਾਈਟ੍ਰੋਗਲਿਸਰੀਨ ਸਪਰੇਅ
+    aliases_target: [ਨਾਈਟ੍ਰੋ ਸਪਰੇਅ]
+    explanation_en: A spray under the tongue that quickly eases chest pain by widening blood vessels.
+    explanation_target: ਜੀਭ ਹੇਠਾਂ ਕਰਨ ਵਾਲੀ ਸਪਰੇਅ ਜੋ ਖੂਨ ਦੀਆਂ ਨਾੜੀਆਂ ਖੋਲ੍ਹ ਕੇ ਛਾਤੀ ਦਾ ਦਰਦ ਛੇਤੀ ਘਟਾਉਂਦੀ ਹੈ।
+  - en: under the tongue
+    aliases_en: [sublingual]
+    target: ਜੀਭ ਹੇਠਾਂ
+    aliases_target: [ਜੀਭ ਦੇ ਹੇਠਾਂ]
+    explanation_en: Placed beneath the tongue so the medicine enters the blood quickly.
+    explanation_target: ਦਵਾਈ ਜੀਭ ਦੇ ਹੇਠਾਂ ਰੱਖੀ ਜਾਂਦੀ ਹੈ ਤਾਂ ਜੋ ਛੇਤੀ ਖੂਨ ਵਿੱਚ ਪਹੁੰਚੇ।
+  - en: aspirin
+    aliases_en: [ASA]
+    target: ਐਸਪਰੀਨ
+    aliases_target: []
+    explanation_en: A tablet that makes blood less likely to clot, protecting the heart.
+    explanation_target: ਇੱਕ ਗੋਲੀ ਜੋ ਖੂਨ ਨੂੰ ਜੰਮਣ ਤੋਂ ਰੋਕ ਕੇ ਦਿਲ ਦੀ ਰੱਖਿਆ ਕਰਦੀ ਹੈ।
+  - en: angiogram
+    aliases_en: [coronary angiogram]
+    target: ਐਂਜੀਓਗ੍ਰਾਮ
+    aliases_target: []
+    explanation_en: A test that uses dye and X-rays to look inside the heart's blood vessels.
+    explanation_target: ਇੱਕ ਟੈਸਟ ਜਿਸ ਵਿੱਚ ਰੰਗ ਅਤੇ ਐਕਸ-ਰੇ ਨਾਲ ਦਿਲ ਦੀਆਂ ਨਾੜੀਆਂ ਅੰਦਰੋਂ ਦੇਖੀਆਂ ਜਾਂਦੀਆਂ ਹਨ।
+  - en: ECG
+    aliases_en: [electrocardiogram, EKG]
+    target: ਈਸੀਜੀ (ਦਿਲ ਦੀ ਧੜਕਣ ਦਾ ਟੈਸਟ)
+    aliases_target: [ਈਸੀਜੀ]
+    explanation_en: A painless test that records the heart's electrical activity.
+    explanation_target: ਇੱਕ ਬਿਨਾਂ ਦਰਦ ਵਾਲਾ ਟੈਸਟ ਜੋ ਦਿਲ ਦੀ ਬਿਜਲਈ ਹਰਕਤ ਨੂੰ ਰਿਕਾਰਡ ਕਰਦਾ ਹੈ।
+  - en: blood pressure
+    aliases_en: [high blood pressure, hypertension]
+    target: ਬਲੱਡ ਪ੍ਰੈਸ਼ਰ
+    aliases_target: [ਬੀਪੀ]
+    explanation_en: The force of blood against the walls of the blood vessels.
+    explanation_target: ਖੂਨ ਦਾ ਨਾੜੀਆਂ ਦੀਆਂ ਕੰਧਾਂ ਉੱਤੇ ਦਬਾਅ।
+  - en: emergency department
+    aliases_en: [emergency room, ER, the emergency]
+    target: ਐਮਰਜੈਂਸੀ ਵਿਭਾਗ
+    aliases_target: [ਐਮਰਜੈਂਸੀ]
+    explanation_en: The hospital department for urgent care.
+    explanation_target: ਹਸਪਤਾਲ ਦਾ ਉਹ ਹਿੱਸਾ ਜਿੱਥੇ ਤੁਰੰਤ ਇਲਾਜ ਹੁੰਦਾ ਹੈ।
+  - en: milligrams
+    aliases_en: [milligram, mg]
+    target: ਮਿਲੀਗ੍ਰਾਮ
+    aliases_target: []
+    explanation_en: A unit for measuring medicine doses.
+    explanation_target: ਦਵਾਈ ਦੀ ਮਾਤਰਾ ਮਾਪਣ ਦੀ ਇਕਾਈ।

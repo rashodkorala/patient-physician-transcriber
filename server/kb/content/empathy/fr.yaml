@@ -1,0 +1,15 @@
+# French empathy phrases used as tone guidance when translating into French. Drafts: French speaker to review.
+reviewer: pending
+entries:
+  - intent: acknowledgement
+    emotions: [worried]
+    phrase: Je vois que cela vous inquiète, et c'est tout à fait normal.
+  - intent: reassurance
+    emotions: [worried, confused]
+    phrase: Nous l'avons découvert tôt, et nous pouvons faire beaucoup de choses.
+  - intent: acknowledgement
+    emotions: [embarrassed]
+    phrase: Merci de me l'avoir dit. Cela m'aide à bien vous soigner.
+  - intent: acknowledgement
+    emotions: [in_pain]
+    phrase: Je suis désolé que vous ayez mal.

@@ -1,0 +1,27 @@
+# English empathy phrases for physician nudges (ADR-002). The physician says these; they are then translated.
+reviewer: pending
+entries:
+  - intent: acknowledgement
+    emotions: [worried]
+    phrase: I can see this is worrying you, and that is completely understandable.
+  - intent: acknowledgement
+    emotions: [worried]
+    phrase: I understand why you are scared, especially with what happened in your family.
+  - intent: reassurance
+    emotions: [worried, confused]
+    phrase: We have found this early, and there is a lot we can do.
+  - intent: acknowledgement
+    emotions: [embarrassed]
+    phrase: Thank you for telling me. Many people feel the same, and it helps me care for you.
+  - intent: acknowledgement
+    emotions: [in_pain]
+    phrase: I am sorry you are in pain. Let's make you more comfortable first.
+  - intent: encouragement
+    emotions: [confused]
+    phrase: That is a good question. Let me explain it another way.
+  - intent: acknowledgement
+    emotions: [worried]
+    phrase: I hear how worried you are about cost. Let's find an option that works for you.
+  - intent: acknowledgement
+    emotions: [worried]
+    phrase: I hear how worried you are about your job. Let's make a plan that fits around your work.

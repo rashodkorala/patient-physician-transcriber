@@ -6,9 +6,10 @@
 @see openspec/tdr/adr/adr-007-in-memory-state-websocket.md
 """
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from contracts import (
@@ -45,6 +46,8 @@ class Connection:
     sender: Sender
     role: Role
     seq: int = 0
+    # Graph nodes run in parallel, so sends are serialised to keep wire order equal to seq order.
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 @dataclass
@@ -127,17 +130,18 @@ class Hub:
             type=event_type,
             visit_id=self.visit.visit_id,
             seq=conn.seq,
-            ts=datetime.now(timezone.utc).isoformat(),
+            ts=datetime.now(UTC).isoformat(),
             payload=payload,
         ).wire()
 
     async def send_to(self, conn: Connection, event_type: str, payload: dict) -> None:
         if event_type in CONTROLLER_ONLY_EVENTS and conn.role != "controller":
             return
-        try:
-            await conn.sender.send_json(self._envelope(conn, event_type, payload))
-        except Exception:
-            self.remove(conn)
+        async with conn.lock:
+            try:
+                await conn.sender.send_json(self._envelope(conn, event_type, payload))
+            except Exception:
+                self.remove(conn)
 
     async def publish(self, event_type: str, payload: dict) -> None:
         for conn in list(self.connections):

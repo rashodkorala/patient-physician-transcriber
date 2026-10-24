@@ -1,0 +1,63 @@
+# English to Canadian French medical glossary (ADR-002). Drafts: French speaker to review.
+reviewer: pending
+entries:
+  - en: angina
+    aliases_en: [stable angina]
+    target: angine de poitrine
+    aliases_target: [angine]
+    explanation_en: Chest pain that happens when the heart muscle does not get enough blood during effort.
+    explanation_target: Douleur à la poitrine quand le cœur ne reçoit pas assez de sang pendant un effort.
+  - en: heart attack
+    aliases_en: [myocardial infarction]
+    target: crise cardiaque
+    aliases_target: [infarctus]
+    explanation_en: Damage to the heart muscle when its blood supply is suddenly blocked.
+    explanation_target: Dommage au muscle du cœur quand l'arrivée de sang est soudainement bloquée.
+  - en: nitroglycerin spray
+    aliases_en: [nitro spray, nitroglycerin]
+    target: vaporisateur de nitroglycérine
+    aliases_target: [nitro, nitroglycérine]
+    explanation_en: A spray under the tongue that quickly eases chest pain by widening blood vessels.
+    explanation_target: Un jet sous la langue qui soulage vite la douleur en ouvrant les vaisseaux sanguins.
+  - en: under the tongue
+    aliases_en: [sublingual]
+    target: sous la langue
+    aliases_target: []
+    explanation_en: Placed beneath the tongue so the medicine enters the blood quickly.
+    explanation_target: Placé sous la langue pour que le médicament passe vite dans le sang.
+  - en: aspirin
+    aliases_en: [ASA]
+    target: aspirine
+    aliases_target: [AAS]
+    explanation_en: A tablet that makes blood less likely to clot, protecting the heart.
+    explanation_target: Un comprimé qui aide à empêcher les caillots et protège le cœur.
+  - en: angiogram
+    aliases_en: [coronary angiogram]
+    target: coronarographie
+    aliases_target: [angiographie]
+    explanation_en: A test that uses dye and X-rays to look inside the heart's blood vessels.
+    explanation_target: Un examen avec un colorant et des rayons X pour voir l'intérieur des artères du cœur.
+  - en: ECG
+    aliases_en: [electrocardiogram, EKG]
+    target: électrocardiogramme (ECG)
+    aliases_target: [ECG]
+    explanation_en: A painless test that records the heart's electrical activity.
+    explanation_target: Un examen sans douleur qui enregistre l'activité électrique du cœur.
+  - en: blood pressure
+    aliases_en: [high blood pressure, hypertension]
+    target: pression artérielle
+    aliases_target: [pression]
+    explanation_en: The force of blood against the walls of the blood vessels.
+    explanation_target: La force du sang contre les parois des vaisseaux.
+  - en: emergency department
+    aliases_en: [emergency room, ER, the emergency]
+    target: urgence
+    aliases_target: [salle d'urgence]
+    explanation_en: The hospital department for urgent care.
+    explanation_target: Le service de l'hôpital pour les soins urgents.
+  - en: milligrams
+    aliases_en: [milligram, mg]
+    target: milligrammes
+    aliases_target: [mg, milligramme]
+    explanation_en: A unit for measuring medicine doses.
+    explanation_target: Une unité pour mesurer les doses de médicament.

@@ -6,7 +6,16 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from contracts import TurnCaption, TurnResult, VisitStatePublic, to_caption
+from contracts import (
+    EmpathyNudge,
+    InterpreterEscalation,
+    TurnCaption,
+    TurnRef,
+    TurnResult,
+    VisitStateController,
+    VisitStatePublic,
+    to_caption,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PRIVATE_FIELDS = {"emotion", "certainty", "backTranslation", "confidence", "toneTags", "attempts"}
@@ -32,8 +41,21 @@ def test_visit_state_public_fixture_validates_cdr_001():
     assert state.wire() == load("visit_state_public.json")
 
 
+@pytest.mark.parametrize(
+    ("name", "model"),
+    [
+        ("visit_state_controller.json", VisitStateController),
+        ("empathy_nudge.json", EmpathyNudge),
+        ("interpreter_escalation.json", InterpreterEscalation),
+        ("turn_ref.json", TurnRef),
+    ],
+)
+def test_controller_payload_fixtures_validate_cdr_001(name, model):
+    assert model.model_validate(load(name)).wire() == load(name)
+
+
 def test_caption_never_carries_private_fields_cdr_002():
-    caption = to_caption(TurnResult.model_validate(load("turn_result.json")) .model_copy(update={"status": "final"}))
+    caption = to_caption(TurnResult.model_validate(load("turn_result.json")).model_copy(update={"status": "final"}))
     assert PRIVATE_FIELDS.isdisjoint(caption.wire())
     with pytest.raises(ValidationError):
         TurnCaption.model_validate({**load("turn_caption_final.json"), "emotion": "worried"})

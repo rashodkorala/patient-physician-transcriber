@@ -128,8 +128,7 @@ def to_caption(result: TurnResult, readback_confirmed: bool = False) -> TurnCapt
         tone_label=tone,
         glossary_used=result.glossary_used,
         critical_values=[
-            CaptionCriticalValue(kind=v.kind, source=v.source, translated=v.translated)
-            for v in result.critical_values
+            CaptionCriticalValue(kind=v.kind, source=v.source, translated=v.translated) for v in result.critical_values
         ],
         readback_confirmed=readback_confirmed,
     )
@@ -226,6 +225,12 @@ class TurnSubmit(Wire):
     language: Language
     text: str
     recognition_confidence: float
+
+
+class TurnRef(Wire):
+    """Payload of turn.readback_confirm and turn.readback_reject, and of turn.readback_required."""
+
+    turn_id: str
 
 
 class MarkHighRisk(Wire):

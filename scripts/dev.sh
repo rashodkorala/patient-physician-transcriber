@@ -9,7 +9,7 @@ if [[ -f "$ROOT/server/.env" ]]; then
   set -a; source "$ROOT/server/.env"; set +a
 fi
 
-( cd "$ROOT/server" && uv run uvicorn main:app --host 0.0.0.0 --port 8000 ) &
+( cd "$ROOT/server" && uv run uvicorn main:create_app --factory --host 0.0.0.0 --port 8000 ) &
 SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
 

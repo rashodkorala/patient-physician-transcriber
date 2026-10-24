@@ -1,0 +1,15 @@
+# Punjabi empathy phrases used as tone guidance when translating into Punjabi. Drafts: Punjabi speaker to review.
+reviewer: pending
+entries:
+  - intent: acknowledgement
+    emotions: [worried]
+    phrase: ਮੈਂ ਸਮਝਦਾ ਹਾਂ ਕਿ ਤੁਸੀਂ ਫ਼ਿਕਰ ਵਿੱਚ ਹੋ, ਇਹ ਬਿਲਕੁਲ ਕੁਦਰਤੀ ਹੈ।
+  - intent: reassurance
+    emotions: [worried, confused]
+    phrase: ਅਸੀਂ ਇਹ ਸਮੇਂ ਸਿਰ ਫੜ ਲਿਆ ਹੈ, ਅਤੇ ਅਸੀਂ ਬਹੁਤ ਕੁਝ ਕਰ ਸਕਦੇ ਹਾਂ।
+  - intent: acknowledgement
+    emotions: [embarrassed]
+    phrase: ਦੱਸਣ ਲਈ ਤੁਹਾਡਾ ਧੰਨਵਾਦ। ਇਸ ਨਾਲ ਮੈਨੂੰ ਤੁਹਾਡਾ ਇਲਾਜ ਕਰਨ ਵਿੱਚ ਮਦਦ ਮਿਲਦੀ ਹੈ।
+  - intent: acknowledgement
+    emotions: [in_pain]
+    phrase: ਮੈਨੂੰ ਅਫ਼ਸੋਸ ਹੈ ਕਿ ਤੁਹਾਨੂੰ ਦਰਦ ਹੋ ਰਿਹਾ ਹੈ।
