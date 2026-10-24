@@ -1,0 +1,17 @@
+{
+  "turnId": "t1",
+  "speaker": "physician",
+  "sourceLanguage": "en-CA",
+  "targetLanguage": "pa-IN",
+  "sourceText": "Take one aspirin, 81 milligrams, once a day.",
+  "translation": "ਰੋਜ਼ਾਨਾ ਇੱਕ ਵਾਰ ਇੱਕ ਐਸਪਰੀਨ, 81 ਮਿਲੀਗ੍ਰਾਮ, ਲਓ।",
+  "backTranslation": "Take one aspirin, 81 milligrams, once daily.",
+  "toneTags": ["respectful"],
+  "emotion": "calm",
+  "certainty": "high",
+  "glossaryUsed": [],
+  "criticalValues": [{"kind": "dose", "source": "81 milligrams", "translated": "81 ਮਿਲੀਗ੍ਰਾਮ", "matched": true}],
+  "confidence": 0.93,
+  "status": "readback_required",
+  "attempts": 1
+}

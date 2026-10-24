@@ -1,0 +1,13 @@
+{
+  "turnId": "t3",
+  "speaker": "physician",
+  "sourceLanguage": "en-CA",
+  "targetLanguage": "pa-IN",
+  "sourceText": "Use the nitroglycerin spray: 0.4 milligrams.",
+  "status": "blocked",
+  "translation": null,
+  "toneLabel": null,
+  "glossaryUsed": [],
+  "criticalValues": [],
+  "readbackConfirmed": false
+}

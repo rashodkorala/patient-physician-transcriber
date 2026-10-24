@@ -1,0 +1,13 @@
+{
+  "turnId": "t2",
+  "speaker": "patient",
+  "sourceLanguage": "pa-IN",
+  "targetLanguage": "en-CA",
+  "sourceText": "ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਡਾਕਟਰ ਜੀ।",
+  "status": "final",
+  "translation": "Hello, doctor.",
+  "toneLabel": "respectful",
+  "glossaryUsed": [],
+  "criticalValues": [],
+  "readbackConfirmed": false
+}

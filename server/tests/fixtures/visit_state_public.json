@@ -1,0 +1,9 @@
+{
+  "patientLanguage": "pa-IN",
+  "physicianLanguage": "en-CA",
+  "consent": null,
+  "paused": false,
+  "turns": [],
+  "currentTurn": {"turnId": "t4", "speaker": "physician", "sourceText": "Hello", "stage": "translating"},
+  "integrity": {"status": "verified", "headHash": "", "brokenAt": null}
+}
