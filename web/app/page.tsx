@@ -1,13 +1,24 @@
 import Link from "next/link";
+import styles from "./home.module.css";
 
 export default function Home() {
   return (
-    <main style={{ maxWidth: 640, margin: "0 auto", padding: "48px 16px", lineHeight: 1.6 }}>
-      <h1>Demo Night Interpreter</h1>
-      <p>Open each screen on its device:</p>
-      <ul>
-        <li><Link href="/control">Physician controller</Link> (laptop)</li>
-        <li><Link href="/screen">Shared screen</Link> (TV)</li>
+    <main className={styles.page}>
+      <p className={styles.eyebrow}>Demo night</p>
+      <h1 className={styles.title}>Medical interpreter</h1>
+      <ul className={styles.links}>
+        <li>
+          <Link href="/control">
+            <span className={styles.name}>Physician controller</span>
+            <span className={styles.device}>Laptop</span>
+          </Link>
+        </li>
+        <li>
+          <Link href="/screen">
+            <span className={styles.name}>Shared screen</span>
+            <span className={styles.device}>TV</span>
+          </Link>
+        </li>
       </ul>
     </main>
   );

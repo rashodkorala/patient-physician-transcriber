@@ -1,42 +1,97 @@
-/* Sized for a 40-inch TV read from about 3 metres (task 1.6). */
-.screen { min-height: 100vh; padding: 3vh 4vw; background: var(--bg); position: relative; }
-.status { position: absolute; top: 12px; right: 12px; width: 14px; height: 14px; border-radius: 50%; background: var(--warn); }
-.status[data-state="open"] { background: var(--ok); }
-.status[data-state="closed"] { background: var(--bad); }
-.captions { display: grid; gap: 2.5vh; }
-.turn { border-left: 10px solid currentColor; background: var(--surface); border-radius: 12px; padding: 1.5vh 2vw; }
-.turn header { font-size: clamp(18px, 2.2vw, 34px); font-weight: 600; }
-.physician { color: var(--physician); }
-.patient { color: var(--patient); }
-.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 3vw; color: var(--text); }
-.pair p { margin: 0.6vh 0 0; font-size: clamp(24px, 3.2vw, 56px); line-height: 1.35; }
-/* Fixed height so the original and the translation start on the same line, tone label or not. */
-.lang {
-  display: flex; align-items: center; gap: 0.6em; height: 1.7em; margin-top: 0.6vh;
-  font-size: clamp(14px, 1.4vw, 24px); color: var(--muted);
+/*
+ * Shared TV screen: always black with crème type, read from about 3 metres on a 40-inch TV (task 1.6).
+ * Turns are rows split by hairlines; the original and the translation sit in two columns.
+ */
+.screen {
+  --bg: #0e0e0c;
+  --text: #f3efe6;
+  --muted: #8f8a7e;
+  --line: rgba(243, 239, 230, 0.16);
+  --signal: #e08a78;
+  --chip-bg: #f3efe6;
+  --chip-text: #0f0f0d;
+  color-scheme: dark;
+  min-height: 100vh; padding: 0 5vw 6vh; background: var(--bg); color: var(--text);
 }
-.tone {
-  padding: 0 0.6em; border: 1px solid var(--line); border-radius: 999px;
-  font-size: clamp(13px, 1.2vw, 20px); line-height: 1.6;
+
+/* Small uppercase labels, as on the dashboard reference. */
+.eyebrow, .speaker, .status, .tag {
+  font-family: var(--sans); font-weight: 500; text-transform: uppercase; letter-spacing: 0.16em;
+  font-size: clamp(12px, 0.8vw, 16px); line-height: 1;
+}
+
+.bar {
+  display: flex; align-items: center; gap: 2vw; padding: 3vh 0 2.4vh;
+  border-bottom: 1px solid var(--text);
+}
+.eyebrow { color: var(--muted); }
+.visitPair { font-family: var(--serif); font-style: italic; font-size: clamp(16px, 1.2vw, 24px); }
+.status { margin-left: auto; display: inline-flex; align-items: center; gap: 0.8em; color: var(--muted); }
+.status::before {
+  content: ""; width: 0.6em; height: 0.6em; border-radius: 50%; border: 1px solid currentColor;
+}
+.status[data-state="open"] { color: var(--text); }
+.status[data-state="open"]::before { background: currentColor; }
+.status[data-state="closed"] { color: var(--signal); }
+
+.turn {
+  display: grid; grid-template-columns: 1fr 1fr; padding: 3.4vh 0;
+  border-bottom: 1px solid var(--line);
+}
+.side { min-width: 0; }
+.side:first-child { padding-right: 3vw; }
+.side + .side { padding-left: 3vw; border-left: 1px solid var(--line); }
+
+/* Fixed height so both columns start their text on the same line, with or without a tag. */
+.meta { display: flex; align-items: center; gap: 1.2em; height: 2.2em; font-size: clamp(14px, 1.1vw, 22px); }
+.speaker { display: inline-flex; align-items: center; gap: 0.8em; }
+.speaker::before {
+  content: ""; width: 0.6em; height: 0.6em; border-radius: 50%; border: 1.5px solid currentColor;
+}
+.physician::before { background: currentColor; }
+.lang { font-family: var(--serif); font-style: italic; color: var(--muted); font-size: clamp(16px, 1.2vw, 24px); }
+.tag {
+  padding: 0.45em 0.6em; border: 1px solid var(--line); border-radius: 4px; color: var(--muted);
+  font-size: clamp(11px, 0.7vw, 14px); letter-spacing: 0.12em;
+}
+.stop { border-color: var(--signal); color: var(--signal); }
+
+.text {
+  margin: 1.4vh 0 0; font-size: clamp(26px, 3vw, 56px); font-weight: 300; line-height: 1.28;
+  letter-spacing: -0.015em; overflow-wrap: anywhere;
 }
 .value {
-  background: var(--mark); color: inherit; border-radius: 0.2em; padding: 0 0.15em;
+  background: var(--chip-bg); color: var(--chip-text); border-radius: 0.12em; padding: 0 0.12em;
   -webkit-box-decoration-break: clone; box-decoration-break: clone;
 }
-.glossary { margin: 1.2vh 0 0; display: grid; gap: 0.8vh; font-size: clamp(16px, 1.6vw, 28px); line-height: 1.4; }
-.glossary div { border-left: 3px solid var(--line); padding-left: 0.8em; }
-.glossary dt { display: inline; font-weight: 600; }
-.glossary dt::after { content: ": "; }
-.glossary dd { display: inline; margin: 0; color: var(--muted); }
-.notice { align-self: center; color: var(--muted); }
-.notice p { margin: 0; font-size: clamp(22px, 2.6vw, 44px); line-height: 1.35; }
-.notice p + p { font-size: clamp(18px, 2vw, 34px); }
-.pending { opacity: 0.85; }
-.working { display: inline-block; width: 3em; height: 0.5em; vertical-align: middle; border-radius: 999px;
-  background: linear-gradient(90deg, var(--line) 25%, var(--muted) 50%, var(--line) 75%);
-  background-size: 200% 100%; animation: working 1.2s linear infinite; }
-@keyframes working { to { background-position: -200% 0; } }
+
+.glossary {
+  margin: 2.4vh 0 0; padding-top: 1.6vh; border-top: 1px solid var(--line); max-width: 40em;
+  display: grid; gap: 1.6vh; font-size: clamp(16px, 1.25vw, 24px); line-height: 1.45;
+}
+.glossary div { margin: 0; }
+.glossary dt { font-weight: 500; }
+.glossary dd { margin: 0; color: var(--muted); }
+
+.notice { margin-top: 1.4vh; display: grid; gap: 0.6vh; }
+.notice p {
+  margin: 0; font-family: var(--serif); font-style: italic; font-weight: 400; line-height: 1.3;
+  font-size: clamp(24px, 2.4vw, 44px);
+}
+.notice p + p { color: var(--muted); font-size: clamp(18px, 1.7vw, 32px); }
+
+.pending .speaker, .pending .lang { opacity: 0.7; }
+.working {
+  display: block; height: 1px; width: min(18vw, 280px); margin-top: 4vh;
+  background: linear-gradient(90deg, transparent, var(--text), transparent) 0 0 / 40% 100% no-repeat, var(--line);
+  animation: working 1.6s ease-in-out infinite;
+}
+@keyframes working { from { background-position: -40% 0, 0 0; } to { background-position: 140% 0, 0 0; } }
 @media (prefers-reduced-motion: reduce) { .working { animation: none; } }
-@media (max-width: 640px) {
-  .pair { grid-template-columns: 1fr; }
+
+@media (max-width: 720px) {
+  .screen { padding: 0 16px 32px; }
+  .turn { grid-template-columns: 1fr; gap: 20px; }
+  .side:first-child { padding-right: 0; }
+  .side + .side { padding-left: 0; padding-top: 16px; border-left: none; border-top: 1px solid var(--line); }
 }

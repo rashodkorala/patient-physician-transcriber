@@ -8,7 +8,7 @@
  * @contract TurnCaption
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type {
   Envelope,
   Language,
@@ -20,7 +20,7 @@ import type {
 } from "@/lib/contracts";
 import { bilingual, type NoticeKey } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
-import { useVisitSocket } from "@/lib/socket";
+import { type ConnectionState, useVisitSocket } from "@/lib/socket";
 import Highlighted from "./Highlighted";
 import styles from "./screen.module.css";
 
@@ -34,6 +34,7 @@ interface Pending {
 }
 
 const SPEAKER_LABEL: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
+const STATE_LABEL: Record<ConnectionState, string> = { open: "Connected", connecting: "Connecting", closed: "Reconnecting" };
 
 function Notice({ notice, first, second }: { notice: NoticeKey; first: Language; second: Language }) {
   return (
@@ -47,29 +48,45 @@ function Notice({ notice, first, second }: { notice: NoticeKey; first: Language;
   );
 }
 
+/** The original, with the speaker label above it. */
+function Original({ speaker, language, children }: { speaker: Speaker; language?: Language; children: ReactNode }) {
+  return (
+    <div className={styles.side} lang={language}>
+      <div className={styles.meta}>
+        <span className={`${styles.speaker} ${styles[speaker]}`}>{SPEAKER_LABEL[speaker]}</span>
+        {language && <span className={styles.lang}>{LANGUAGE_LABELS[language].own}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function NotSpoken() {
+  return <span className={`${styles.tag} ${styles.stop}`}>Not spoken</span>;
+}
+
 function Caption({ c }: { c: TurnCaption }) {
   const spoken = c.status === "final" && c.translation !== null;
   return (
-    <article className={`${styles.turn} ${styles[c.speaker]}`} data-testid="caption" data-status={c.status}>
-      <header>{SPEAKER_LABEL[c.speaker]}</header>
-      <div className={styles.pair}>
-        <div lang={c.sourceLanguage}>
-          <span className={styles.lang}>{LANGUAGE_LABELS[c.sourceLanguage].own}</span>
-          <p>
-            <Highlighted text={c.sourceText} values={c.criticalValues.map((v) => v.source)} className={styles.value} />
-          </p>
+    <article className={styles.turn} data-testid="caption" data-turn-id={c.turnId} data-status={c.status}>
+      <Original speaker={c.speaker} language={c.sourceLanguage}>
+        <p className={styles.text}>
+          <Highlighted text={c.sourceText} values={c.criticalValues.map((v) => v.source)} className={styles.value} />
+        </p>
+      </Original>
+      <div className={styles.side} lang={spoken ? c.targetLanguage : undefined}>
+        <div className={styles.meta}>
+          <span className={styles.lang}>{LANGUAGE_LABELS[c.targetLanguage].own}</span>
+          {spoken && c.toneLabel && (
+            <span className={styles.tag} data-testid="tone-label">
+              {c.toneLabel}
+            </span>
+          )}
+          {!spoken && <NotSpoken />}
         </div>
         {spoken ? (
-          <div lang={c.targetLanguage}>
-            <span className={styles.lang}>
-              {LANGUAGE_LABELS[c.targetLanguage].own}
-              {c.toneLabel && (
-                <span className={styles.tone} data-testid="tone-label">
-                  {c.toneLabel}
-                </span>
-              )}
-            </span>
-            <p>
+          <>
+            <p className={styles.text}>
               <Highlighted
                 text={c.translation ?? ""}
                 values={c.criticalValues.map((v) => v.translated)}
@@ -86,7 +103,7 @@ function Caption({ c }: { c: TurnCaption }) {
                 ))}
               </dl>
             )}
-          </div>
+          </>
         ) : (
           <Notice
             notice={c.status === "escalated" ? "interpreterOffered" : "pleaseRepeat"}
@@ -108,15 +125,23 @@ function PendingTurn({ p, other }: { p: Pending; other: (lang: Language) => Lang
         ? "pleaseRepeat"
         : null;
   return (
-    <article className={`${styles.turn} ${styles.pending} ${styles[p.speaker]}`} data-testid="pending" data-stage={p.stage}>
-      <header>{SPEAKER_LABEL[p.speaker]}</header>
-      <div className={styles.pair}>
-        <div lang={source}>
-          {source && <span className={styles.lang}>{LANGUAGE_LABELS[source].own}</span>}
-          <p>{p.sourceText ?? <span className={styles.working} aria-label="working" />}</p>
+    <article className={`${styles.turn} ${styles.pending}`} data-testid="pending" data-stage={p.stage}>
+      <Original speaker={p.speaker} language={source}>
+        {p.sourceText ? (
+          <p className={styles.text}>{p.sourceText}</p>
+        ) : (
+          <span className={styles.working} role="status" aria-label="working" />
+        )}
+      </Original>
+      {notice && source && (
+        <div className={styles.side}>
+          <div className={styles.meta}>
+            <span className={styles.lang}>{LANGUAGE_LABELS[other(source)].own}</span>
+            {notice === "pleaseRepeat" && <NotSpoken />}
+          </div>
+          <Notice notice={notice} first={other(source)} second={source} />
         </div>
-        {notice && source && <Notice notice={notice} first={other(source)} second={source} />}
-      </div>
+      )}
     </article>
   );
 }
@@ -173,8 +198,16 @@ export default function SharedScreen() {
 
   return (
     <main className={styles.screen}>
-      <div className={styles.status} data-testid="connection" data-state={state} aria-label={`connection ${state}`} />
-      <div className={styles.captions}>
+      <header className={styles.bar}>
+        <span className={styles.eyebrow}>Live interpretation</span>
+        <span className={styles.visitPair}>
+          {LANGUAGE_LABELS[languages.patient].own} / {LANGUAGE_LABELS[languages.physician].own}
+        </span>
+        <span className={styles.status} data-testid="connection" data-state={state}>
+          {STATE_LABEL[state]}
+        </span>
+      </header>
+      <div>
         {captions.slice(-6).map((c) => (
           <Caption key={c.turnId} c={c} />
         ))}

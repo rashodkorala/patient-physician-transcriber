@@ -260,60 +260,68 @@ export default function Controller() {
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <h1>Physician controller</h1>
-        <span className={styles[state]} data-testid="connection">
+        <div>
+          <p className={styles.eyebrow}>Demo night interpreter</p>
+          <h1>Physician controller</h1>
+        </div>
+        <span className={`${styles.status} ${styles[state]}`} data-testid="connection">
           {state}
         </span>
       </header>
 
-      <section className={styles.panel}>
-        <label>
-          Patient language{" "}
-          <select
-            value={patientLanguage}
-            disabled={turns.length > 0}
-            onChange={(e) =>
-              send("visit.set_languages", { patientLanguage: e.target.value, physicianLanguage: "en-CA" })
-            }
-          >
-            {PATIENT_LANGUAGES.map((lang) => (
-              <option key={lang} value={lang}>
-                {LANGUAGE_LABELS[lang].own} ({LANGUAGE_LABELS[lang].english})
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className={styles.muted}> with English. Fixed once the first turn starts.</span>
+      <section className={styles.section}>
+        <h2 className={styles.eyebrow}>Visit</h2>
+        <div className={styles.visit}>
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Patient language</span>
+            <select
+              value={patientLanguage}
+              disabled={turns.length > 0}
+              onChange={(e) =>
+                send("visit.set_languages", { patientLanguage: e.target.value, physicianLanguage: "en-CA" })
+              }
+            >
+              {PATIENT_LANGUAGES.map((lang) => (
+                <option key={lang} value={lang}>
+                  {LANGUAGE_LABELS[lang].own} ({LANGUAGE_LABELS[lang].english})
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className={styles.aside}>With English. Fixed once the first turn starts.</p>
+        </div>
       </section>
 
-      <section className={styles.talk}>
-        {(["physician", "patient"] as Speaker[]).map((speaker, i) => (
-          <button
-            key={speaker}
-            className={`${styles.talkButton} ${styles[speaker]} ${recording === speaker ? styles.recording : ""}`}
-            onPointerDown={() => void pressTalk(speaker)}
-            onPointerUp={() => void releaseTalk()}
-            onPointerLeave={() => recording === speaker && void releaseTalk()}
-          >
-            {speaker === "physician" ? "Physician speaking" : "Patient speaking"}
-            <small>
-              {LANGUAGE_LABELS[languageOf(speaker)].own} · hold or press {i + 1}
-            </small>
-          </button>
-        ))}
+      <section className={styles.section}>
+        <h2 className={styles.eyebrow}>Speak</h2>
+        <div className={styles.talk}>
+          {(["physician", "patient"] as Speaker[]).map((speaker, i) => (
+            <button
+              key={speaker}
+              className={`${styles.talkButton} ${recording === speaker ? styles.recording : ""}`}
+              onPointerDown={() => void pressTalk(speaker)}
+              onPointerUp={() => void releaseTalk()}
+              onPointerLeave={() => recording === speaker && void releaseTalk()}
+            >
+              <span className={styles.eyebrow}>{recording === speaker ? "Listening" : `Hold or press ${i + 1}`}</span>
+              <span className={styles.talkRole}>{speaker === "physician" ? "Physician" : "Patient"}</span>
+              <span className={styles.talkLang}>{LANGUAGE_LABELS[languageOf(speaker)].own}</span>
+            </button>
+          ))}
+        </div>
       </section>
 
       {readbackTurn && (
-        <section className={`${styles.panel} ${styles.readback}`} data-testid="readback" aria-live="assertive">
-          <h2>Check the values before they are spoken</h2>
-          <p lang={readbackTurn.sourceLanguage}>
+        <section className={styles.readback} data-testid="readback" aria-live="assertive">
+          <h2 className={styles.eyebrow}>Read-back · check the values before they are spoken</h2>
+          <p className={styles.readbackLine} lang={readbackTurn.sourceLanguage}>
             <Highlighted
               text={readbackTurn.sourceText}
               values={readbackTurn.criticalValues.map((v) => v.source)}
               className={styles.value}
             />
           </p>
-          <p lang={readbackTurn.targetLanguage}>
+          <p className={styles.readbackLine} lang={readbackTurn.targetLanguage}>
             <Highlighted
               text={readbackTurn.translation}
               values={readbackTurn.criticalValues.map((v) => v.translated)}
@@ -329,7 +337,11 @@ export default function Controller() {
             >
               Confirm and speak
             </button>
-            <button data-testid="readback-reject" onClick={() => decideReadback(readbackTurn.turnId, false)}>
+            <button
+              className={styles.secondary}
+              data-testid="readback-reject"
+              onClick={() => decideReadback(readbackTurn.turnId, false)}
+            >
               Reject and repeat
             </button>
           </div>
@@ -337,22 +349,26 @@ export default function Controller() {
       )}
 
       {nudge && (
-        <section className={`${styles.panel} ${styles.nudge}`} data-testid="nudge" aria-live="polite">
+        <section className={`${styles.section} ${styles.nudge}`} data-testid="nudge" aria-live="polite">
           <div className={styles.nudgeHead}>
-            <h2>Empathy nudge · patient seems {nudge.emotion.replace("_", " ")}</h2>
+            <h2 className={styles.eyebrow}>Empathy nudge · patient seems {nudge.emotion.replace("_", " ")}</h2>
             <button className={styles.quiet} onClick={() => setDismissed((d) => new Set(d).add(nudge.turnId))}>
               Dismiss
             </button>
           </div>
-          <p>{nudge.suggestion}</p>
+          <p className={styles.suggestion}>{nudge.suggestion}</p>
           <blockquote lang={nudge.phraseLanguage}>{nudge.phrase}</blockquote>
         </section>
       )}
 
-      <section className={styles.panel}>
-        <h2>Typed turn</h2>
+      <section className={styles.section}>
+        <h2 className={styles.eyebrow}>Typed turn</h2>
         <div className={styles.typed}>
-          <select data-testid="typed-speaker" value={typedSpeaker} onChange={(e) => setTypedSpeaker(e.target.value as Speaker)}>
+          <select
+            data-testid="typed-speaker"
+            value={typedSpeaker}
+            onChange={(e) => setTypedSpeaker(e.target.value as Speaker)}
+          >
             <option value="physician">Physician (English)</option>
             <option value="patient">Patient ({LANGUAGE_LABELS[patientLanguage].english})</option>
           </select>
@@ -363,20 +379,20 @@ export default function Controller() {
             rows={2}
             placeholder="Type what was said"
           />
-          <button data-testid="typed-send" onClick={sendTyped} disabled={state !== "open"}>
+          <button className={styles.primary} data-testid="typed-send" onClick={sendTyped} disabled={state !== "open"}>
             Send
           </button>
         </div>
+        {notice && (
+          <p className={styles.notice} role="status" data-testid="notice">
+            {notice}
+          </p>
+        )}
       </section>
 
-      {notice && (
-        <p className={styles.notice} role="status" data-testid="notice">
-          {notice}
-        </p>
-      )}
-
-      <section className={styles.panel}>
-        <h2>Turns (private to the physician)</h2>
+      <section className={styles.section}>
+        <h2 className={styles.eyebrow}>Turns · private to the physician</h2>
+        {turns.length === 0 && <p className={styles.aside}>Nothing said yet.</p>}
         <ol className={styles.turns}>
           {turns.map((t) => {
             const outcome = outcomes[t.turnId] ?? {};
@@ -384,16 +400,18 @@ export default function Controller() {
             return (
               <li key={t.turnId} data-testid="turn" data-status={t.status}>
                 <div className={styles.turnHead}>
-                  <strong className={styles[t.speaker]}>{t.speaker}</strong>
-                  <span className={`${styles.badge} ${unspoken ? styles.badgeStop : ""}`}>
+                  <span className={`${styles.speaker} ${styles[t.speaker]}`}>{t.speaker}</span>
+                  <span className={`${styles.tag} ${unspoken ? styles.stop : ""}`}>
                     {statusText(t, outcome, t.turnId === pendingReadback)}
                   </span>
-                  {!unspoken && <span className={styles.badge}>{toneLabel(t)}</span>}
+                  {!unspoken && <span className={styles.tag}>{toneLabel(t)}</span>}
                 </div>
-                <div lang={t.sourceLanguage}>{t.sourceText}</div>
-                <div lang={t.targetLanguage} className={unspoken ? styles.unspoken : undefined}>
-                  → {t.translation}
-                </div>
+                <p className={styles.line} lang={t.sourceLanguage}>
+                  {t.sourceText}
+                </p>
+                <p className={`${styles.line} ${unspoken ? styles.unspoken : ""}`} lang={t.targetLanguage}>
+                  {t.translation}
+                </p>
                 {t.status === "blocked" && (
                   <>
                     <ValuesTable turn={t} only="mismatched" />
@@ -406,23 +424,25 @@ export default function Controller() {
                     Offer a human interpreter.
                   </p>
                 )}
-                <div className={styles.muted}>
-                  back: {t.backTranslation} · {t.emotion.replace("_", " ")} · certainty {t.certainty} · confidence{" "}
+                <p className={styles.analysis}>
+                  Back: {t.backTranslation} · {t.emotion.replace("_", " ")} · certainty {t.certainty} · confidence{" "}
                   {t.confidence.toFixed(2)} · attempts {t.attempts}
-                </div>
+                </p>
               </li>
             );
           })}
         </ol>
       </section>
 
-      <section className={styles.panel}>
-        <h2>Latency</h2>
-        <p>
-          Median end of speech to audio: {medianMs === undefined ? "n/a" : `${(medianMs / 1000).toFixed(2)} s`} over{" "}
-          {totals.length} turn(s). Target under 3 s.
-        </p>
-        <button onClick={downloadCsv} disabled={!latency.length}>
+      <section className={`${styles.section} ${styles.latency}`}>
+        <div>
+          <h2 className={styles.eyebrow}>Median end of speech to audio</h2>
+          <p className={styles.stat}>{medianMs === undefined ? "n/a" : `${(medianMs / 1000).toFixed(2)} s`}</p>
+          <p className={styles.aside}>
+            Over {totals.length} turn{totals.length === 1 ? "" : "s"}. Target under 3 s.
+          </p>
+        </div>
+        <button className={styles.secondary} onClick={downloadCsv} disabled={!latency.length}>
           Download CSV
         </button>
       </section>

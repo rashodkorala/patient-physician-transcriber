@@ -34,22 +34,27 @@ const say = async (speaker, text) => {
   await control.click('[data-testid="typed-send"]');
 };
 const lastCaption = () => tv.locator('[data-testid="caption"]').last();
-const captionCount = () => tv.locator('[data-testid="caption"]').count();
+// The screen keeps only the latest captions, so a new turn is a new last turn id, not a higher count.
+const lastTurnId = () => tv.evaluate(() => [...document.querySelectorAll('[data-testid="caption"]')].at(-1)?.dataset.turnId ?? null);
 const waitForCaption = async (before) => {
-  await tv.waitForFunction((n) => document.querySelectorAll('[data-testid="caption"]').length > n, before, { timeout: 15000 });
+  await tv.waitForFunction(
+    (id) => ([...document.querySelectorAll('[data-testid="caption"]')].at(-1)?.dataset.turnId ?? null) !== id,
+    before,
+    { timeout: 15000 },
+  );
   return lastCaption();
 };
 
 // 2.4: tone label and glossary explanation on a spoken caption.
-let n = await captionCount();
+let n = await lastTurnId();
 await say("physician", "You did not have a heart attack.");
 let caption = await waitForCaption(n);
 await check((await caption.locator('[data-testid="tone-label"]').count()) === 1, "spoken caption carries one tone label");
-await check((await caption.locator('[data-testid="tone-label"]').innerText()) === "reassuring", "reassurance is labelled reassuring");
+await check((await caption.locator('[data-testid="tone-label"]').textContent()) === "reassuring", "reassurance is labelled reassuring");
 await check((await caption.locator('[data-testid="glossary"]').innerText()).includes("ਦਿਲ ਦਾ ਦੌਰਾ"), "approved term explained beside the translation");
 
 // 2.5: empathy nudge on /control only.
-n = await captionCount();
+n = await lastTurnId();
 await say("patient", "ਮੈਨੂੰ ਬਹੁਤ ਡਰ ਲੱਗਦਾ ਹੈ, I am scared about the cost.");
 await waitForCaption(n);
 await control.waitForSelector('[data-testid="nudge"]', { timeout: 15000 });
@@ -76,7 +81,7 @@ await check((await late.locator('[data-testid="pending"]').innerText()).includes
 await shot(late, "screen-late-readback");
 await late.close();
 
-n = await captionCount();
+n = await lastTurnId();
 await control.click('[data-testid="readback-confirm"]');
 caption = await waitForCaption(n);
 const marks = await caption.locator("mark").allInnerTexts();
@@ -91,7 +96,7 @@ await tv.waitForSelector('[data-testid="pending"][data-stage="discarded"] [data-
 await check((await control.locator('[data-testid="notice"]').innerText()).includes("say it again"), "rejected dose asks the physician to repeat");
 
 // Blocked: the dose still changes after a retry.
-n = await captionCount();
+n = await lastTurnId();
 await say("physician", `${DOSE} (test: mismatch)`);
 caption = await waitForCaption(n);
 await check((await caption.getAttribute("data-status")) === "blocked", "mismatched dose is blocked");
@@ -103,7 +108,7 @@ await shot(control, "control-blocked");
 await shot(tv, "screen-blocked");
 
 // Escalated: tone check fails after a retry.
-n = await captionCount();
+n = await lastTurnId();
 await say("physician", "This is very unlikely to be serious. (test: tone)");
 caption = await waitForCaption(n);
 await check((await caption.getAttribute("data-status")) === "escalated", "failed tone check escalates");
@@ -116,7 +121,17 @@ const PRIVATE = /"turn\.analysis"|"turn\.readback_required"|"empathy\.nudge"|"em
 const leaked = [...tvFrames, ...lateFrames].filter((f) => PRIVATE.test(f));
 if (leaked.length) await fail(`/screen received private data: ${leaked[0].slice(0, 200)}`);
 await check(true, `/screen received ${tvFrames.length + lateFrames.length} frames, none private`);
-const wrongDose = tvFrames.filter((f) => f.includes("[pa-IN]") && f.includes("(test: mismatch)") && f.includes('"translation":"'));
-await check(wrongDose.length === 0, "the blocked translation never reached /screen");
+// Every caption a screen received, live or in a visit.state snapshot.
+const captionsSeen = [...tvFrames, ...lateFrames].flatMap((f) => {
+  const event = JSON.parse(f);
+  if (event.type === "turn.result") return [event.payload];
+  if (event.type === "visit.state") return event.payload.turns;
+  return [];
+});
+const wrongDose = captionsSeen.filter((c) => c.sourceText.includes("(test: mismatch)") && c.translation !== null);
+await check(
+  captionsSeen.some((c) => c.sourceText.includes("(test: mismatch)")) && wrongDose.length === 0,
+  "the blocked turn reached /screen without its translation",
+);
 
 await browser.close();

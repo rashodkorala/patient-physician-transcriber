@@ -1,38 +1,45 @@
+/*
+ * Black and crème design system (decided by rashodkorala, 2026-10-24).
+ * One muted red, --signal, is reserved for safety states: blocked turns, mismatched values, and
+ * anything not spoken. Speakers are told apart by label and a filled or hollow dot, never colour.
+ */
 :root {
-  --bg: #f7f7f5;
-  --surface: #ffffff;
-  --text: #1c1c1a;
-  --muted: #5f5f5a;
-  --line: #d9d9d4;
-  --accent: #1f5fbf;
-  --patient: #0f7a5c;
-  --physician: #1f5fbf;
-  --warn: #a15c00;
-  --bad: #b3261e;
-  --ok: #1e7a34;
-  --mark: #ffe08a;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Gurmukhi", sans-serif;
+  --ink: #0f0f0d;
+  --creme: #f3efe6;
+  --bg: var(--creme);
+  --text: var(--ink);
+  --muted: #625e55;
+  --line: rgba(15, 15, 13, 0.16);
+  --field: #e8e3d7;
+  --signal: #a4372a;
+  --chip-bg: var(--ink);
+  --chip-text: var(--creme);
+  --sans: "Inter Tight", "Noto Sans Gurmukhi", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Newsreader", "Noto Sans Gurmukhi", Georgia, "Times New Roman", serif;
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #121211;
-    --surface: #1d1d1b;
-    --text: #f1f1ec;
-    --muted: #a9a9a2;
-    --line: #34342f;
-    --accent: #7aa7f0;
-    --patient: #5fc9a6;
-    --physician: #7aa7f0;
-    --warn: #f0b45f;
-    --bad: #f28b82;
-    --ok: #7fd18f;
-    --mark: #6b5310;
+    --bg: #0e0e0c;
+    --text: var(--creme);
+    --muted: #8f8a7e;
+    --line: rgba(243, 239, 230, 0.16);
+    --field: #1c1b18;
+    --signal: #e08a78;
+    --chip-bg: var(--creme);
+    --chip-text: var(--ink);
+    color-scheme: dark;
   }
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: var(--font); }
-a { color: var(--accent); }
-button { font: inherit; }
+body {
+  background: var(--bg); color: var(--text); font-family: var(--sans);
+  font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+a { color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
+::selection { background: var(--text); color: var(--bg); }
+:focus-visible { outline: 1px solid var(--text); outline-offset: 2px; }
