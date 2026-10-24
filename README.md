@@ -42,6 +42,23 @@ AI agents build; humans decide and review.
 python3 scripts/check_tdr.py    # validate decisions and show the human review queue
 ```
 
+## Run the demo
+
+Requirements: Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node 20+.
+
+```bash
+cp server/.env.example server/.env    # add ANTHROPIC_API_KEY and AZURE_SPEECH_KEY / AZURE_SPEECH_REGION
+(cd server && uv sync) && (cd web && npm install)
+scripts/dev.sh            # development
+scripts/dev.sh --prod     # production build, for rehearsals and demo night
+```
+
+- Physician laptop: `http://localhost:3000/control`
+- TV: `http://<laptop-ip>:3000/screen` (same network)
+- Without keys, `TRANSLATOR=fake` echoes text with a language tag and nothing is spoken; use the typed turn box.
+
+Tests: `cd server && uv run pytest`, `cd web && npm run check:contracts && npm run build`.
+
 ## OpenSpec commands
 
 No code is written until its spec is agreed and its decisions are accepted.

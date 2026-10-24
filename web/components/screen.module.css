@@ -1,0 +1,22 @@
+/* Sized for a 40-inch TV read from about 3 metres (task 1.6). */
+.screen { min-height: 100vh; padding: 3vh 4vw; background: var(--bg); position: relative; }
+.status { position: absolute; top: 12px; right: 12px; width: 14px; height: 14px; border-radius: 50%; background: var(--warn); }
+.status[data-state="open"] { background: var(--ok); }
+.status[data-state="closed"] { background: var(--bad); }
+.captions { display: grid; gap: 2.5vh; }
+.turn { border-left: 10px solid currentColor; background: var(--surface); border-radius: 12px; padding: 1.5vh 2vw; }
+.turn header { font-size: clamp(18px, 2.2vw, 34px); font-weight: 600; }
+.physician { color: var(--physician); }
+.patient { color: var(--patient); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 3vw; color: var(--text); }
+.pair p, .pending p { margin: 0.6vh 0 0; font-size: clamp(24px, 3.2vw, 56px); line-height: 1.35; }
+.lang { display: block; font-size: clamp(14px, 1.4vw, 24px); color: var(--muted); }
+.tone {
+  display: inline-block; margin-left: 0.6em; padding: 0 0.5em; border: 1px solid var(--line); border-radius: 999px;
+  font-size: clamp(14px, 1.3vw, 22px); color: var(--muted); vertical-align: middle;
+}
+.notice { color: var(--muted); font-style: italic; }
+.pending { opacity: 0.8; }
+@media (max-width: 640px) {
+  .pair { grid-template-columns: 1fr; }
+}

@@ -14,13 +14,13 @@ TDRs: ADR-004, ADR-005, ADR-006, ADR-007, CDR-001, CDR-002, EDR-002, IDR-001, ID
 
 TDRs: ADR-001, ADR-005, ADR-006, ADR-007, CDR-001, CDR-002, IDR-001, EDR-002
 
-- [ ] 1.1 Scaffold `server/` (FastAPI, pyproject) and `web/` (Next.js), with one start script; verify both start and `/screen` connects to the WebSocket
-- [ ] 1.2 Implement CDR-001 and CDR-002 types in `server/contracts.py` and `web/lib/contracts.ts`; verify contract tests pass
-- [ ] 1.3 Implement speech token minting and `web/lib/speech.ts` recognise and speak; verify Punjabi, French, and English round trip on the laptop
+- [x] 1.1 Scaffold `server/` (FastAPI, pyproject) and `web/` (Next.js), with one start script; verify both start and `/screen` connects to the WebSocket (2026-10-24: `scripts/dev.sh --prod` with `TRANSLATOR=fake`; `node web/e2e/week1.mjs` confirms `/screen` and `/control` connect)
+- [x] 1.2 Implement CDR-001 and CDR-002 types in `server/contracts.py` and `web/lib/contracts.ts`; verify contract tests pass (2026-10-24: `uv run pytest` 17 passed; `npm run check:contracts` passes and fails on a private field in a caption)
+- [ ] 1.3 Implement speech token minting and `web/lib/speech.ts` recognise and speak; verify Punjabi, French, and English round trip on the laptop (code done 2026-10-24; laptop check pending: needs Azure key and microphone; log in docs/speech-test.md)
 - [ ] 1.4 Run the Punjabi accuracy test with the speaker on the demo script; record word error notes in docs/speech-test.md and switch to Google if it fails (ADR-005)
-- [ ] 1.5 Build push-to-talk on `/control` and a plain translate path; verify a spoken turn appears on `/screen` with original and translation
-- [ ] 1.6 Build `/screen` bilingual caption layout with Gurmukhi font; verify readability at 3 metres on the TV
-- [ ] 1.7 Log per-turn latency; verify the median is under 3 seconds for the demo lines
+- [ ] 1.5 Build push-to-talk on `/control` and a plain translate path; verify a spoken turn appears on `/screen` with original and translation (code done 2026-10-24; verified with a typed turn and the fake translator by `node web/e2e/week1.mjs`; spoken turn pending on the laptop)
+- [ ] 1.6 Build `/screen` bilingual caption layout with Gurmukhi font; verify readability at 3 metres on the TV (layout done 2026-10-24; TV check pending)
+- [ ] 1.7 Log per-turn latency; verify the median is under 3 seconds for the demo lines (logging and CSV export on `/control` done 2026-10-24; real median pending on the laptop with live speech and Claude)
 
 ## 2. Week 2 (30 Oct to 5 Nov): knowledge base and tone-aware turn graph
 
