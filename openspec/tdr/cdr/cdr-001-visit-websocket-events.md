@@ -72,6 +72,7 @@ Channel: `ws://<server>/ws/visit` (one visit at a time). Each connection declare
 
 | Command (client to server) | Sender |
 |---|---|
+| `visit.set_languages` (`patientLanguage`, `physicianLanguage`) | Controller; rejected once the visit has a turn |
 | `turn.submit` (speaker, language, recognised text, recognition confidence) | Controller |
 | `turn.readback_confirm` / `turn.readback_reject` (reject discards the turn unspoken and asks the speaker to repeat) | Controller |
 | `visit.pause` / `visit.resume` | Any screen |
@@ -84,8 +85,9 @@ Channel: `ws://<server>/ws/visit` (one visit at a time). Each connection declare
 
 Every message: `{ "type": string, "visitId": string, "seq": integer, "ts": ISO-8601 string, "payload": object }`. `seq` increases by one per server event so clients can detect gaps and request `visit.state`.
 
-- `visit.state.payload` for `controller`: `{ consent, paused, turns: TurnResult[], currentTurn?: TurnResult, pendingReadback?: turnId, nudges: empathy.nudge payload[], integrity: record.integrity payload }`
-- `visit.state.payload` for `screen` and `review`: `{ consent, paused, turns: TurnCaption[], currentTurn?: { turnId, speaker, sourceText, stage }, integrity: record.integrity payload }`. `turns` holds settled turns only. Never a pending `TurnResult`, emotion, certainty, back-translation, nudge, unspoken translation, or demo injection state
+- `visit.set_languages` command payload: `{ patientLanguage: BCP-47, physicianLanguage: BCP-47 }`; the server answers with a fresh `visit.state`, or an `error` event (controller only) if the visit already has a turn
+- `visit.state.payload` for `controller`: `{ patientLanguage, physicianLanguage, consent, paused, turns: TurnResult[], currentTurn?: TurnResult, pendingReadback?: turnId, nudges: empathy.nudge payload[], integrity: record.integrity payload }`
+- `visit.state.payload` for `screen` and `review`: `{ patientLanguage, physicianLanguage, consent, paused, turns: TurnCaption[], currentTurn?: { turnId, speaker, sourceText, stage }, integrity: record.integrity payload }`. `turns` holds settled turns only. Never a pending `TurnResult`, emotion, certainty, back-translation, nudge, unspoken translation, or demo injection state
 - `turn.started.payload`: `{ turnId, speaker: "patient"|"physician"|"companion", language: BCP-47 }`
 - `turn.status.payload`: `{ turnId, stage: string }`
 - `turn.analysis.payload`: CDR-002 `TurnResult` (controller only)
@@ -102,7 +104,7 @@ Version in the URL path once a second version exists (`/ws/v2/visit`). Additive 
 
 ## Testing Requirements
 
-Server contract tests assert each event shape; a front-end test replays a recorded event log and checks the screens render; tests assert `turn.analysis`, `turn.readback_required`, and `empathy.nudge` reach controller connections only, that no `screen` or `review` connection ever receives `emotion`, `certainty`, `backTranslation`, or the translation of a `blocked` or `escalated` turn, and that `visit.mark_high_risk` yields `interpreter.escalation` with reason `high_risk`. A `screen` connection opened during read-back, and one opened after a blocked or escalated turn, receives a `visit.state` with no translation for those turns and no emotion, certainty, or back-translation. Replay mode (TDM-001) applies the same role filtering. `demo.inject_mismatch` and `demo.cancel_injection` are rejected from non-presenter connections, and `demo.injection_state` never reaches `screen` or `review` connections, live or via `visit.state`.
+Server contract tests assert each event shape; a front-end test replays a recorded event log and checks the screens render; tests assert `turn.analysis`, `turn.readback_required`, and `empathy.nudge` reach controller connections only, that no `screen` or `review` connection ever receives `emotion`, `certainty`, `backTranslation`, or the translation of a `blocked` or `escalated` turn, and that `visit.mark_high_risk` yields `interpreter.escalation` with reason `high_risk`. `visit.set_languages` is accepted before the first turn and rejected after it. A `screen` connection opened during read-back, and one opened after a blocked or escalated turn, receives a `visit.state` with no translation for those turns and no emotion, certainty, or back-translation. Replay mode (TDM-001) applies the same role filtering. `demo.inject_mismatch` and `demo.cancel_injection` are rejected from non-presenter connections, and `demo.injection_state` never reaches `screen` or `review` connections, live or via `visit.state`.
 
 ## Consequences
 
@@ -123,3 +125,4 @@ Code carries `@contract ws:/ws/visit` and `@implements CDR-001: Visit WebSocket 
 - 2026-10-22, rashodkorala: Amended before implementation: role-based routing; new controller-only `turn.analysis` carries the full TurnResult while `turn.result` carries the public TurnCaption; `turn.readback_required` is controller-only; new `visit.mark_high_risk` command so the `high_risk` reason has a source. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended before implementation: `visit.state` snapshots are filtered by connection role like live events, with a defined payload per role, so a screen connecting mid read-back cannot receive the private TurnResult. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended (additive, task 0.5): presenter-only `demo.inject_mismatch` and `demo.cancel_injection` commands and controller-only `demo.injection_state` event, per accepted TDM-002. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-24, rashodkorala: Amended (additive, before implementation): `visit.set_languages` command and language fields in `visit.state`, so the server knows the target language for each turn. Recorded by Claude (agent) at rashodkorala's explicit request.
