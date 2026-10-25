@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
-from config import Settings, load_settings
+from config import LIVE_MODEL, Settings, load_settings
 from contracts import (
     CONTROLLER_COMMANDS,
     ErrorPayload,
@@ -50,10 +50,18 @@ def make_model(settings: Settings) -> Model:
     return fake_model()
 
 
+def describe(settings: Settings) -> str:
+    """One start-up line saying what this run will use, so a fake run is never mistaken for live."""
+    translator = f"Claude ({LIVE_MODEL})" if settings.translator == "claude" else "fake model (no AI calls)"
+    speech = "Azure" if settings.azure_speech_key and settings.azure_speech_region else "not configured"
+    return f"Translator: {translator}. Speech: {speech}."
+
+
 def create_app(
     model: Model | None = None, settings: Settings | None = None, kb: KnowledgeBase | None = None
 ) -> FastAPI:
     settings = settings or load_settings()
+    logging.getLogger("uvicorn.error").info(describe(settings))
     model = model or make_model(settings)
     kb = kb or KnowledgeBase(make_embedder())
     pipeline = TurnPipeline(model, kb)
