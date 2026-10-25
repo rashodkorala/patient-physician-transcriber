@@ -89,6 +89,11 @@
 @keyframes working { from { background-position: -40% 0, 0 0; } to { background-position: 140% 0, 0 0; } }
 @media (prefers-reduced-motion: reduce) { .working { animation: none; } }
 
+/* Before the first turn: a quiet line in both languages, so an empty TV does not look broken. */
+.ready { display: grid; gap: 1.2vh; padding-top: 30vh; text-align: center; }
+.ready p { margin: 0; font-family: var(--serif); font-style: italic; font-size: clamp(28px, 3vw, 56px); line-height: 1.25; }
+.ready p + p { color: var(--muted); font-size: clamp(20px, 2vw, 36px); }
+
 @media (max-width: 720px) {
   .screen { padding: 0 16px 32px; }
   .turn { grid-template-columns: 1fr; gap: 20px; }

@@ -13,6 +13,17 @@ fi
 SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
 
+# The laptop's address on the local network, for the TV (macOS first, then Linux).
+LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || true)"
+echo
+echo "  Physician controller (this laptop):  http://localhost:3000/control"
+if [[ -n "$LAN_IP" ]]; then
+  echo "  Shared screen (TV on the same Wi-Fi): http://$LAN_IP:3000/screen"
+else
+  echo "  Shared screen (TV on the same Wi-Fi): http://<this laptop's IP>:3000/screen"
+fi
+echo
+
 cd "$ROOT/web"
 if [[ "${1:-}" == "--prod" ]]; then
   npm run build && npm run start -- --hostname 0.0.0.0 --port 3000

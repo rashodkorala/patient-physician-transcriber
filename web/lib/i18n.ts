@@ -8,7 +8,7 @@ import en from "@/i18n/en.json";
 import fr from "@/i18n/fr.json";
 import pa from "@/i18n/pa.json";
 
-export type NoticeKey = "checkingDose" | "pleaseRepeat" | "interpreterOffered";
+export type NoticeKey = "checkingDose" | "pleaseRepeat" | "interpreterOffered" | "ready";
 
 const NOTICES: Record<Language, Record<NoticeKey, string>> = { "en-CA": en, "fr-CA": fr, "pa-IN": pa };
 

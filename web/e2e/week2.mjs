@@ -5,6 +5,9 @@
 // Usage: node e2e/week2.mjs [baseUrl] [screenshotDir]
 import { chromium } from "playwright-core";
 
+// Only the visit channel; in dev mode pages also hold the Next.js hot-reload socket.
+const visitChannel = (ws) => new URL(ws.url()).pathname === "/ws/visit";
+
 const base = process.argv[2] ?? "http://localhost:3000";
 const shots = process.argv[3];
 const DOSE = "Use the nitroglycerin spray: 0.4 milligrams, one spray under your tongue.";
@@ -20,7 +23,7 @@ const shot = async (page, name) => shots && page.screenshot({ path: `${shots}/${
 
 const tv = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 const tvFrames = [];
-tv.on("websocket", (ws) => ws.on("framereceived", (f) => tvFrames.push(String(f.payload))));
+tv.on("websocket", (ws) => visitChannel(ws) && ws.on("framereceived", (f) => tvFrames.push(String(f.payload))));
 await tv.goto(`${base}/screen`);
 await tv.waitForSelector('[data-testid="connection"][data-state="open"]', { timeout: 15000 });
 
@@ -74,7 +77,7 @@ await shot(tv, "screen-readback");
 
 const late = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 const lateFrames = [];
-late.on("websocket", (ws) => ws.on("framereceived", (f) => lateFrames.push(String(f.payload))));
+late.on("websocket", (ws) => visitChannel(ws) && ws.on("framereceived", (f) => lateFrames.push(String(f.payload))));
 await late.goto(`${base}/screen`);
 await late.waitForSelector('[data-testid="pending"][data-stage="awaiting_readback"]', { timeout: 15000 });
 await check((await late.locator('[data-testid="pending"]').innerText()).includes("0.4 milligrams"), "screen opened mid read-back shows the original");

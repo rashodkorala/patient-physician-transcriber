@@ -4,6 +4,9 @@
 // Usage: node e2e/week1.mjs [baseUrl]
 import { chromium } from "playwright-core";
 
+// Only the visit channel; in dev mode pages also hold the Next.js hot-reload socket.
+const visitChannel = (ws) => new URL(ws.url()).pathname === "/ws/visit";
+
 const base = process.argv[2] ?? "http://localhost:3000";
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium" });
 const fail = async (message) => {
@@ -14,7 +17,7 @@ const fail = async (message) => {
 
 const screen = await browser.newPage();
 const screenFrames = [];
-screen.on("websocket", (ws) => ws.on("framereceived", (f) => screenFrames.push(String(f.payload))));
+screen.on("websocket", (ws) => visitChannel(ws) && ws.on("framereceived", (f) => screenFrames.push(String(f.payload))));
 await screen.goto(`${base}/screen`);
 await screen.waitForSelector('[data-testid="connection"][data-state="open"]', { timeout: 15000 });
 console.log("ok: /screen connected to the WebSocket");

@@ -38,6 +38,8 @@ html, body { margin: 0; padding: 0; }
 body {
   background: var(--bg); color: var(--text); font-family: var(--sans);
   font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  /* Gurmukhi has no italic; keep it upright beside italic Latin instead of a faked slant. */
+  font-synthesis-style: none;
 }
 a { color: inherit; }
 button, input, select, textarea { font: inherit; color: inherit; }

@@ -212,6 +212,15 @@ export default function SharedScreen() {
           <Caption key={c.turnId} c={c} />
         ))}
         {pending && <PendingTurn p={pending} other={other} />}
+        {!pending && captions.length === 0 && (
+          <div className={styles.ready} data-testid="ready">
+            {bilingual("ready", languages.patient, languages.physician).map(({ lang, text }) => (
+              <p key={lang} lang={lang}>
+                {text}
+              </p>
+            ))}
+          </div>
+        )}
         <div ref={bottom} />
       </div>
     </main>
