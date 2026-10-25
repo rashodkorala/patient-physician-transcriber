@@ -29,9 +29,9 @@ import type {
   VisitStateController,
 } from "@/lib/contracts";
 import { LANGUAGE_LABELS } from "@/lib/languages";
-import { type LatencyRow, median, toCsv, totalMs } from "@/lib/latency";
+import { type LatencyRow, median, segments, toCsv } from "@/lib/latency";
 import { useVisitSocket } from "@/lib/socket";
-import { type Capture, speak, startCapture } from "@/lib/speech";
+import { type Capture, speak, startCapture, warmUp } from "@/lib/speech";
 import styles from "./controller.module.css";
 import Highlighted from "./Highlighted";
 
@@ -110,7 +110,7 @@ export default function Controller() {
   const [typedText, setTypedText] = useState("");
   const capture = useRef<Capture | null>(null);
   // Submits are sequential from this one controller, so turn.started events match them in order.
-  const pendingEnds = useRef<number[]>([]);
+  const pendingTimes = useRef<{ endOfSpeechAt: number; submittedAt: number }[]>([]);
 
   const physicianLanguage: Language = "en-CA";
   const languageOf = (speaker: Speaker): Language => (speaker === "physician" ? physicianLanguage : patientLanguage);
@@ -132,8 +132,9 @@ export default function Controller() {
       }
       case "turn.started": {
         const started = event.payload as TurnStarted;
-        const endOfSpeechAt = pendingEnds.current.shift() ?? Date.now();
-        setLatency((rows) => [...rows, { turnId: started.turnId, speaker: started.speaker, endOfSpeechAt }]);
+        const now = Date.now();
+        const times = pendingTimes.current.shift() ?? { endOfSpeechAt: now, submittedAt: now };
+        setLatency((rows) => [...rows, { turnId: started.turnId, speaker: started.speaker, ...times }]);
         break;
       }
       case "turn.status": {
@@ -147,6 +148,7 @@ export default function Controller() {
       }
       case "turn.analysis": {
         const result = event.payload as TurnResult;
+        updateLatency(result.turnId, { analysisAt: Date.now() });
         setTurns((prev) => [...prev.filter((t) => t.turnId !== result.turnId), result]);
         if (result.status === "blocked") {
           setNotice("Blocked: a value changed in translation. Ask the speaker to repeat or rephrase.");
@@ -158,7 +160,7 @@ export default function Controller() {
         break;
       case "turn.result": {
         const caption = event.payload as TurnCaption;
-        updateLatency(caption.turnId, { resultAt: Date.now() });
+        updateLatency(caption.turnId, { resultAt: Date.now(), spoken: caption.status === "final" });
         // The public caption is the signal to speak (CDR-002: shown only once spoken).
         if (caption.status === "final" && caption.translation) {
           updateOutcome(caption.turnId, { spoken: true });
@@ -192,7 +194,7 @@ export default function Controller() {
       return;
     }
     setNotice(null);
-    pendingEnds.current.push(endOfSpeechAt);
+    pendingTimes.current.push({ endOfSpeechAt, submittedAt: Date.now() });
     send("turn.submit", { speaker, language: languageOf(speaker), text: text.trim(), recognitionConfidence: confidence });
   };
 
@@ -217,6 +219,11 @@ export default function Controller() {
     const heard = await active.stop();
     submit(speaker, heard.text, heard.confidence, heard.endOfSpeechAt);
   };
+
+  // Open the Azure voices for this visit's languages before the first turn, so speech starts at once.
+  useEffect(() => {
+    void warmUp([patientLanguage, physicianLanguage]);
+  }, [patientLanguage]);
 
   // Hold 1 for the physician and 2 for the patient.
   useEffect(() => {
@@ -244,8 +251,13 @@ export default function Controller() {
   const decideReadback = (turnId: string, confirmed: boolean) =>
     send(confirmed ? "turn.readback_confirm" : "turn.readback_reject", { turnId });
 
-  const totals = latency.map(totalMs).filter((v): v is number => v !== undefined);
-  const medianMs = median(totals);
+  const measured = latency.map(segments).filter((s) => s.totalMs !== undefined);
+  const medianMs = median(measured.map((s) => s.totalMs));
+  const breakdown = [
+    { label: "Recognition", ms: median(measured.map((s) => s.recognitionMs)) },
+    { label: "Server", ms: median(measured.map((s) => s.serverMs)) },
+    { label: "Voice start", ms: median(measured.map((s) => s.voiceMs)) },
+  ];
 
   const downloadCsv = () => {
     const url = URL.createObjectURL(new Blob([toCsv(latency)], { type: "text/csv" }));
@@ -439,8 +451,17 @@ export default function Controller() {
           <h2 className={styles.eyebrow}>Median end of speech to audio</h2>
           <p className={styles.stat}>{medianMs === undefined ? "n/a" : `${(medianMs / 1000).toFixed(2)} s`}</p>
           <p className={styles.aside}>
-            Over {totals.length} turn{totals.length === 1 ? "" : "s"}. Target under 3 s.
+            Over {measured.length} turn{measured.length === 1 ? "" : "s"}. Target under 3 s. Read-back decisions are
+            not counted.
           </p>
+          <dl className={styles.breakdown} data-testid="latency-breakdown">
+            {breakdown.map(({ label, ms }) => (
+              <div key={label}>
+                <dt className={styles.eyebrow}>{label}</dt>
+                <dd>{ms === undefined ? "n/a" : `${(ms / 1000).toFixed(2)} s`}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
         <button className={styles.secondary} onClick={downloadCsv} disabled={!latency.length}>
           Download CSV
