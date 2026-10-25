@@ -62,9 +62,10 @@ scripts/dev.sh --prod     # production build, for rehearsals and demo night
 1. Install the tools: `brew install uv node`, and use Google Chrome for `/control`.
 2. Copy `server/.env.example` to `server/.env` and fill in `ANTHROPIC_API_KEY`, `AZURE_SPEECH_KEY`, and `AZURE_SPEECH_REGION`; leave the other lines blank.
 3. Run `uv sync` and `uv run python scripts/download_model.py` in `server/` (about 1 GB the first time), then `npm install` in `web/`.
-4. Run `scripts/dev.sh` from the repository root and open the two printed URLs.
-5. Allow the microphone when Chrome asks, and allow incoming connections if macOS asks, so the TV can reach the laptop.
-6. Put the TV (or any second screen) on the same Wi-Fi as the laptop.
+4. Run `uv run python scripts/check_keys.py` in `server/`; it checks both keys, the Claude models, and the Azure voices, makes no paid calls, and never prints a key.
+5. Run `scripts/dev.sh` from the repository root and open the two printed URLs.
+6. Allow the microphone when Chrome asks, and allow incoming connections if macOS asks, so the TV can reach the laptop.
+7. Put the TV (or any second screen) on the same Wi-Fi as the laptop.
 - Without keys, `TRANSLATOR=fake` echoes text with a language tag, swaps in approved glossary terms, and speaks nothing; use the typed turn box.
 - Where the embedding model cannot be downloaded, run the server with `EMBEDDINGS=hashing` and `uv sync --no-group embeddings`; retrieval then uses a test embedder and is not fit for rehearsals.
 
