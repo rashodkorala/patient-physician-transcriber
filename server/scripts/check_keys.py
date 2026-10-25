@@ -19,7 +19,7 @@ SERVER = Path(__file__).resolve().parents[1]
 # Scripts run with scripts/ on the import path; the server modules live one level up.
 sys.path.insert(0, str(SERVER))
 
-from config import LIVE_MODEL, RECORD_MODEL  # noqa: E402
+from config import LIVE_MODEL, RECORD_MODEL, TONE_MODEL  # noqa: E402
 from speech_token import issue_token  # noqa: E402
 
 ENV_FILE = SERVER / ".env"
@@ -67,7 +67,7 @@ def mask(secret: str) -> str:
 def check_claude(key: str, client: anthropic.Anthropic | None = None) -> list[str]:
     client = client or anthropic.Anthropic(api_key=key, max_retries=1, timeout=20)
     problems = []
-    for model in (LIVE_MODEL, RECORD_MODEL):
+    for model in (LIVE_MODEL, TONE_MODEL, RECORD_MODEL):
         try:
             client.models.retrieve(model)
         except anthropic.AuthenticationError:
@@ -129,7 +129,7 @@ def main() -> int:
     print(f"Claude key {mask(claude_key)}, Azure key {mask(speech_key)}, region {region}")
 
     results = {
-        f"Claude ({LIVE_MODEL}, {RECORD_MODEL})": check_claude(claude_key),
+        f"Claude ({LIVE_MODEL}, {TONE_MODEL}, {RECORD_MODEL})": check_claude(claude_key),
         f"Azure Speech (token and voices {', '.join(voices.values())})": asyncio.run(
             check_azure(speech_key, region, voices)
         ),

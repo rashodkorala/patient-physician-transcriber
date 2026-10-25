@@ -16,7 +16,8 @@ ai_context:
     - "Live turn calls must be fast"
     - "Note and summary favour quality over speed"
   framework_hints:
-    - "Model ids: claude-sonnet-5-5 (live), claude-opus-5-5 (note, summary)"
+    - "Model ids: claude-sonnet-5-5 (live translate), claude-haiku-5-5 (tone check), claude-opus-5-5 (note, summary)"
+    - "claude-haiku-5-5 has no server-side fallback: call it without the fallback beta"
     - "Consult the claude-api skill when writing model calls"
     - "Use structured outputs validated by Pydantic"
   validation_rules:
@@ -31,7 +32,7 @@ test_refs: []
 
 ## Summary
 
-Use Claude Sonnet 5.5 for the live analyse, translate, and verify steps and Claude Opus 5.5 for the clinical note and patient summary.
+Use Claude Sonnet 5.5 for the live translate step, Claude Haiku 5.5 for the live tone check, and Claude Opus 5.5 for the clinical note and patient summary.
 
 ## Context
 
@@ -42,13 +43,14 @@ Use Claude Sonnet 5.5 for the live analyse, translate, and verify steps and Clau
 ## Decision
 
 Configure models in `server/config.py`. Use structured outputs for every call. Benchmark Punjabi turns in week 1 and revisit if latency or quality falls short.
+The tone check is a yes or no judgement on the original and its back-translation, so it runs on Haiku 5.5 for latency; translation, where Punjabi quality matters most, stays on Sonnet 5.5.
 
 ## Alternatives Considered
 
 | Option | Pros | Cons | Why not chosen |
 |---|---|---|---|
 | One model for everything | Simpler | Either too slow live or weaker for the note | Different needs |
-| Haiku 5.5 for live turns | Fastest | Weaker Punjabi quality expected | Revisit only if latency fails |
+| Haiku 5.5 for live turns | Fastest | Weaker Punjabi quality expected | Latency failed (8.18 s median); Haiku now runs only the tone check, not translation |
 
 ## Consequences
 
@@ -64,3 +66,4 @@ Configure models in `server/config.py`. Use structured outputs for every call. B
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-25, rashodkorala: Amended after a measured 8.18 s median on the demo laptop: the tone check moves to Claude Haiku 5.5; translation stays on Sonnet 5.5. Recorded by Claude (agent) at rashodkorala's explicit request.

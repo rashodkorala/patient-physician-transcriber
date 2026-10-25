@@ -6,7 +6,7 @@ import json
 import anthropic
 import httpx2 as httpx
 
-from config import LIVE_MODEL, RECORD_MODEL
+from config import LIVE_MODEL, RECORD_MODEL, TONE_MODEL
 from scripts.check_keys import LANGUAGES_TS, check_azure, check_claude, configured_voices, env_problems, parse_env
 
 GOOD = {"ANTHROPIC_API_KEY": "sk-ant-abc123", "AZURE_SPEECH_KEY": "f00dfeed", "AZURE_SPEECH_REGION": "canadacentral"}
@@ -76,16 +76,16 @@ def claude(statuses: dict[str, int]) -> anthropic.Anthropic:
 
 
 def test_claude_ok_when_both_models_are_available():
-    assert check_claude("sk-test", claude({LIVE_MODEL: 200, RECORD_MODEL: 200})) == []
+    assert check_claude("sk-test", claude({LIVE_MODEL: 200, TONE_MODEL: 200, RECORD_MODEL: 200})) == []
 
 
 def test_claude_reports_a_rejected_key():
-    assert check_claude("sk-test", claude({LIVE_MODEL: 401, RECORD_MODEL: 401})) == [
+    assert check_claude("sk-test", claude({LIVE_MODEL: 401, TONE_MODEL: 401, RECORD_MODEL: 401})) == [
         "Claude rejected ANTHROPIC_API_KEY (check it was copied whole)"
     ]
 
 
 def test_claude_reports_a_model_the_key_cannot_use():
-    assert check_claude("sk-test", claude({LIVE_MODEL: 200, RECORD_MODEL: 404})) == [
+    assert check_claude("sk-test", claude({LIVE_MODEL: 200, TONE_MODEL: 200, RECORD_MODEL: 404})) == [
         f"this key cannot use {RECORD_MODEL}"
     ]

@@ -29,11 +29,11 @@ Constraints: one demo laptop plus a TV and optionally a phone on the same networ
                          |            -- hash_chain  (IDR-003)
                          |            -- speech_token (ADR-005)
               turn graph (ADR-004)
-     analyse -> retrieve -> translate -> verify --+--> done (final or readback_required)
-                              ^                   |
-                              +--- retry once ----+--> block (critical value mismatch)
-                                                  |
-                                                  +--> escalate (confidence or tone, ADR-003)
+     retrieve -> translate -> verify --+--> done (final or readback_required)
+                    ^                  |
+                    +-- retry once ----+--> block (critical value mismatch)
+                                       |
+                                       +--> escalate (confidence or tone, ADR-003)
                          |
       knowledge base (ADR-002; retrieval per IDR-002)
       glossary | tone and culture | empathy phrases | condition explainers
@@ -45,10 +45,9 @@ Constraints: one demo laptop plus a TV and optionally a phone on the same networ
 The controller has "Physician speaking" and "Patient speaking" buttons. The browser recognises speech (ADR-005) and sends `turn.submit` with speaker, language, text, and recognition confidence (CDR-001).
 
 ### Tone-aware turn graph (ADR-004)
-- **analyse**: emotion, certainty, register, intent, and critical values (deterministic extractor for numbers and units, model for medication names).
 - **retrieve**: glossary hits by exact and fuzzy match; tone, culture, and empathy entries for the listener's language by vector search (IDR-002).
-- **translate**: model call with retrieved context and fixed rules: keep certainty, keep warmth, use the respectful register, explain jargon plainly, never change critical values.
-- **verify**: back-translation, deterministic critical value comparison, and a tone check (certainty and warmth preserved). Any failure triggers one retry (with mismatched values pinned in the prompt); the outcome after that is one of the `TurnResult.status` values in CDR-002:
+- **translate**: one model call (Sonnet 5.5, ADR-006) with retrieved context. It first reads the speaker's emotion, certainty, and medication names, then translates with fixed rules: keep certainty, keep warmth, use the respectful register, explain jargon plainly, never change critical values. It also returns the back-translation. Reading and translating in one call is ADR-004's latency mitigation, applied 2026-10-25.
+- **verify**: deterministic critical value comparison (numbers and units by code, medications against the glossary) and a tone check (certainty and warmth preserved) on Haiku 5.5 (ADR-006). Any failure triggers one retry (with mismatched values pinned in the prompt); the outcome after that is one of the `TurnResult.status` values in CDR-002:
 
   | Verify result | Status | Spoken? | What the screens do |
   |---|---|---|---|
@@ -91,7 +90,7 @@ web/     app/{page,control,screen,review,record}  lib/{speech,socket,contracts,l
 
 ## Risks / Trade-offs
 
-- [Latency over 3 seconds] → merge analyse into translate; run the tone check after the caption appears; keep retrieval local.
+- [Latency over 3 seconds] → applied 2026-10-25 after an 8.18 s median: analyse merged into translate, tone check on Haiku 5.5, Azure speech connections warmed in the browser; retrieval stays local. The tone check stays before speech, because CDR-002 never lets an escalated turn be spoken.
 - [Punjabi recognition errors on stage] → week 1 test, rehearse the script with the speaker, Google as backup (ADR-005).
 - [Tone check too strict causes retries] → tune during rehearsals using the tone set (EDR-002).
 - [Venue network failure] → hotspot, then replay mode, then backup video (TDM-001).

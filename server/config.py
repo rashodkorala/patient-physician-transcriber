@@ -10,6 +10,8 @@ from dataclasses import dataclass
 # ADR-006: model ids live here only; nodes and chains import them.
 LIVE_MODEL = "claude-sonnet-5-5"
 RECORD_MODEL = "claude-opus-5-5"
+# ADR-006 amended 2026-10-25: the tone check is a yes or no judgement, so it runs on Haiku for latency.
+TONE_MODEL = "claude-haiku-5-5"
 
 
 @dataclass(frozen=True)

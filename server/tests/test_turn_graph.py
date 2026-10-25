@@ -21,7 +21,6 @@ def kb():
 
 def model(translate=None, tone_check=None):
     handlers = {
-        "analyse": fake_model.analyse,
         "translate": translate or fake_model.translate,
         "tone_check": tone_check or fake_model.tone_check,
         "empathy": fake_model.empathy,
@@ -78,7 +77,7 @@ def test_faithful_dose_needs_readback_cdr_002(kb):
     result, reason, stages = run(kb, model())
     assert result.status == "readback_required" and result.attempts == 1 and reason is None
     assert all(v.matched for v in result.critical_values)
-    assert {"analysing", "checking_glossary", "translating", "verifying"} <= set(stages)
+    assert {"checking_glossary", "translating", "verifying"} <= set(stages)
     assert {g.term for g in result.glossary_used} == {"nitroglycerin spray", "milligrams"}
     medication = next(v for v in result.critical_values if v.kind == "medication")
     assert medication.translated == "ਨਾਈਟ੍ਰੋਗਲਿਸਰੀਨ ਸਪਰੇਅ"  # matched in the translation, not the back-translation
@@ -140,3 +139,18 @@ def test_fake_model_markers_drive_blocked_and_escalated_turns(kb):
     assert blocked.status == "blocked" and "4 ਮਿਲੀਗ੍ਰਾਮ" in blocked.translation and "0.4" not in blocked.translation
     escalated, reason, _ = run(kb, fake_model.fake_model(), text=f"Hello. {fake_model.TONE_MARKER}")
     assert escalated.status == "escalated" and reason == "tone_failure"
+
+
+def test_one_model_call_per_attempt_before_the_tone_check_adr_004(kb):
+    # ADR-004's latency mitigation: translate also reads emotion, certainty, and medications.
+    m = model()
+    result, _, stages = run(kb, m)
+    assert [purpose for purpose, _ in m.calls] == ["translate", "tone_check"]
+    assert "analysing" not in stages
+    assert result.emotion == "calm" and result.certainty == "high"
+
+
+def test_retry_repeats_only_translate_and_tone_check_adr_004(kb):
+    m = model(translate=mistranslate_dose(1))
+    run(kb, m)
+    assert [purpose for purpose, _ in m.calls] == ["translate", "tone_check", "translate", "tone_check"]

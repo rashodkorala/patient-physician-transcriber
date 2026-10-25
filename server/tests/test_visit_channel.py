@@ -25,7 +25,6 @@ def kb():
 def make_client(kb, translate=None, tone_check=None):
     model = ScriptedModel(
         {
-            "analyse": fake_model.analyse,
             "translate": translate or fake_model.translate,
             "tone_check": tone_check or fake_model.tone_check,
             "empathy": fake_model.empathy,
@@ -107,7 +106,7 @@ def test_patient_turn_reaches_screen_without_private_fields(client):
         assert "turn.analysis" in types(ctl_events)
         assert "turn.analysis" not in types(tv_events)
         stages = [e["payload"]["stage"] for e in tv_events if e["type"] == "turn.status"]
-        assert {"analysing", "checking_glossary", "translating", "verifying"} <= set(stages)
+        assert {"checking_glossary", "translating", "verifying"} <= set(stages)
         caption = tv_events[-1]["payload"]
         assert caption["translation"] == "[en-CA] ਸਤ ਸ੍ਰੀ ਅਕਾਲ" and caption["toneLabel"] == "respectful"
         assert not any(contains_private(e) for e in tv_events)

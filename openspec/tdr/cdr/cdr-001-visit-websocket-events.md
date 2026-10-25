@@ -59,7 +59,7 @@ Channel: `ws://<server>/ws/visit` (one visit at a time). Each connection declare
 |---|---|
 | `visit.state` | On connect, and on request after a `seq` gap: a snapshot filtered by connection role exactly like live events. `controller` gets the full state; `screen` and `review` get the public snapshot only |
 | `turn.started` | A speaker pressed push-to-talk |
-| `turn.status` | Each graph node starts (`analysing`, `checking_glossary`, `translating`, `verifying`, `retrying`), and `awaiting_readback` while a dose waits for physician confirmation |
+| `turn.status` | Each graph node starts (`checking_glossary`, `translating`, `verifying`, `retrying`), and `awaiting_readback` while a dose waits for physician confirmation |
 | `turn.analysis` | *Controller only.* Full CDR-002 `TurnResult` (translation, back-translation, emotion, certainty, critical values, status). With `status: blocked` the controller shows the mismatched values and asks the speaker to repeat |
 | `turn.readback_required` | *Controller only.* Critical values need physician confirmation before speaking |
 | `turn.result` | Public CDR-002 `TurnCaption` once a turn is settled (spoken, blocked, or escalated). Never carries an unspoken translation, emotion, certainty, or back-translation |
@@ -126,3 +126,4 @@ Code carries `@contract ws:/ws/visit` and `@implements CDR-001: Visit WebSocket 
 - 2026-10-22, rashodkorala: Amended before implementation: `visit.state` snapshots are filtered by connection role like live events, with a defined payload per role, so a screen connecting mid read-back cannot receive the private TurnResult. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended (additive, task 0.5): presenter-only `demo.inject_mismatch` and `demo.cancel_injection` commands and controller-only `demo.injection_state` event, per accepted TDM-002. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-24, rashodkorala: Amended (additive, before implementation): `visit.set_languages` command and language fields in `visit.state`, so the server knows the target language for each turn. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-25, rashodkorala: Amended: `analysing` removed from the `turn.status` stages, because the translate call now also reads emotion, certainty, and medications (ADR-004's latency mitigation, after a measured 8.18 s median on the demo laptop). Recorded by Claude (agent) at rashodkorala's explicit request.

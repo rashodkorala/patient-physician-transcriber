@@ -12,13 +12,14 @@ Run with the app factory so nothing loads on import: uvicorn main:create_app --f
 
 import asyncio
 import logging
+import time
 import uuid
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
-from config import LIVE_MODEL, Settings, load_settings
+from config import LIVE_MODEL, TONE_MODEL, Settings, load_settings
 from contracts import (
     CONTROLLER_COMMANDS,
     ErrorPayload,
@@ -38,7 +39,8 @@ from llm import ClaudeModel, Model
 from speech_token import SpeechNotConfigured, issue_token
 from visit_store import Connection, Hub, TurnRecord, Visit
 
-log = logging.getLogger("demo")
+# uvicorn prints this logger, so timing lines and errors show in the dev.sh output.
+log = logging.getLogger("uvicorn.error")
 ROLES = ("controller", "screen", "review")
 
 
@@ -52,7 +54,11 @@ def make_model(settings: Settings) -> Model:
 
 def describe(settings: Settings) -> str:
     """One start-up line saying what this run will use, so a fake run is never mistaken for live."""
-    translator = f"Claude ({LIVE_MODEL})" if settings.translator == "claude" else "fake model (no AI calls)"
+    translator = (
+        f"Claude ({LIVE_MODEL}, tone check {TONE_MODEL})"
+        if settings.translator == "claude"
+        else "fake model (no AI calls)"
+    )
     speech = "Azure" if settings.azure_speech_key and settings.azure_speech_region else "not configured"
     return f"Translator: {translator}. Speech: {speech}."
 
@@ -61,7 +67,7 @@ def create_app(
     model: Model | None = None, settings: Settings | None = None, kb: KnowledgeBase | None = None
 ) -> FastAPI:
     settings = settings or load_settings()
-    logging.getLogger("uvicorn.error").info(describe(settings))
+    log.info(describe(settings))
     model = model or make_model(settings)
     kb = kb or KnowledgeBase(make_embedder())
     pipeline = TurnPipeline(model, kb)
@@ -135,6 +141,7 @@ def create_app(
             "turn.started", TurnStarted(turn_id=turn_id, speaker=cmd.speaker, language=cmd.language).wire()
         )
 
+        started = time.perf_counter()
         try:
             result, reason = await pipeline.run(
                 turn_id=turn_id,
@@ -150,6 +157,9 @@ def create_app(
             await status(turn_id, "failed")
             await error(conn, f"Translation failed: {exc}", "turn.submit")
             return
+        log.info(
+            "turn %s %s, attempts %d, in %.2fs", turn_id, result.status, result.attempts, time.perf_counter() - started
+        )
 
         record.result = result
         await hub.publish("turn.analysis", result.wire())

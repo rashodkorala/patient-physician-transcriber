@@ -1,9 +1,11 @@
 """Per-turn translation graph.
 
-    START -+-> analyse --+
-           +-> retrieve -+-> translate -> verify -+-> done      (final or readback_required)
-                              ^                   +-> block     (critical value still mismatched)
-                              +---- retry once ---+-> escalate  (confidence or tone still failing)
+    START -> retrieve -> translate -> verify -+-> done      (final or readback_required)
+                            ^                 +-> block     (critical value still mismatched)
+                            +-- retry once ---+-> escalate  (confidence or tone still failing)
+
+translate also reads the speaker's emotion, certainty, and medications, in the same call: the
+latency mitigation ADR-004 names, applied 2026-10-25. Retrieval is local, so it adds no model call.
 
 Outcome order when several apply: blocked, escalated, readback_required, final (CDR-002).
 
@@ -39,14 +41,11 @@ Emit = Callable[[str], Awaitable[None]]
 # ---------- model outputs ----------
 
 
-class Analysis(BaseModel):
+class Draft(BaseModel):
+    # Read first, so the translation keeps what was read (one call instead of analyse then translate).
     emotion: Emotion
     certainty: Certainty
-    intent: str
     medications: list[str]
-
-
-class Draft(BaseModel):
     translation: str
     back_translation: str
     tone_tags: list[ToneTag]
@@ -69,7 +68,6 @@ class TurnState(TypedDict, total=False):
     target: str
     text: str
     recognition_confidence: float
-    analysis: Analysis
     glossary: list[GlossaryEntry]
     guidance: list[str]
     draft: Draft
@@ -85,14 +83,12 @@ class TurnState(TypedDict, total=False):
 
 # ---------- prompts ----------
 
-ANALYSE_SYSTEM = """You analyse one utterance from a medical consultation before it is interpreted.
-Report the speaker's emotion and how certain the speaker sounds, and the intent in a few words.
-List every medication name exactly as said (empty list if none)."""
-
 TRANSLATE_SYSTEM = """You interpret a medical consultation between a patient and a physician who do not share a language.
-Translate the utterance faithfully into the target language for the listener.
+First read the speaker: emotion is how they feel, certainty is how sure they sound, and medications lists
+every medication name exactly as said (empty list if none).
+Then translate the utterance faithfully into the target language for the listener.
 Rules:
-- Keep the speaker's level of certainty: never make news sound more or less serious than it was said.
+- Keep the speaker's emotion and level of certainty: never make news sound more or less serious than it was said.
 - Keep warmth and reassurance, and use the respectful form of address the guidance describes.
 - Use the approved glossary translations for any listed medical term.
 - Write every number as digits and never change numbers, doses, units, frequencies, dates, or medication names.
@@ -112,15 +108,11 @@ def tag(name: str, value: str) -> str:
 
 
 def _translate_user(state: TurnState) -> str:
-    analysis = state["analysis"]
     lines = [
         tag("speaker", state["speaker"]),
         tag("source_language", LANGUAGE_NAMES[state["source"]]),
         tag("target_language", LANGUAGE_NAMES[state["target"]]),
         tag("target_code", state["target"]),
-        tag("speaker_emotion", analysis.emotion),
-        tag("speaker_certainty", analysis.certainty),
-        tag("intent", analysis.intent),
         tag("glossary", "; ".join(f"{g.term} = {g.translation}" for g in state.get("glossary", [])) or "none"),
         tag("guidance", "\n".join(state.get("guidance", [])) or "none"),
     ]
@@ -166,16 +158,6 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
         if callback:
             await callback(stage)
 
-    async def analyse(state: TurnState, config: RunnableConfig) -> dict:
-        await emit(config, "analysing")
-        analysis = await model.parse(
-            purpose="analyse",
-            system=ANALYSE_SYSTEM,
-            user="\n".join([tag("speaker", state["speaker"]), tag("utterance", state["text"])]),
-            schema=Analysis,
-        )
-        return {"analysis": analysis, "stages": ["analysing"]}
-
     async def retrieve(state: TurnState, config: RunnableConfig) -> dict:
         await emit(config, "checking_glossary")
         glossary = kb.glossary_hits(state["text"], state["source"], state["target"])
@@ -195,7 +177,7 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
     async def verify(state: TurnState, config: RunnableConfig) -> dict:
         await emit(config, "verifying")
         draft = state["draft"]
-        medications = state["analysis"].medications
+        medications = draft.medications
         critical = critical_values.check(
             state["text"],
             state["source"],
@@ -251,7 +233,6 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
 
     graph = StateGraph(TurnState)
     for name, node in [
-        ("analyse", analyse),
         ("retrieve", retrieve),
         ("translate", translate),
         ("verify", verify),
@@ -260,9 +241,8 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
         ("done", done),
     ]:
         graph.add_node(name, node)
-    graph.add_edge(START, "analyse")
     graph.add_edge(START, "retrieve")
-    graph.add_edge(["analyse", "retrieve"], "translate")
+    graph.add_edge("retrieve", "translate")
     graph.add_edge("translate", "verify")
     graph.add_conditional_edges("verify", route, ["translate", "block", "escalate", "done"])
     for terminal in ("block", "escalate", "done"):
@@ -301,7 +281,6 @@ class TurnPipeline:
             config={"configurable": {"emit": emit}},
         )
         draft: Draft = state["draft"]
-        analysis: Analysis = state["analysis"]
         # A glossary translation may carry a gloss in brackets the model can leave out.
         said = draft.translation.casefold()
         used = [g for g in state.get("glossary", []) if g.translation.split(" (")[0].casefold() in said]
@@ -314,8 +293,8 @@ class TurnPipeline:
             translation=draft.translation,
             back_translation=draft.back_translation,
             tone_tags=draft.tone_tags,
-            emotion=analysis.emotion,
-            certainty=analysis.certainty,
+            emotion=draft.emotion,
+            certainty=draft.certainty,
             glossary_used=used,
             critical_values=state["critical"],
             confidence=state["confidence"],

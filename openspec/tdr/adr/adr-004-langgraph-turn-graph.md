@@ -13,7 +13,7 @@ related_specs: []
 related_changes: [demo-night-mvp]
 ai_context:
   implementation_priorities:
-    - "Per-turn graph: analyse, retrieve, translate, verify, retry once, then done, block, or escalate"
+    - "Per-turn graph: retrieve, translate (which also reads emotion, certainty, and medications), verify, retry once, then done, block, or escalate"
     - "Stream node status events to the screens"
   framework_hints:
     - "langgraph StateGraph with a TypedDict state for one turn"
@@ -41,7 +41,7 @@ Use a LangGraph state graph for the live translation turn because it branches an
 
 ## Decision
 
-Implement `server/graph/turn_graph.py` as a LangGraph `StateGraph` with nodes analyse, retrieve, translate, verify, block, and escalate, with conditional edges from verify: done (`final` or `readback_required`), retry once (any failure, with mismatched critical values pinned), block (critical value still mismatched), and escalate (confidence or tone still failing). Outcomes follow the status table in CDR-002. Use LCEL chains for note, summary, explain-back, and empathy nudges.
+Implement `server/graph/turn_graph.py` as a LangGraph `StateGraph` with nodes retrieve, translate, verify, block, and escalate (translate also reads the speaker's emotion, certainty, and medications, so there is no separate analyse call), with conditional edges from verify: done (`final` or `readback_required`), retry once (any failure, with mismatched critical values pinned), block (critical value still mismatched), and escalate (confidence or tone still failing). Outcomes follow the status table in CDR-002. Use LCEL chains for note, summary, explain-back, and empathy nudges.
 
 ## Alternatives Considered
 
@@ -67,3 +67,4 @@ Implement `server/graph/turn_graph.py` as a LangGraph `StateGraph` with nodes an
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended: verify gains a block edge for critical value mismatches after one retry, aligned with CDR-002. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-24, rashodkorala: Amended framework hint: LangGraph orchestrates the turn graph as decided, and every model call inside a node or chain uses the official anthropic SDK (as the week 1 path does), not langchain-anthropic. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-10-25, rashodkorala: Applied this record's latency mitigation after a measured 8.18 s median on the demo laptop: analyse is merged into translate. The other half (running the tone check asynchronously) is not applied, because CDR-002 never lets an escalated turn be spoken, so the tone check stays before speech. Recorded by Claude (agent) at rashodkorala's explicit request.

@@ -5,12 +5,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from config import LIVE_MODEL
-from graph.turn_graph import Draft
+from config import LIVE_MODEL, TONE_MODEL
+from graph.turn_graph import Draft, ToneCheck
 from llm import ClaudeModel, ModelRefused
 
 DRAFT = Draft(
-    translation="Bonjour, docteur.", back_translation="Hello, doctor.", tone_tags=["respectful"], confidence=0.95
+    emotion="calm",
+    certainty="high",
+    medications=[],
+    translation="Bonjour, docteur.",
+    back_translation="Hello, doctor.",
+    tone_tags=["respectful"],
+    confidence=0.95,
 )
 
 
@@ -26,7 +32,7 @@ class FakeMessages:
 
 def client_with(response):
     messages = FakeMessages(response)
-    return SimpleNamespace(beta=SimpleNamespace(messages=messages)), messages
+    return SimpleNamespace(beta=SimpleNamespace(messages=messages), messages=FakeMessages(None)), messages
 
 
 def test_live_model_structured_output_and_refusal_fallback_adr_006():
@@ -44,3 +50,15 @@ def test_refusal_raises_so_nothing_is_spoken():
     client, _ = client_with(SimpleNamespace(stop_reason="refusal", parsed_output=None))
     with pytest.raises(ModelRefused):
         asyncio.run(ClaudeModel(client=client).parse(purpose="translate", system="s", user="u", schema=Draft))
+
+
+def test_tone_check_runs_on_haiku_without_the_fallback_beta_adr_006():
+    tone = ToneCheck(certainty_preserved=True, warmth_preserved=True, issue="")
+    plain = FakeMessages(SimpleNamespace(stop_reason="end_turn", parsed_output=tone))
+    beta = FakeMessages(None)
+    client = SimpleNamespace(messages=plain, beta=SimpleNamespace(messages=beta))
+    out = asyncio.run(ClaudeModel(client=client).parse(purpose="tone_check", system="s", user="u", schema=ToneCheck))
+    assert out == tone and beta.kwargs is None  # the beta endpoint was never called
+    assert plain.kwargs["model"] == TONE_MODEL == "claude-haiku-5-5"
+    assert "fallbacks" not in plain.kwargs and "betas" not in plain.kwargs
+    assert plain.kwargs["output_config"] == {"effort": "low"} and plain.kwargs["output_format"] is ToneCheck

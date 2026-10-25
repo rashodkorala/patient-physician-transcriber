@@ -11,7 +11,7 @@ import re
 from decimal import Decimal
 
 from empathy import NudgeDraft
-from graph.turn_graph import Analysis, Draft, ToneCheck
+from graph.turn_graph import Draft, ToneCheck
 from llm import ScriptedModel
 
 MEDICATIONS = ("aspirin", "nitroglycerin", "metformin", "amlodipine")
@@ -24,16 +24,6 @@ WORRY = re.compile(r"scared|worried|afraid|ਡਰ|ਫ਼ਿਕਰ|peur|inquiet",
 def field(user: str, name: str) -> str:
     match = re.search(rf"<{name}>(.*?)</{name}>", user, flags=re.S)
     return match.group(1).strip() if match else ""
-
-
-def analyse(user: str) -> Analysis:
-    text = field(user, "utterance")
-    return Analysis(
-        emotion="worried" if WORRY.search(text) else "calm",
-        certainty="high",
-        intent="inform",
-        medications=[m for m in MEDICATIONS if m in text.lower()],
-    )
 
 
 def glossary_terms(user: str) -> list[tuple[str, str]]:
@@ -57,6 +47,9 @@ def translate(user: str) -> Draft:
         )
     tone = "reassuring" if re.search(r"reassur|not have|unlikely", text, re.IGNORECASE) else "respectful"
     return Draft(
+        emotion="worried" if WORRY.search(text) else "calm",
+        certainty="high",
+        medications=[m for m in MEDICATIONS if m in text.lower()],
         translation=f"[{field(user, 'target_code')}] {translated}",
         back_translation=text,
         tone_tags=[tone],
@@ -81,4 +74,4 @@ def empathy(user: str) -> NudgeDraft:
 
 
 def fake_model() -> ScriptedModel:
-    return ScriptedModel({"analyse": analyse, "translate": translate, "tone_check": tone_check, "empathy": empathy})
+    return ScriptedModel({"translate": translate, "tone_check": tone_check, "empathy": empathy})
