@@ -25,6 +25,7 @@ import { bilingual, type NoticeKey } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
 import { type ConnectionState, useVisitSocket } from "@/lib/socket";
 import Highlighted from "./Highlighted";
+import Orb, { type OrbMode } from "./Orb";
 import styles from "./screen.module.css";
 
 interface Pending {
@@ -161,7 +162,22 @@ function Caption({ c, names }: { c: TurnCaption; names: Names }) {
   );
 }
 
+/** Listening in the speaker's colour; every later stage until the result is translating; a dropped turn rests. */
+function orbMode(p: Pending): OrbMode {
+  if (p.stage === "listening") return p.speaker === "physician" ? "physician" : "patient";
+  if (p.stage === "discarded" || p.stage === "failed") return "ready";
+  return "translating";
+}
+
+const ORB_LABEL: Record<OrbMode, string> = {
+  ready: "waiting",
+  physician: "listening",
+  patient: "listening",
+  translating: "translating",
+};
+
 function PendingTurn({ p, names, other }: { p: Pending; names: Names; other: (lang: Language) => Language }) {
+  const mode = orbMode(p);
   const source = p.language;
   const notice: NoticeKey | null =
     p.stage === "awaiting_readback"
@@ -175,7 +191,7 @@ function PendingTurn({ p, names, other }: { p: Pending; names: Names; other: (la
         {p.sourceText ? (
           <p className={styles.text}>{p.sourceText}</p>
         ) : (
-          <span className={styles.working} role="status" aria-label="working" />
+          <Orb mode={mode} label={ORB_LABEL[mode]} className={styles.pendingOrb} />
         )}
       </Original>
       {notice && source && (
@@ -277,6 +293,7 @@ export default function SharedScreen() {
         {pending && <PendingTurn p={pending} names={names} other={other} />}
         {!pending && captions.length === 0 && lines.length === 0 && (
           <div className={styles.ready} data-testid="ready">
+            <Orb mode="ready" className={styles.readyOrb} />
             {bilingual("ready", languages.patient, languages.physician).map(({ lang, text }) => (
               <p key={lang} lang={lang}>
                 {text}
