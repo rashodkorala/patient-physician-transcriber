@@ -67,5 +67,8 @@ EDR-002 covers server tests and end-to-end checks but not web unit tests, so thi
 
 ## Open Questions
 
-- Whether the "wrong speaker" correction can reuse an existing discard path for a settled turn, or needs a small visit channel addition; if the latter, it needs a CDR-001 amendment first.
+- The "wrong speaker" correction cannot reuse an existing discard path (checked against 83c274e, task 0.2).
+  The only one is `turn.readback_reject`, which discards just the turn waiting for dose read-back; a settled turn cannot be discarded, and the record is append-only (IDR-003).
+  A mislabelled turn has also already been translated the wrong way and spoken to the wrong listener by the time the physician sees it.
+  Options for the project lead: a CDR-001 amendment adding a controller-only correction that marks the turn as mislabelled in the record and resubmits it; or holding each hands-free turn briefly on the controller, with its detected speaker shown, before it is submitted, at a latency cost; or no correction beyond push-to-talk.
 - EDR-002 does not mention web unit tests; whether `node --test` in `web/` should be recorded there is for the project lead to decide.
