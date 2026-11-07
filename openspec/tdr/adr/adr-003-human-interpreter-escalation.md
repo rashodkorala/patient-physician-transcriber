@@ -10,7 +10,7 @@ proposed_by: human
 category: architecture
 related_decisions: [mdd-001, adr-008]
 related_specs: [demo-consultation-flow, medical-interpretation]
-related_changes: [add-multilingual-medical-consultation, demo-night-mvp]
+related_changes: [add-multilingual-medical-consultation, demo-night-mvp, mediator-voice]
 ai_context:
   implementation_priorities:
     - "Offer a human interpreter when the confidence or tone check still fails after one retry, when the physician marks a moment high risk, or on request"
@@ -64,3 +64,4 @@ Escalate node in the turn graph (ADR-004); escalation event in CDR-001; interpre
 - 2026-10-22, rashodkorala: Accepted by the project lead in the planning conversation.
 - 2026-10-22, rashodkorala: Amended: automatic escalation covers confidence and tone failures only; critical value mismatches are blocked per CDR-002. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Summary and ai_context brought in line with the decision paragraph (they still described escalation as confidence and high-risk only); physician marking now has a CDR-001 command; automatic detection referred to ADR-008. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request.

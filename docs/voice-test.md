@@ -1,0 +1,115 @@
+# Mediator voice test (mediator-voice tasks 0.4 and 2.3)
+
+> **Status: automated run recorded; native speaker ratings and the listening test are pending.**
+
+## Relay run, 3 November 2026
+
+- Pipeline: the live turn graph (`server/graph/turn_graph.py`) with Claude, names set to Dr. Patel, Gurpreet Singh, and Lucie Tremblay.
+- Lines: the demo script (`docs/demo-script.md`), both directions, typed with recognition confidence 1.0.
+- Runner: a scratch script calling `TurnPipeline.run` directly, with no speech and no browser.
+
+### What the run shows
+
+- Every relay uses one reported-speech frame naming the speaker, in indirect speech, with "they" for people whose gender was not given.
+- Instructions keep their force: "call 911" is relayed as "you should call 911" in both languages.
+- Doses, frequencies, and the 911 instruction match on the first attempt (5.3 and 5.4 in Punjabi, 5.4 in French).
+- Three turns are blocked: 3.4, 5.5, and 7.2 in Punjabi.
+  In each one the relay is correct, but the critical value check does not read a Punjabi number word in it: ਪਚਵੰਜਾ (55), and ਇੱਕ (one) before a medicine name.
+  The same gap blocks French "une aspirine".
+  This sits in `server/critical_values.py`, which has uncommitted work in progress on native number words, and needs fixing there before demo-quality runs.
+- French 7.4 needed a second attempt, so it took longer.
+
+### Relays
+
+Native speakers fill in the last two columns: faithful means nothing was lost, added, or softened; natural means it sounds like a person interpreting.
+
+| Line | Speaker | Said | Relay | Back-translation | Outcome (attempts) | Critical values | Seconds | Faithful (1-5) | Natural (1-5) |
+|---|---|---|---|---|---|---|---|---|---|
+| pa-IN 3.1 | physician | Hello Mr Singh, I'm Dr Patel. This screen shows what we both say, in Punjabi and in English. How have you been since your visit to the emergency department? | ਡਾਕਟਰ ਪਟੇਲ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਸਿੰਘ ਜੀ, ਉਹ ਡਾਕਟਰ ਪਟੇਲ ਹਨ। ਇਹ ਸਕਰੀਨ ਦਿਖਾਉਂਦੀ ਹੈ ਕਿ ਤੁਸੀਂ ਦੋਵੇਂ ਕੀ ਕਹਿੰਦੇ ਹੋ, ਪੰਜਾਬੀ ਵਿੱਚ ਅਤੇ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ। ਉਹ ਪੁੱਛ ਰਹੇ ਹਨ ਕਿ ਐਮਰਜੈਂਸੀ ਵਿਭਾਗ ਵਿੱਚ ਤੁਹਾਡੀ ਫੇਰੀ ਤੋਂ ਬਾਅਦ ਤੁਸੀਂ ਕਿਵੇਂ ਰਹੇ ਹੋ? | Dr. Patel is saying hello Mr. Singh, and that they are Dr. Patel. This screen shows what the two of you say, in Punjabi and in English. They are asking how you have been since your visit to the emergency department. | final (1) | none | 5.4 |  |  |
+| pa-IN 3.2 | patient | ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਡਾਕਟਰ ਜੀ। ਪਿਛਲੇ ਦੋ ਹਫ਼ਤਿਆਂ ਤੋਂ ਜਦੋਂ ਮੈਂ ਪੌੜੀਆਂ ਚੜ੍ਹਦਾ ਹਾਂ, ਮੇਰੀ ਛਾਤੀ ਵਿੱਚ ਦਬਾਅ ਜਿਹਾ ਹੁੰਦਾ ਹੈ। ਬੈਠਣ ਨਾਲ ਠੀਕ ਹੋ ਜਾਂਦਾ ਹੈ। | Gurpreet Singh is saying sat sri akal, doctor (a traditional Punjabi Sikh greeting). For the last 2 weeks, whenever they climb stairs, they get a kind of pressure in their chest. It gets better when they sit down. | Gurpreet Singh is saying sat sri akal, doctor. For the past 2 weeks, when they climb stairs, there is a kind of pressure in their chest. It gets better with sitting. | final (1) | ਦੋ ਹਫ਼ਤਿਆਂ -> 2 weeks ok | 4.0 |  |  |
+| pa-IN 3.3 | physician | Your heart tests in the emergency department were reassuring. You did not have a heart attack. The most likely cause is angina: your heart muscle does not get enough blood when you exert yourself. | ਡਾਕਟਰ ਪਟੇਲ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਐਮਰਜੈਂਸੀ ਵਿਭਾਗ ਵਿੱਚ ਤੁਹਾਡੇ ਦਿਲ ਦੇ ਟੈਸਟ ਤਸੱਲੀਬਖ਼ਸ਼ ਸਨ। ਤੁਹਾਨੂੰ ਦਿਲ ਦਾ ਦੌਰਾ ਨਹੀਂ ਪਿਆ ਸੀ। ਸਭ ਤੋਂ ਸੰਭਾਵਿਤ ਕਾਰਨ ਐਨਜਾਈਨਾ (ਛਾਤੀ ਦਾ ਦਰਦ) ਹੈ, ਯਾਨੀ ਜਦੋਂ ਤੁਸੀਂ ਜ਼ੋਰ ਲਾਉਂਦੇ ਹੋ ਤਾਂ ਤੁਹਾਡੇ ਦਿਲ ਦੀ ਮਾਸਪੇਸ਼ੀ ਨੂੰ ਲੋੜੀਂਦਾ ਖੂਨ ਨਹੀਂ ਮਿਲਦਾ। | Dr. Patel is saying that your heart tests in the emergency department were reassuring. You did not have a heart attack. The most likely cause is angina (chest pain), that is, when you exert yourself, your heart muscle does not get enough blood. | final (1) | none | 6.1 |  |  |
+| pa-IN 3.4 | patient | ਡਾਕਟਰ ਜੀ, ਕੀ ਮੈਨੂੰ ਵੀ ਮੇਰੇ ਪਿਤਾ ਜੀ ਵਾਂਗ ਦਿਲ ਦਾ ਦੌਰਾ ਪਵੇਗਾ? ਮੇਰੇ ਪਿਤਾ ਜੀ ਪਚਵੰਜਾ ਸਾਲ ਦੀ ਉਮਰ ਵਿੱਚ ਦਿਲ ਦੇ ਦੌਰੇ ਨਾਲ ਗੁਜ਼ਰ ਗਏ ਸਨ। ਮੈਨੂੰ ਬਹੁਤ ਡਰ ਲੱਗਦਾ ਹੈ। | Gurpreet Singh is asking whether they will also have a heart attack, like their father. Their father passed away from a heart attack at the age of 55. They are very scared. | ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ ਪੁੱਛ ਰਹੇ ਹਨ ਕਿ ਕੀ ਉਨ੍ਹਾਂ ਨੂੰ ਵੀ ਆਪਣੇ ਪਿਤਾ ਜੀ ਵਾਂਗ ਦਿਲ ਦਾ ਦੌਰਾ ਪਵੇਗਾ। ਉਨ੍ਹਾਂ ਦੇ ਪਿਤਾ ਜੀ 55 ਸਾਲ ਦੀ ਉਮਰ ਵਿੱਚ ਦਿਲ ਦੇ ਦੌਰੇ ਨਾਲ ਗੁਜ਼ਰ ਗਏ ਸਨ। ਉਨ੍ਹਾਂ ਨੂੰ ਬਹੁਤ ਡਰ ਲੱਗਦਾ ਹੈ। | blocked (2) | - -> 55 MISMATCH | 14.0 |  |  |
+| pa-IN 3.5 | physician | I understand why you are scared, especially after losing your father. We have found this early, and there is a lot we can do. | ਡਾਕਟਰ ਪਟੇਲ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਉਹ ਸਮਝਦੇ ਹਨ ਕਿ ਤੁਸੀਂ ਕਿਉਂ ਡਰੇ ਹੋਏ ਹੋ, ਖ਼ਾਸ ਕਰਕੇ ਆਪਣੇ ਪਿਤਾ ਜੀ ਨੂੰ ਗੁਆਉਣ ਤੋਂ ਬਾਅਦ। ਉਹ ਇਹ ਵੀ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਇਹ ਸਮੇਂ ਸਿਰ, ਯਾਨੀ ਸ਼ੁਰੂ ਵਿੱਚ ਹੀ ਪਤਾ ਲੱਗ ਗਿਆ ਹੈ, ਅਤੇ ਬਹੁਤ ਕੁਝ ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ। | Dr. Patel is saying that they understand why you are scared, especially after losing your father. They are also saying that this has been found in time, that is, early, and that a lot can be done. | final (1) | none | 5.2 |  |  |
+| pa-IN 4.4 | patient | ਮੈਂ ਇੱਕ ਮਹੀਨੇ ਤੋਂ ਬਲੱਡ ਪ੍ਰੈਸ਼ਰ ਦੀਆਂ ਗੋਲੀਆਂ ਨਹੀਂ ਲਈਆਂ। ਉਨ੍ਹਾਂ ਨਾਲ ਚੱਕਰ ਆਉਂਦੇ ਸਨ, ਅਤੇ ਮੈਨੂੰ ਦੱਸਣ ਵਿੱਚ ਸ਼ਰਮ ਆਉਂਦੀ ਸੀ। | Gurpreet Singh is saying they have not taken their blood pressure pills for 1 month. They are saying the pills made them dizzy, and they felt embarrassed to tell you. | Gurpreet Singh is saying they have not taken their blood pressure pills for 1 month. They are saying the pills were causing dizziness, and they felt embarrassed to tell you. | final (1) | ਇੱਕ ਮਹੀਨੇ -> 1 month ok | 3.7 |  |  |
+| pa-IN 5.3 | physician | Use the nitroglycerin spray: 0.4 milligrams, one spray under your tongue when the chest pain starts. | ਡਾਕਟਰ ਪਟੇਲ ਜੀ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਤੁਸੀਂ ਨਾਈਟ੍ਰੋਗਲਿਸਰੀਨ ਸਪਰੇਅ ਵਰਤੋ: 0.4 ਮਿਲੀਗ੍ਰਾਮ, ਜਦੋਂ ਛਾਤੀ ਦਾ ਦਰਦ ਸ਼ੁਰੂ ਹੋਵੇ ਤਾਂ ਆਪਣੀ ਜੀਭ ਦੇ ਥੱਲੇ 1 ਸਪਰੇਅ ਕਰੋ। | Dr. Patel is saying that you should use the nitroglycerin spray: 0.4 milligrams, and when the chest pain starts, you should give 1 spray under your tongue. | readback_required (1) | 0.4 milligrams -> 0.4 ਮਿਲੀਗ੍ਰਾਮ ok, one spray -> 1 ਸਪਰੇਅ ok, nitroglycerin spray -> ਨਾਈਟ੍ਰੋਗਲਿਸਰੀਨ ਸਪਰੇਅ ok | 3.8 |  |  |
+| pa-IN 5.4 | physician | If the pain is not better after 5 minutes, call 911. | ਡਾਕਟਰ ਪਟੇਲ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਜੇ 5 ਮਿੰਟ ਬਾਅਦ ਵੀ ਦਰਦ ਠੀਕ ਨਾ ਹੋਵੇ, ਤਾਂ ਤੁਹਾਨੂੰ 911 'ਤੇ ਫ਼ੋਨ ਕਰਨਾ ਚਾਹੀਦਾ ਹੈ। | Dr. Patel is saying that if the pain is not better even after 5 minutes, you should call 911. | readback_required (1) | 5 minutes -> 5 ਮਿੰਟ ok, 911 -> 911 ok | 3.9 |  |  |
+| pa-IN 5.5 | physician | Also take one aspirin, 81 milligrams, once a day. | ਡਾਕਟਰ ਪਟੇਲ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਤੁਹਾਨੂੰ ਇਸ ਦੇ ਨਾਲ ਇੱਕ ਐਸਪਰੀਨ, 81 ਮਿਲੀਗ੍ਰਾਮ, ਦਿਨ ਵਿੱਚ ਇੱਕ ਵਾਰ ਲੈਣੀ ਚਾਹੀਦੀ ਹੈ। | Dr. Patel is saying that you should also take one aspirin, 81 milligrams, once a day. | blocked (2) | one -> - MISMATCH, 81 milligrams -> 81 ਮਿਲੀਗ੍ਰਾਮ ok, once a day -> ਦਿਨ ਵਿੱਚ ਇੱਕ ਵਾਰ ok, aspirin -> ਐਸਪਰੀਨ ok | 10.1 |  |  |
+| pa-IN 7.2 | patient | ਹਰ ਰੋਜ਼ ਇੱਕ ਐਸਪਰੀਨ ਲੈਣੀ ਹੈ। ਜੇ ਛਾਤੀ ਵਿੱਚ ਦਰਦ ਹੋਵੇ ਤਾਂ ਬੈਠ ਕੇ ਜੀਭ ਹੇਠਾਂ ਇੱਕ ਸਪਰੇਅ ਕਰਨੀ ਹੈ। | Gurpreet Singh is saying they have to take 1 aspirin every day. If they have chest pain, they have to sit down and use 1 spray under the tongue. | ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਉਨ੍ਹਾਂ ਨੂੰ ਹਰ ਰੋਜ਼ 1 ਐਸਪਰੀਨ ਲੈਣੀ ਹੈ। ਜੇ ਉਨ੍ਹਾਂ ਦੀ ਛਾਤੀ ਵਿੱਚ ਦਰਦ ਹੋਵੇ ਤਾਂ ਉਨ੍ਹਾਂ ਨੂੰ ਬੈਠ ਕੇ ਜੀਭ ਹੇਠਾਂ 1 ਸਪਰੇਅ ਕਰਨੀ ਹੈ। | blocked (2) | ਇੱਕ ਸਪਰੇਅ -> 1 spray ok, - -> 1 MISMATCH, ਹਰ ਰੋਜ਼ -> every day ok, ਐਸਪਰੀਨ -> aspirin ok | 14.3 |  |  |
+| fr-CA 3.2 | patient | Depuis deux semaines, j'ai une pression dans la poitrine quand je monte l'escalier. Ça passe quand je m'assois. | Lucie Tremblay is saying that for the past 2 weeks they have had a pressure in their chest when they climb the stairs. They are saying it goes away when they sit down. | Lucie Tremblay dit que depuis 2 semaines, elle ou il a une pression dans la poitrine quand la personne monte l'escalier. Elle ou il dit que ça passe quand la personne s'assoit. | final (1) | deux semaines -> 2 weeks ok | 4.0 |  |  |
+| fr-CA 3.4 | patient | Je ne peux pas manquer le travail. Si je m'absente, je vais perdre mon emploi. | Lucie Tremblay is saying they can't miss work. They're saying that if they are absent, they will lose their job. | Lucie Tremblay dit qu'elle ou il ne peut pas manquer le travail. Elle ou il dit que si elle ou il s'absente, elle ou il va perdre son emploi. | final (1) | none | 3.7 |  |  |
+| fr-CA 4.1 | patient | Qui va voir ce que je dis ici ? | Lucie Tremblay is asking who will see what they say here. | Lucie Tremblay demande qui va voir ce qu'elle ou il dit ici. | final (1) | none | 3.7 |  |  |
+| fr-CA 5.4 | physician | If the pain is not better after 5 minutes, call 911. | Le docteur Patel dit que si la douleur n'est pas meilleure après 5 minutes, vous devriez appeler le 911. | Dr. Patel is saying that if the pain is not better after 5 minutes, you should call 911. | readback_required (1) | 5 minutes -> 5 minutes ok, 911 -> 911 ok | 3.3 |  |  |
+| fr-CA 7.4 | patient | Une aspirine par jour, tous les jours. | Lucie Tremblay is saying that they take an aspirin a day, every day. | Lucie Tremblay dit qu'elle ou il prend une aspirine par jour, tous les jours. | final (2) | tous les jours -> every day ok, aspirine -> aspirine ok | 6.6 |  |  |
+| fr-CA 7.1 | physician | To make sure I explained it well, can you tell me in your own words how you will use these medicines? | Le Dr Patel dit que, pour s'assurer d'avoir bien expliqué, il ou elle vous demande si vous pouvez dire avec vos propres mots comment vous allez utiliser ces médicaments. | Dr. Patel is saying that, to make sure they explained well, they are asking whether you can say in your own words how you will use these medicines. | final (1) | none | 3.5 |  |  |
+
+## Name reading, 3 November 2026 (task 2.6)
+
+- Model: the tone-check model (Haiku), through `read_name` in `server/introduction.py`.
+- Replies were typed, not spoken: speech recognition of names, especially Punjabi names, still needs a test with the speakers.
+- Result: 15 of 15 read correctly, including Gurmukhi names written in Latin script ("ਮੇਰਾ ਨਾਮ ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ ਹੈ।" as "Gurpreet Singh") and replies with no name ("Pardon, je n'ai pas compris." gives none).
+
+| Role | Reply | Name read |
+|---|---|---|
+| Physician | I'm Doctor Thomas. | Dr. Thomas |
+| Physician | Just call me Priya. | Priya |
+| Physician | Dr. Patel, please. | Dr. Patel |
+| Physician | Um, it's Doctor Anne-Marie Leblanc | Dr. Anne-Marie Leblanc |
+| Physician | Sorry, can you repeat that? | (none) |
+| Patient | ਮੇਰਾ ਨਾਮ ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ ਹੈ। | Gurpreet Singh |
+| Patient | ਜੀ, ਹਰਪ੍ਰੀਤ ਕੌਰ। | Harpreet Kaur |
+| Patient | ਮੈਨੂੰ ਬਲਜੀਤ ਕਹਿ ਸਕਦੇ ਹੋ। | Baljit |
+| Patient | ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਂ ਅਮਨਦੀਪ ਹਾਂ। | Amandeep |
+| Patient | ਕੀ ਕਿਹਾ ਤੁਸੀਂ? | (none) |
+| Patient | Je m'appelle Lucie Tremblay. | Lucie Tremblay |
+| Patient | Lucie, s'il vous plaît. | Lucie |
+| Patient | Moi c'est Jean-François. | Jean-François |
+| Patient | Appelez-moi Madame Gagnon. | Madame Gagnon |
+| Patient | Pardon, je n'ai pas compris. | (none) |
+
+## Listening test (task 0.4)
+
+Pending: a blind comparison with the Punjabi and French speakers, then the chosen voice per language and the verdict here.
+
+### How to run it
+
+1. Put the keys in `server/.env`: `OPENAI_API_KEY`, `ELEVENLABS_API_KEY` (optionally `ELEVENLABS_VOICE_ID`), `AZURE_SPEECH_KEY`, and `AZURE_SPEECH_REGION`.
+2. From `server/`, run `uv run python scripts/voice_samples.py`.
+   It speaks every relay above with each voice and writes `server/voice-samples/index.html`, which git ignores.
+3. Each line's clips are shuffled under A, B, and C, so the speakers do not know the vendor.
+   Open `server/voice-samples/key.json` only after the ratings are recorded.
+
+### What each vendor says it supports, checked 3 November 2026
+
+| | OpenAI `gpt-4o-mini-tts` | ElevenLabs `eleven_v4` | Azure (current) |
+|---|---|---|---|
+| Punjabi | Not in OpenAI's language list | Listed | `pa-IN-VaaniNeural` |
+| French | Listed (no Canadian French) | Listed (no Canadian French) | `fr-CA-SylvieNeural` |
+| Tone control | Plain-language `instructions` | Audio tags such as `[measured]`; stability setting | SSML styles for some voices |
+| Status | Deprecated: shuts down 6 January 2027, with OpenAI pointing to its Realtime API | Under active development | In use |
+
+Sources: OpenAI's [text to speech guide](https://developers.openai.com/api/docs/guides/text-to-speech), ElevenLabs' [Eleven v4 page](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4) and [language list](https://elevenlabs.io/docs/help-center/other/what-languages-do-you-support).
+
+## Tamil relay run, 6 November 2026 (TDM-004)
+
+- Pipeline: the live turn graph with Claude, names set to Dr. Patel and Meena Rajaratnam.
+- Lines: `docs/test-script-tamil.md`, both directions, typed with recognition confidence 1.0.
+- First run, before the fix: 3 of 10 correct relays were blocked, because the critical value check did not read Tamil units (மில்லிகிராம், நிமிடங்கள்) or number words (ஐம்பத்து நான்கு).
+- Second run, after adding Tamil units, numbers, and frequencies to `server/critical_values.py`: 0 of 11 blocked, all on the first attempt but 3.3.
+
+| Line | Speaker | Outcome | Critical values | Seconds | Faithful (1-5) | Natural (1-5) |
+|---|---|---|---|---|---|---|
+| ta-LK 3.2 | patient | final | none | 3.8 |  |  |
+| ta-LK 3.3 | patient | final | ஐம்பத்து நான்கு வயது -> fifty-four years ok | 7.4 |  |  |
+| ta-LK 4.2 | physician | readback_required | 2 -> 2 ok | 4.3 |  |  |
+| ta-LK 5.1 | patient | final | none | 3.8 |  |  |
+| ta-LK 6.4 | patient | final | none | 3.6 |  |  |
+| ta-LK 6.5 | physician | final | none | 5.0 |  |  |
+| ta-LK 7.3 | physician | readback_required | 500 milligrams -> 500 மில்லிகிராம் ok, twice a day -> ஒரு நாளைக்கு 2 முறை ok, metformin -> மெட்ஃபோர்மின் ok | 3.7 |  |  |
+| ta-LK 7.4 | physician | readback_required | 3 months -> 3 மாதங்களில் ok | 4.4 |  |  |
+| ta-LK 7.5 | physician | readback_required | 30 minutes -> 30 நிமிடங்கள் ok, every day -> ஒவ்வொரு நாளும் ok | 3.6 |  |  |
+| ta-LK 8.2 | patient | final | ஒரு மாத்திரை -> one tablet ok (twice), தினமும் -> every day ok | 3.6 |  |  |
+| ta-LK 8.4 | patient | final | none | 3.4 |  |  |
+
+- 6.4 keeps the religious sense of விரதம் ("vratham, a religious fast"), as the script asks.
+- The HbA1c gloss was changed from "மூன்று மாத" (three-month) to "நீண்டகால" (long-term), so the gloss no longer adds a number the physician did not say.
+- ElevenLabs `eleven_v4` with `language_code` `ta` spoke relay 7.3 (first audio 1.2 s) and the introduction line (0.7 s); a Tamil speaker still has to judge the voice.

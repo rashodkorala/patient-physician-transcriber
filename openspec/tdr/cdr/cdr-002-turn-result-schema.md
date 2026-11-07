@@ -10,7 +10,7 @@ proposed_by: agent
 category: api-contract
 related_decisions: [adr-002, adr-004, cdr-001]
 related_specs: []
-related_changes: [demo-night-mvp]
+related_changes: [demo-night-mvp, mediator-voice]
 ai_context:
   implementation_priorities:
     - "Single shape for every translated turn"
@@ -142,3 +142,4 @@ Code carries `@contract TurnResult` or `@contract TurnCaption` and `@implements 
 - 2026-10-22, rashodkorala: Amended in place before implementation: added `blocked` status and the single outcome table, so a critical value still mismatched after one re-translation is never spoken and the speaker is asked to repeat (previously a mismatch could reach `readback_required`). Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended to reference the new `tone_failure` escalation reason in CDR-001. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended in place before implementation: status precedence (blocked, escalated, readback_required, final); public `TurnCaption` projection so emotion, certainty, back-translations, and unspoken or blocked translations never reach shared screens. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request.

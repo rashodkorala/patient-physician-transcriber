@@ -38,7 +38,7 @@ TDRs: ADR-002, ADR-003, ADR-004, ADR-006, IDR-002, CDR-002, EDR-002
 
 TDRs: ADR-003, ADR-006, IDR-003, CDR-001, CDR-002
 
-- [ ] 3.1 Language picker with thirteen languages in their own scripts; verify only Punjabi and French are selectable
+- [x] 3.1 Language picker with thirteen languages in their own scripts; verify only Punjabi and French are selectable (2026-11-03: thirteen languages in their own scripts, others coming soon; `node e2e/test-languages.mjs off` passes)
 - [ ] 3.2 Consent screen in Punjabi and French; verify conversation is blocked until consent
 - [ ] 3.3 Off-the-record pause, human interpreter button with connecting state, and "mark high risk" on the controller; verify all notices appear in both languages and a high-risk mark offers an interpreter
 - [ ] 3.4 Explain-back chain and view; verify a missed frequency is flagged
@@ -68,9 +68,9 @@ TDRs: TDM-002, ADR-004, CDR-001, CDR-002
 
 TDRs: TDM-003, ADR-002, ADR-005, ADR-006, IDR-002
 
-- [ ] 6.1 Add test mode as a server start-up setting (off by default, restart to change, no runtime toggle) with a controller-only banner; verify Sinhala and Tamil are selectable only when started in test mode, the shared and review screens show no banner, and the stage checklist in docs/demo-script.md covers it
-- [ ] 6.2 Check speech recognition and voices for Sinhala and Tamil (ADR-005; Google backup if Azure fails a language); verify a short round trip in each and record the result in docs/speech-test.md
-- [ ] 6.3 Write knowledge base content for en-si and en-ta (glossary, tone and honorifics, empathy phrases, type 2 diabetes and high blood pressure explainers) with the native speakers; verify each file names its reviewer and retrieval tests pass offline
+- [x] 6.1 Add test mode as a server start-up setting (off by default, restart to change, no runtime toggle) with a controller-only banner; verify Sinhala and Tamil are selectable only when started in test mode, the shared and review screens show no banner, and the stage checklist in docs/demo-script.md covers it (2026-11-03: `TEST_LANGUAGES=on` at start-up, `/api/health` reports it, server refuses si-LK and ta-LK otherwise; `node e2e/test-languages.mjs off` and `on` pass, no banner on `/screen`; the stage checklist in docs/demo-script.md already checks for no banner)
+- [ ] 6.2 Check speech recognition and voices for Sinhala and Tamil (ADR-005; Google backup if Azure fails a language); verify a short round trip in each and record the result in docs/speech-test.md (2026-11-03: Azure lists si-LK-ThiliniNeural and ta-LK-SaranyaNeural and they are set in web/lib/languages.ts; ElevenLabs eleven_v4 lists Tamil but not Sinhala; laptop round trip pending)
+- [ ] 6.3 Write knowledge base content for en-si and en-ta (glossary, tone and honorifics, empathy phrases, type 2 diabetes and high blood pressure explainers) with the native speakers; verify each file names its reviewer and retrieval tests pass offline (drafts 2026-11-03, all `reviewer: pending`: glossary, tone, empathy, interpreter lines, and explainers for high blood pressure (si) and type 2 diabetes (ta), Sri Lankan Tamil usage; retrieval tests pass offline. Doses in both languages are blocked until critical_values.py knows Sinhala and Tamil unit words)
 - [ ] 6.4 Run docs/test-script-tamil.md and docs/test-script-sinhala.md in full at least twice each, with each speaker's agreement and fictional content only; verify every test log row is filled in, no audio is retained, and test-run replay logs are deleted after the summary
 - [ ] 6.5 Summarise both runs in docs/language-benchmark.md (latency, retries, blocks, escalations, tone ratings, verdict); verify the project lead has read it before the 17 November rehearsal
 

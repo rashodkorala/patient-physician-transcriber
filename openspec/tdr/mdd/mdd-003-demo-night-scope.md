@@ -60,3 +60,4 @@ OpenSpec change `demo-night-mvp`, capability `demo-consultation-flow`.
 ## Review Notes
 
 - 2026-10-22, rashodkorala: Accepted by the project lead in the planning conversation.
+- 2026-11-06, rashodkorala: Tamil added as a live language alongside Punjabi and French by TDM-004 (stage pairs otherwise unchanged). Recorded by Claude (agent) at rashodkorala's explicit request.

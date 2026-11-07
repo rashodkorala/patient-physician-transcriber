@@ -10,7 +10,7 @@ proposed_by: agent
 category: engineering-practice
 related_decisions: [mdd-003, adr-004]
 related_specs: []
-related_changes: [demo-night-mvp]
+related_changes: [demo-night-mvp, mediator-voice]
 ai_context:
   implementation_priorities:
     - "Unit tests never call real AI services"
@@ -62,3 +62,4 @@ pytest with a fake chat model for the turn graph (pass, retry, block, and escala
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended: turn graph tests cover the block branch. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request.

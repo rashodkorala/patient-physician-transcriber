@@ -10,7 +10,7 @@ proposed_by: human
 category: architecture
 related_decisions: [mdd-001, mdd-003]
 related_specs: [demo-consultation-flow]
-related_changes: [demo-night-mvp]
+related_changes: [demo-night-mvp, mediator-voice]
 ai_context:
   implementation_priorities:
     - "Server owns visit state and all AI calls"
@@ -63,3 +63,4 @@ Server and screens communicate only through the contracts in CDR-001 and CDR-002
 ## Review Notes
 
 - 2026-10-22, rashodkorala: Accepted by the project lead in the planning conversation.
+- 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request.

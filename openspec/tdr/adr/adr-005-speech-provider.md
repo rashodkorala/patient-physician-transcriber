@@ -10,7 +10,7 @@ proposed_by: agent
 category: architecture
 related_decisions: [adr-001]
 related_specs: []
-related_changes: [demo-night-mvp]
+related_changes: [demo-night-mvp, mediator-voice]
 ai_context:
   implementation_priorities:
     - "Recognise pa-IN, fr-CA, en-CA; speak with neural voices in each"
@@ -62,3 +62,4 @@ Browser uses the Azure Speech SDK with tokens minted by the server. Week 1 inclu
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request. Condition: the week 1 Punjabi accuracy test (demo-night-mvp task 1.4) decides whether to switch to Google Speech.
+- 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request. Its synthesis half is replaced by ADR-009 for mediator-voice; recognition is unchanged.

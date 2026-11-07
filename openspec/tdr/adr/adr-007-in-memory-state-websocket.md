@@ -10,7 +10,7 @@ proposed_by: agent
 category: architecture
 related_decisions: [adr-001, mdd-003]
 related_specs: []
-related_changes: [demo-night-mvp]
+related_changes: [demo-night-mvp, mediator-voice]
 ai_context:
   implementation_priorities:
     - "One active visit at a time held in server memory"
@@ -61,3 +61,4 @@ Hold the demo visit in server memory and push updates to all screens over a WebS
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request.

@@ -72,3 +72,4 @@ Start-up setting read by the server (for example `TEST_LANGUAGES=on`); the langu
 
 - 2026-10-23, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-24, rashodkorala: Accepted with clarifications: test mode is a server start-up setting (off by default, restart to change, no runtime toggle, no CDR-001 change); test runs use fictional content only, speakers agree beforehand, and no audio is retained. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-06, rashodkorala: Tamil leaves test mode and becomes a live language under TDM-004; Sinhala stays test-only under this memo. Recorded by Claude (agent) at rashodkorala's explicit request.
