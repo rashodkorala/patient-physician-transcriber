@@ -59,7 +59,7 @@ The signal is independent of IDR-004 and changes no behaviour by itself, so it l
 It sits under ADR-005, as part of the speech module.
 
 **Unit tests**: `npm test` runs `node --test` over `web/lib/**/*.test.mjs`, using Node's built-in runner with no new dependency.
-EDR-002 covers server tests and end-to-end checks but not web unit tests, so this is noted for the project lead under Open Questions.
+EDR-002 records this runner for web unit tests (amended 2026-11-07).
 
 ## Risks and Trade-offs
 
@@ -70,4 +70,4 @@ EDR-002 covers server tests and end-to-end checks but not web unit tests, so thi
 
 ## Open Questions
 
-- EDR-002 does not mention web unit tests; whether `node --test` in `web/` should be recorded there is for the project lead to decide.
+None.
