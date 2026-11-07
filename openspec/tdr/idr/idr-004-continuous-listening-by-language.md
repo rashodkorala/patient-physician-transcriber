@@ -52,7 +52,7 @@ Push-to-talk per speaker (IDR-001) remains the default, the fallback, and a manu
    It runs one Azure recogniser (ADR-005) with continuous language identification over exactly two candidates, the physician language and the patient language.
    Each recognised utterance reports its text, detected language, confidence, and end-of-speech time.
 2. The controller maps the detected language to the speaker and submits through the existing path, so name replies, read-back, latency, and `turn.submit` are unchanged.
-3. Listening pauses while the interpreter's voice queue is playing, and resumes a short moment after it drains.
+3. Listening pauses while the interpreter's voice is audible, read from the one shared speaking signal in `web/lib/speech.ts` (also used by the controller's orb; see the change's design.md), and resumes a short moment after it stops.
    It also pauses while a dose read-back is pending, and while the physician holds a push-to-talk control.
 4. The controller shows which speaker was last heard, and each turn offers a one-action "wrong speaker" correction that discards the turn and resubmits it with the other speaker.
 5. The mode is chosen per visit on the controller; it is off by default.
