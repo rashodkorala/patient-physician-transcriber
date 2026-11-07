@@ -11,6 +11,7 @@ The physician speaks English and the patient speaks the visit's patient language
 - Goal: a visit can run without pressing a control per turn, with correct speaker labels in normal conversation.
 - Goal: no server or contract change.
 - Non-goal: telling apart two speakers of the same language.
+- Non-goal, planned as a follow-up change: voice recognition, which learns each person's voice from the name introduction and breaks ties on short replies and tells companions from the patient; it needs its own decision record (vendor, and voiceprints as biometric data).
 
 ## Decisions
 
@@ -19,7 +20,8 @@ The physician speaks English and the patient speaks the visit's patient language
 - **Speaker**: physician language means physician, patient language means patient, per IDR-004; the turn is then submitted through the existing controller path, so name replies, read-back, and latency rows behave as for push-to-talk (CDR-001 unchanged).
 - **Echo**: listening pauses while the shared speaking signal (below) says the voice is playing, and resumes after a short tail (about 300 ms, owned by the listener) once it stops, per IDR-004.
 - **Other pauses**: while a dose read-back is pending, and while a push-to-talk control is held (the override), per IDR-004.
-- **Correction**: a "wrong speaker" action on a turn discards it through the existing discard path and resubmits the same text with the other speaker and language, per IDR-004.
+- **No correction**: the interpreter routes each utterance by its detected language into the other party's language, so a misdetection gives a redundant translation, not a lost one; push-to-talk covers anything said again, per IDR-004 (amended 2026-11-07).
+  No visit channel change is needed (CDR-001 unchanged).
 - **Latency**: end of speech becomes the recognised time minus the silence timeout, so the recognition figure stays comparable with push-to-talk.
 
 ### Shared speaking signal
@@ -61,14 +63,11 @@ EDR-002 covers server tests and end-to-end checks but not web unit tests, so thi
 
 ## Risks and Trade-offs
 
-- Short replies may be misdetected; the indicator and correction cover this, and push-to-talk remains.
+- Short replies may be misdetected; the indicator shows it and push-to-talk remains.
+  Voice recognition, enrolled during the name introduction, is the planned follow-up for short replies and companions.
 - A patient answering in English is labelled physician; the physician corrects it or uses push-to-talk.
 - Each language must be supported by the provider's language identification; unsupported languages keep hands-free disabled.
 
 ## Open Questions
 
-- The "wrong speaker" correction cannot reuse an existing discard path (checked against 83c274e, task 0.2).
-  The only one is `turn.readback_reject`, which discards just the turn waiting for dose read-back; a settled turn cannot be discarded, and the record is append-only (IDR-003).
-  A mislabelled turn has also already been translated the wrong way and spoken to the wrong listener by the time the physician sees it.
-  Options for the project lead: a CDR-001 amendment adding a controller-only correction that marks the turn as mislabelled in the record and resubmits it; or holding each hands-free turn briefly on the controller, with its detected speaker shown, before it is submitted, at a latency cost; or no correction beyond push-to-talk.
 - EDR-002 does not mention web unit tests; whether `node --test` in `web/` should be recorded there is for the project lead to decide.

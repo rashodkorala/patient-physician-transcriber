@@ -11,7 +11,7 @@ A hands-free mode lets the conversation flow while still recording who said what
 - An opt-in hands-free mode on the physician controller: the microphone stays open and each utterance becomes a turn when the speaker pauses.
 - The speaker of each turn is decided by the language spoken, since the physician and the patient always speak different languages in a visit.
 - The interpreter never transcribes its own spoken translations.
-- The controller shows who was last heard, and the physician can correct a wrong speaker in one action.
+- The controller shows who was last heard; the interpreter routes each utterance by its language, so there is no speaker correction, and push-to-talk covers anything said again.
 - Push-to-talk stays the default, the fallback, and a manual override while hands-free is on.
 
 ## Capabilities
@@ -32,6 +32,8 @@ None; push-to-talk turns keep their current behaviour.
 ## Out of Scope
 
 - Voice diarisation, and visits where both parties speak the same language.
+- Voice recognition (matching each person's voice, enrolled during the name introduction), as a tie-breaker for short replies and to tell companions from the patient: a follow-up change.
+- Correcting a speaker label after the turn is spoken.
 - Companions or third speakers.
 - Overlapping speech.
 - Any server or visit channel contract change.

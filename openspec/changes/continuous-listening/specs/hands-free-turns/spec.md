@@ -36,9 +36,9 @@ The system SHALL stop hands-free listening while a dose read-back is waiting for
 - **WHEN** hands-free is on and the physician holds the patient control
 - **THEN** the utterance is recorded as a patient turn, as in push-to-talk, and hands-free listening resumes on release
 
-### Requirement: Speaker correction
-The system SHALL show the physician which speaker each hands-free turn was given, and SHALL let the physician correct it in one action.
+### Requirement: Routing by language
+The system SHALL show the physician which speaker each hands-free turn was given, and SHALL translate each turn into the other party's language, decided only by the language detected.
 
-#### Scenario: Wrong speaker
-- **WHEN** a patient answers in English and the turn is recorded as physician
-- **THEN** the physician can mark it as the patient's, and the turn is recorded again with speaker patient while the mislabelled turn is discarded
+#### Scenario: Patient answers in English
+- **WHEN** hands-free is on and the patient answers in English
+- **THEN** the turn is recorded as the physician's, in English, and translated into the patient's language; nothing is lost, and the physician can use push-to-talk if it needs saying again

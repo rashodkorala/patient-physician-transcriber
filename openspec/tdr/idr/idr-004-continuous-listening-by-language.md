@@ -23,7 +23,7 @@ ai_context:
   validation_rules:
     - "Every turn still records speaker and language explicitly, through the unchanged turn.submit event (CDR-001)"
     - "No turn is submitted from audio captured while translated speech plays"
-    - "The physician can correct a wrong speaker label in one action"
+    - "Each hands-free turn is translated into the other party's language, decided by the language detected; there is no speaker correction"
 affects: [web/lib/speech.ts, web/components/Controller.tsx]
 implementation_refs: []
 test_refs: []
@@ -52,9 +52,11 @@ Push-to-talk per speaker (IDR-001) remains the default, the fallback, and a manu
    It runs one Azure recogniser (ADR-005) with continuous language identification over exactly two candidates, the physician language and the patient language.
    Each recognised utterance reports its text, detected language, confidence, and end-of-speech time.
 2. The controller maps the detected language to the speaker and submits through the existing path, so name replies, read-back, latency, and `turn.submit` are unchanged.
-3. Listening pauses while the interpreter's voice is audible, read from the one shared speaking signal in `web/lib/speech.ts` (also used by the controller's orb; see the change's design.md), and resumes a short moment after it stops.
+3. Listening pauses while the interpreter's voice is audible, read from the one shared speaking signal in `web/lib/speech.ts` (also the controller's source for the CDR-004 voice events; see the change's design.md), and resumes a short moment after it stops.
    It also pauses while a dose read-back is pending, and while the physician holds a push-to-talk control.
-4. The controller shows which speaker was last heard, and each turn offers a one-action "wrong speaker" correction that discards the turn and resubmits it with the other speaker.
+4. The controller shows which speaker was last heard.
+   There is no "wrong speaker" correction: the interpreter routes each utterance by the language it heard, translating it into the other party's language, so a misdetection produces a redundant translation, never a lost one.
+   Push-to-talk is the override for anything that needs saying again.
 5. The mode is chosen per visit on the controller; it is off by default.
 
 ## Alternatives Considered
@@ -71,13 +73,14 @@ Push-to-talk per speaker (IDR-001) remains the default, the fallback, and a manu
 - **Negative**: short replies ("yes", "ok") may be misdetected because language identification needs some speech; a patient answering in English, or code-switching heavily, is labelled physician; overlapping speech is not handled.
 - **Risks and mitigations**:
   - Echo of the translated voice: listening pauses while it plays (decision point 3).
-  - Mislabels: a visible last-speaker indicator and one-action correction; push-to-talk override.
+  - Mislabels: a visible last-speaker indicator and the push-to-talk override; a turn spoken in English by the patient is translated into the patient's language, which is redundant but loses nothing.
+  - Short replies and companions: voice recognition, enrolled during the name introduction, is a later change, not part of this record.
   - Language support: each candidate language must be supported by Azure language identification; confirm `pa-IN`, `fr-CA`, `ta-LK`, and `si-LK` before building, and keep hands-free disabled for any language that is not.
 
 ## Implementation
 
 `web/lib/speech.ts` adds the continuous capture and a pause hook on the voice queue.
-`web/components/Controller.tsx` adds the mode toggle, the language-to-speaker mapping, the indicator, and the correction.
+`web/components/Controller.tsx` adds the mode toggle, the language-to-speaker mapping, and the indicator.
 Code governed by this record carries `@implements IDR-004: Hands-free continuous listening, with the speaker found by spoken language`.
 Tests: a unit test for the mapping and the pause rule, and an end-to-end hands-free run in `web/e2e/` with a fake recogniser (EDR-002).
 
@@ -85,3 +88,4 @@ Tests: a unit test for the mapping and the pause rule, and an end-to-end hands-f
 
 - 2026-11-06, Claude (agent): Drafted as a proposal at rashodkorala's request for continuous listening with speaker detection. Awaiting human review; do not implement until accepted.
 - 2026-11-06, rashodkorala: Accepted. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-07, rashodkorala: Amended: no wrong-speaker correction, since the interpreter routes each utterance by its language and push-to-talk covers anything said again (resolves task 0.2; no CDR-001 amendment). Voice recognition, enrolled during the name introduction, is a follow-up change for short replies and companions. Recorded by Claude (agent) at rashodkorala's explicit request.

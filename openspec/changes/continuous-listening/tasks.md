@@ -5,7 +5,7 @@
 TDRs: IDR-004
 
 - [x] 0.1 Project lead reviews IDR-004 and sets it to accepted or rejected; verify `python3 scripts/check_tdr.py` shows no pending records for this change (2026-11-06: accepted by rashodkorala)
-- [ ] 0.2 Decide whether the speaker correction reuses an existing discard path or needs a CDR-001 amendment; verify the decision is recorded in IDR-004 Review Notes or a CDR-001 amendment
+- [x] 0.2 Decide whether the speaker correction reuses an existing discard path or needs a CDR-001 amendment; verify the decision is recorded in IDR-004 Review Notes or a CDR-001 amendment (2026-11-07: rashodkorala decided no correction; routing by language, push-to-talk as override; recorded in IDR-004)
 
 ## 1. Shared speaking signal
 
@@ -27,7 +27,7 @@ TDRs: ADR-005, IDR-001, IDR-004, CDR-001
 - [ ] 3.1 Add the continuous capture with two-language identification, silence segmentation, pause and resume, and token refresh to `web/lib/speech.ts`; verify the web typecheck and lint pass
 - [ ] 3.2 Pause listening on the shared speaking signal and resume after a short tail; verify with a unit test of the pause rule
 - [ ] 3.3 Add the hands-free toggle, language-to-speaker mapping, last-speaker indicator, read-back pause, and push-to-talk override to `web/components/Controller.tsx`; verify with a unit test of the mapping
-- [ ] 3.4 Add the one-action speaker correction; verify a corrected turn is resubmitted with the other speaker and the original is discarded
+- [ ] 3.4 Route each hands-free turn into the other party's language by its detected language, with no speaker correction; verify with a unit test that an English turn while the patient language is set goes to the patient's language
 
 ## 4. Verification
 
