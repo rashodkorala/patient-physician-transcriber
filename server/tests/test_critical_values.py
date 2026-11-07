@@ -228,3 +228,17 @@ def test_hundreds_multiply_cdr_002():
     assert _words_to_digits("இரண்டு ஆயிரம் மில்லிகிராம்", "ta-LK") == "2000 மில்லிகிராம்"
     # "quatre-vingts" (4 x 20) is not a pattern the composer reads; it is left as words.
     assert _words_to_digits("quatre-vingts jours", "fr-CA") == "quatre-vingts jours"
+
+
+def test_frequency_written_with_a_digit_is_a_frequency_cdr_002():
+    # Sonnet's first attempt at 5.5 on 6 November 2026: "once a day" written as "ਦਿਨ ਵਿੱਚ 1 ਵਾਰ", per the
+    # digits rule. It was read as an unknown frequency plus an extra 1, and the retry then dropped "one".
+    translation = "ਡਾਕਟਰ ਪਟੇਲ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਤੁਹਾਨੂੰ ਇਸ ਦੇ ਨਾਲ ਦਿਨ ਵਿੱਚ 1 ਵਾਰ 1 ਐਸਪਰੀਨ, 81 ਮਿਲੀਗ੍ਰਾਮ, ਵੀ ਲੈਣੀ ਚਾਹੀਦੀ ਹੈ।"
+    values = check(
+        "Also take one aspirin, 81 milligrams, once a day.", "en-CA", translation, "pa-IN", "",
+        ["aspirin"], {"aspirin": ["ਐਸਪਰੀਨ"]},
+    )  # fmt: skip
+    assert values and all(v.matched for v in values), values
+    for text, language in [("1 fois par jour", "fr-CA"), ("1 time a day", "en-CA"), ("ਹਫ਼ਤੇ ਵਿੱਚ 1 ਵਾਰ", "pa-IN")]:
+        assert frequencies(text, language), text
+        assert quantities(text, language) == [], text

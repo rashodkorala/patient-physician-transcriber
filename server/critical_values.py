@@ -169,24 +169,27 @@ _TA_TIMES = "(?:முறை|தடவை|வேளை)"
 # Frequencies normalised to (times, period).
 FREQUENCIES: dict[str, list[tuple[str, tuple[int, str]]]] = {
     "en": [
-        (r"\bonce (?:a|per|each) day\b|\bonce daily\b|\bone time (?:a|per) day\b|\bevery day\b|\bdaily\b", (1, "day")),
+        (
+            r"\bonce (?:a|per|each) day\b|\bonce daily\b|\b(?:one|1) times? (?:a|per) day\b|\bevery day\b|\bdaily\b",
+            (1, "day"),
+        ),
         (r"\btwice (?:a|per|each) day\b|\btwice daily\b|\b(?:two|2) times (?:a|per) day\b", (2, "day")),
         (r"\b(?:three|3) times (?:a|per) day\b", (3, "day")),
         (r"\b(?:four|4) times (?:a|per) day\b", (4, "day")),
         (r"\bonce (?:a|per) week\b|\bweekly\b", (1, "week")),
     ],
     "fr": [
-        (r"\bune fois par jour\b|\btous les jours\b|\bchaque jour\b|\bquotidiennement\b", (1, "day")),
+        (r"\b(?:une|1) fois par jour\b|\btous les jours\b|\bchaque jour\b|\bquotidiennement\b", (1, "day")),
         (r"\bdeux fois par jour\b|\b2 fois par jour\b", (2, "day")),
         (r"\btrois fois par jour\b|\b3 fois par jour\b", (3, "day")),
         (r"\bquatre fois par jour\b|\b4 fois par jour\b", (4, "day")),
-        (r"\bune fois par semaine\b", (1, "week")),
+        (r"\b(?:une|1) fois par semaine\b", (1, "week")),
     ],
     "pa": [
-        (r"ਦਿਨ ਵਿੱਚ ਇੱਕ ਵਾਰ|ਦਿਨ ਵਿਚ ਇਕ ਵਾਰ|ਰੋਜ਼ਾਨਾ ਇੱਕ ਵਾਰ|ਰੋਜ਼ ਇੱਕ ਵਾਰ|ਹਰ ਰੋਜ਼|ਰੋਜ਼ਾਨਾ", (1, "day")),
-        (r"ਦਿਨ ਵਿੱਚ ਦੋ ਵਾਰ|ਦਿਨ ਵਿਚ ਦੋ ਵਾਰ|ਰੋਜ਼ਾਨਾ ਦੋ ਵਾਰ|ਦਿਨ ਵਿੱਚ 2 ਵਾਰ", (2, "day")),
+        (r"ਦਿਨ ਵਿੱਚ ਇੱਕ ਵਾਰ|ਦਿਨ ਵਿਚ ਇਕ ਵਾਰ|ਦਿਨ ਵਿੱਚ 1 ਵਾਰ|ਰੋਜ਼ਾਨਾ ਇੱਕ ਵਾਰ|ਰੋਜ਼ਾਨਾ 1 ਵਾਰ|ਰੋਜ਼ ਇੱਕ ਵਾਰ|ਹਰ ਰੋਜ਼|ਰੋਜ਼ਾਨਾ", (1, "day")),
+        (r"ਦਿਨ ਵਿੱਚ ਦੋ ਵਾਰ|ਦਿਨ ਵਿਚ ਦੋ ਵਾਰ|ਰੋਜ਼ਾਨਾ ਦੋ ਵਾਰ|ਦਿਨ ਵਿੱਚ 2 ਵਾਰ|ਰੋਜ਼ਾਨਾ 2 ਵਾਰ", (2, "day")),
         (r"ਦਿਨ ਵਿੱਚ ਤਿੰਨ ਵਾਰ|ਦਿਨ ਵਿਚ ਤਿੰਨ ਵਾਰ|ਦਿਨ ਵਿੱਚ 3 ਵਾਰ", (3, "day")),
-        (r"ਹਫ਼ਤੇ ਵਿੱਚ ਇੱਕ ਵਾਰ|ਹਫਤੇ ਵਿੱਚ ਇੱਕ ਵਾਰ", (1, "week")),
+        (r"ਹਫ਼ਤੇ ਵਿੱਚ ਇੱਕ ਵਾਰ|ਹਫਤੇ ਵਿੱਚ ਇੱਕ ਵਾਰ|ਹਫ਼ਤੇ ਵਿੱਚ 1 ਵਾਰ|ਹਫਤੇ ਵਿੱਚ 1 ਵਾਰ", (1, "week")),
     ],
     # A count of times needs "per day" before it, since "இரண்டு முறை" alone may be twice a week; a count of
     # dose times (வேளை) is always per day. "Daily" alone is once a day only when no count follows it.
