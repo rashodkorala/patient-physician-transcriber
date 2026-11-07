@@ -11,8 +11,8 @@ TDRs: IDR-004
 
 TDRs: ADR-005
 
-- [ ] 1.1 Implement only after the main checkout's current work is committed, and confirm the base and file owners with the supervising session; verify the branch history shows this change on top of that commit
-- [ ] 1.2 Add `isSpeaking()` and `onSpeaking()` to `web/lib/speech.ts` as in design.md, covering the server voice and the Azure fallback (ended by the player's audio end, not by synthesis completing); verify with a unit test of the state changes for back-to-back items, a failed item, and a fetch gap
+- [x] 1.1 Implement only after the main checkout's current work is committed, and confirm the base and file owners with the supervising session; verify the branch history shows this change on top of that commit
+- [x] 1.2 Add `current()`, `isSpeaking()`, and `onSpeaking()` (carrying `{ speechId, language }`) to `web/lib/speech.ts` as in design.md, covering the server voice and the Azure fallback, both played by one audio element and ended by its end, not by synthesis completing; verify with unit tests for back-to-back items, a handover, a repeated end, and unsubscribing, and a Sinhala fallback turn whose audio end is now seen (2026-11-06)
 
 ## 2. Feasibility
 

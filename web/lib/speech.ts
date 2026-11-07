@@ -5,6 +5,7 @@
  * The voice is the server's (ElevenLabs), asked for by turn or line id so the server decides what
  * may be spoken; Azure speaks only when the server has no voice for that language or its vendor fails.
  * Keys stay on the server; the browser uses short-lived Azure tokens.
+ * Both voices play through one audio element path, which drives the shared speaking signal.
  *
  * @implements ADR-005: Speech: Azure Speech primary, Google Speech backup
  * @implements ADR-010: Voice output: ElevenLabs Eleven v4 replaces OpenAI text-to-speech; Azure stays fallback
@@ -15,6 +16,7 @@
 import type { Language } from "./contracts";
 import { VOICES } from "./languages";
 import { serverHttpUrl } from "./socket";
+import { createSpeakingState } from "./speaking";
 
 type Sdk = typeof import("microsoft-cognitiveservices-speech-sdk");
 
@@ -96,7 +98,10 @@ function synthesizerFor(language: Language): Promise<Synthesizer> {
       const { token: authToken, region } = await token();
       const config = sdk.SpeechConfig.fromAuthorizationToken(authToken, region);
       config.speechSynthesisVoiceName = VOICES[language];
-      const synthesizer = new sdk.SpeechSynthesizer(config, sdk.AudioConfig.fromDefaultSpeakerOutput());
+      // MP3 with no speaker output: the SDK's own player plays a reused synthesizer's audio as one
+      // endless stream, so it never says when an utterance ends. playStream plays it instead.
+      config.speechSynthesisOutputFormat = sdk.SpeechSynthesisOutputFormat.Audio24Khz48KBitRateMonoMp3;
+      const synthesizer = new sdk.SpeechSynthesizer(config, null);
       sdk.Connection.fromSynthesizer(synthesizer).openConnection();
       return synthesizer;
     })();
@@ -120,7 +125,8 @@ export function speak(text: string, language: Language, speechId: string): Promi
   const audio = serverSpeech(speechId, language); // fetched now, while anything before it still plays
   const next = queue.then(async () => {
     const response = await audio;
-    return response ? playStream(response) : speakWithAzure(text, language);
+    const item = { speechId, language };
+    return response ? playStream(response, item) : speakWithAzure(text, item);
   });
   queue = next.catch(() => undefined);
   return next;
@@ -128,6 +134,22 @@ export function speak(text: string, language: Language, speechId: string): Promi
 
 // One voice at a time, in the order asked for, whichever voice says it.
 let queue: Promise<unknown> = Promise.resolve();
+
+/** A turn or interpreter line, by the id its audio is asked for by, in one language. */
+export interface Speaking {
+  speechId: string;
+  language: Language;
+}
+
+const speaking = createSpeakingState<Speaking>();
+
+/** The item whose audio is audible now, whichever voice says it, or null. */
+export const current = speaking.current;
+
+export const isSpeaking = (): boolean => speaking.current() !== null;
+
+/** Calls the listener with the current item now, then on every change; returns an unsubscribe. */
+export const onSpeaking = speaking.onSpeaking;
 
 /** The server's audio, or null when Azure should speak instead. */
 async function serverSpeech(speechId: string, language: Language): Promise<Response | null> {
@@ -144,19 +166,24 @@ async function serverSpeech(speechId: string, language: Language): Promise<Respo
   return null; // 503: no server voice for this language, or the vendor failed before any audio
 }
 
-async function playStream(response: Response): Promise<{ startedAt: number }> {
+async function playStream(response: Response, item: Speaking): Promise<{ startedAt: number }> {
   const streams = response.body && typeof MediaSource !== "undefined" && MediaSource.isTypeSupported("audio/mpeg");
   const url = streams ? streamUrl(response.body!) : URL.createObjectURL(await response.blob());
   const audio = new Audio(url);
+  let ended: (() => void) | undefined;
   try {
     return await new Promise((resolve, reject) => {
       let startedAt = 0;
-      audio.onplaying = () => (startedAt ||= Date.now());
+      audio.onplaying = () => {
+        startedAt ||= Date.now();
+        ended ??= speaking.started(item);
+      };
       audio.onended = () => resolve({ startedAt: startedAt || Date.now() });
       audio.onerror = () => reject(new SpeechUnavailable("the voice could not be played"));
       audio.play().catch((error: Error) => reject(new SpeechUnavailable(error.message)));
     });
   } finally {
+    ended?.();
     URL.revokeObjectURL(url);
   }
 }
@@ -186,7 +213,8 @@ function streamUrl(body: ReadableStream<Uint8Array<ArrayBuffer>>): string {
   return URL.createObjectURL(source);
 }
 
-async function speakWithAzure(text: string, language: Language): Promise<{ startedAt: number }> {
+async function speakWithAzure(text: string, item: Speaking): Promise<{ startedAt: number }> {
+  const { language } = item;
   const sdk = await loadSdk();
   let synthesizer: Synthesizer;
   try {
@@ -196,28 +224,40 @@ async function speakWithAzure(text: string, language: Language): Promise<{ start
     throw error instanceof SpeechUnavailable ? error : new SpeechUnavailable(String(error));
   }
 
-  return new Promise((resolve, reject) => {
-    const fail = (reason: string) => {
-      // Drop a broken synthesizer so the next turn connects afresh.
-      synthesizers.delete(language);
-      synthesizer.close();
-      reject(new SpeechUnavailable(reason));
-    };
-    let startedAt = 0;
-    synthesizer.synthesisStarted = () => {
-      startedAt = Date.now();
-    };
-    synthesizer.speakTextAsync(
-      text,
-      (result) => {
-        // A cancelled synthesis (an expired token, a dropped connection) still lands here.
-        if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
-          resolve({ startedAt: startedAt || Date.now() });
-        } else {
-          fail(result.errorDetails || "speech was cancelled");
-        }
-      },
-      (error) => fail(String(error)),
-    );
+  // Chunks reach the player as Azure makes them, so speech starts before synthesis finishes.
+  let firstChunk: () => void;
+  let failed: (error: SpeechUnavailable) => void;
+  const audible = new Promise<void>((resolve, reject) => ((firstChunk = resolve), (failed = reject)));
+  const body = new ReadableStream<Uint8Array<ArrayBuffer>>({
+    start(controller) {
+      const fail = (reason: string) => {
+        // Drop a broken synthesizer so the next turn connects afresh.
+        synthesizers.delete(language);
+        synthesizer.close();
+        const error = new SpeechUnavailable(reason);
+        failed(error);
+        controller.error(error);
+      };
+      synthesizer.synthesizing = (_sender, event) => {
+        controller.enqueue(new Uint8Array(event.result.audioData));
+        firstChunk();
+      };
+      synthesizer.speakTextAsync(
+        text,
+        (result) => {
+          // A cancelled synthesis (an expired token, a dropped connection) still lands here.
+          if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
+            firstChunk(); // an empty text has no chunks, and nothing to wait for
+            controller.close();
+          } else {
+            fail(result.errorDetails || "speech was cancelled");
+          }
+        },
+        (error) => fail(String(error)),
+      );
+    },
   });
+  // A failure before any audio keeps its own reason, instead of a generic playback error.
+  await audible;
+  return playStream(new Response(body, { headers: { "Content-Type": "audio/mpeg" } }), item);
 }

@@ -24,27 +24,40 @@ The physician speaks English and the patient speaks the visit's patient language
 
 ### Shared speaking signal
 
-One signal in `web/lib/speech.ts` says whether the interpreter's voice is audible.
-Hands-free listening uses it to pause, and the controller's animated orb uses it to animate; no other module adds a second one.
+One signal in `web/lib/speech.ts` says which item the interpreter's voice is saying right now, on `/control`, where `speak()` runs.
+Hands-free listening pauses on it, and the controller reports it to the visit so other screens can follow; no other module adds a second one.
+The shared screen on the TV never reads it directly: it learns of the voice only through those visit channel events, which belong to another change.
 
 ```ts
-/** True while the interpreter's voice is audible, whichever voice says it. */
-export function isSpeaking(): boolean;
-/** Calls the listener with the current state now, then on every change; returns an unsubscribe. */
-export function onSpeaking(listener: (speaking: boolean) => void): () => void;
+/** A turn or interpreter line, by the id its audio is asked for by, in one language. */
+export interface Speaking { speechId: string; language: Language }
+/** The item whose audio is audible now, whichever voice says it, or null. */
+export function current(): Speaking | null;
+export function isSpeaking(): boolean; // current() !== null
+/** Calls the listener with the current item now, then on every change; returns an unsubscribe. */
+export function onSpeaking(listener: (speaking: Speaking | null) => void): () => void;
 ```
 
-- **True** from the moment audio actually starts for an item in the `speak()` queue: `onplaying` on the server voice's audio element, or the Azure player's start.
-- **False** when that item's audio has really ended and the next item's audio has not started; if the next item is already loaded, the state stays `true` across the boundary, and any short gap while it loads is smoothed by each listener's own tail.
-- **Covers both voices**: the server voice (`playStream`) and the Azure fallback (`speakWithAzure`).
-  For Azure, the end is the `SpeakerAudioDestination` `onAudioEnd` event, not `speakTextAsync` completing, which fires when synthesis finishes and can be before playback ends.
-- **Errors**: a failed or refused item ends its `true` state like a finished one, so the signal never sticks on.
-- **Fetching is not speaking**: waiting for audio to arrive is `false`, since nothing is audible.
-- **No timing policy inside**: tails, debouncing, and animation easing belong to each listener, so the two features can tune them separately.
-- **Testable**: the state change is a small pure counter around the queue, unit-tested without the speech SDK.
+- **Set** to an item when its audio element fires `playing`.
+- **Cleared** to null when that item's audio ends, errors, or is refused, so the signal never sticks.
+- **Back-to-back items** read item 1, then null, then item 2, since the queue starts an item only after the one before it has ended; listeners smooth that gap with their own tails.
+  A start that arrives while another item is current hands over directly, and the earlier item's late end is ignored.
+- **Fetching is not speaking**: waiting for audio to arrive is null, since nothing is audible.
+- **No timing policy inside**: tails, debouncing, and easing belong to each listener.
+- **Testable**: the state lives in `web/lib/speaking.ts`, which has no imports and is unit-tested without the speech SDK.
 
-The signal is independent of IDR-004 and changes no behaviour by itself, so it can land first for the orb.
-It still sits under ADR-005, as part of the speech module.
+**Both voices play through one path.**
+The server voice was already played by an audio element in `playStream`.
+The Azure fallback used the SDK's own speaker output, and because `speech.ts` reuses one warmed synthesizer per language, that player receives every utterance as one endless stream: its `onAudioStart` fires once, and its end never fires.
+Measured on a Sinhala turn (no server voice, so Azure speaks), the audio element's `ended` event never fired within 30 seconds.
+So the Azure synthesizer now produces MP3 with no speaker output, and its chunks are streamed into `playStream` as Azure makes them, keeping the warm connection and the early start.
+This also makes an Azure queue item last until its audio ends, as a server voice item already did, instead of finishing when synthesis completes.
+
+The signal is independent of IDR-004 and changes no behaviour by itself, so it lands first.
+It sits under ADR-005, as part of the speech module.
+
+**Unit tests**: `npm test` runs `node --test` over `web/lib/**/*.test.mjs`, using Node's built-in runner with no new dependency.
+EDR-002 covers server tests and end-to-end checks but not web unit tests, so this is noted for the project lead under Open Questions.
 
 ## Risks and Trade-offs
 
@@ -54,5 +67,5 @@ It still sits under ADR-005, as part of the speech module.
 
 ## Open Questions
 
-- IDR-004 is proposed and needs a human verdict before implementation.
 - Whether the "wrong speaker" correction can reuse an existing discard path for a settled turn, or needs a small visit channel addition; if the latter, it needs a CDR-001 amendment first.
+- EDR-002 does not mention web unit tests; whether `node --test` in `web/` should be recorded there is for the project lead to decide.
