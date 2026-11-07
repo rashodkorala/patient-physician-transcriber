@@ -4,7 +4,7 @@
 
 TDRs: IDR-004
 
-- [ ] 0.1 Project lead reviews IDR-004 and sets it to accepted or rejected; verify `python3 scripts/check_tdr.py` shows no pending records for this change
+- [x] 0.1 Project lead reviews IDR-004 and sets it to accepted or rejected; verify `python3 scripts/check_tdr.py` shows no pending records for this change (2026-11-06: accepted by rashodkorala)
 - [ ] 0.2 Decide whether the speaker correction reuses an existing discard path or needs a CDR-001 amendment; verify the decision is recorded in IDR-004 Review Notes or a CDR-001 amendment
 
 ## 1. Shared speaking signal

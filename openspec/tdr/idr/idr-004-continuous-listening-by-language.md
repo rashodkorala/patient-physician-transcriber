@@ -1,7 +1,7 @@
 ---
 id: idr-004
 title: "Hands-free continuous listening, with the speaker found by spoken language"
-status: proposed
+status: accepted
 date: 2026-11-06
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -84,3 +84,4 @@ Tests: a unit test for the mapping and the pause rule, and an end-to-end hands-f
 ## Review Notes
 
 - 2026-11-06, Claude (agent): Drafted as a proposal at rashodkorala's request for continuous listening with speaker detection. Awaiting human review; do not implement until accepted.
+- 2026-11-06, rashodkorala: Accepted. Recorded by Claude (agent) at rashodkorala's explicit request.
