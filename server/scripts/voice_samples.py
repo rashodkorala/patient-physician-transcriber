@@ -1,4 +1,4 @@
-"""Blind voice comparison for the listening test (mediator-voice task 0.4, ADR-009).
+"""Blind voice comparison for the listening test (mediator-voice task 0.4, ADR-010).
 
 Speaks every relay in docs/voice-test.md with each configured voice (OpenAI, ElevenLabs, Azure) and
 writes server/voice-samples/index.html, with each line's clips shuffled under the letters A, B, and C
@@ -10,7 +10,7 @@ Keys from server/.env: OPENAI_API_KEY, AZURE_SPEECH_KEY, and AZURE_SPEECH_REGION
 the project's .env.local, where `npx @elevenlabs/cli onboard` puts it (ELEVENLABS_VOICE_ID optional, in
 either file). A voice without its key is skipped.
 
-@implements ADR-009: Voice output: OpenAI text-to-speech with tone instructions; Azure keeps recognition
+@implements ADR-010: Voice output: ElevenLabs Eleven v4 replaces OpenAI text-to-speech; Azure stays fallback
 """
 
 import asyncio

@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ -f "$ROOT/server/.env" ]]; then
   set -a; source "$ROOT/server/.env"; set +a
 fi
-# ELEVENLABS_API_KEY, written here by `npx @elevenlabs/cli onboard` (ADR-009 listening test).
+# ELEVENLABS_API_KEY, written here by `npx @elevenlabs/cli onboard` (ADR-010 listening test).
 if [[ -f "$ROOT/.env.local" ]]; then
   set -a; source "$ROOT/.env.local"; set +a
 fi

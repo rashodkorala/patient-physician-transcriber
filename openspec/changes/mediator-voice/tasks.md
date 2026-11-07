@@ -32,7 +32,7 @@ TDRs: MDD-004, ADR-002, ADR-004, ADR-006, CDR-002, CDR-003, EDR-002
 
 ## 3. Interpreter voice
 
-TDRs: ADR-009, ADR-010, ADR-005, CDR-003, EDR-002
+TDRs: ADR-010, ADR-005, CDR-003, EDR-002
 
 - [x] 3.1 Add `GET /api/speech/{id}` that streams OpenAI speech for final turns, confirmed read-backs, and interpreter lines, and returns 404 otherwise; verify pytest covers blocked, escalated, rejected, unsettled, and unknown ids
   - Built with ElevenLabs per ADR-010 (`server/voice.py`, `server/main.py`); `server/tests/test_voice.py` covers every case.
@@ -50,7 +50,7 @@ TDRs: ADR-009, ADR-010, ADR-005, CDR-003, EDR-002
 
 ## 4. End-to-end check
 
-TDRs: MDD-004, ADR-009, CDR-003, EDR-002
+TDRs: MDD-004, ADR-010, CDR-003, EDR-002
 
 - [ ] 4.1 Run a full Punjabi visit and a full French visit with the native speakers: introduction, names, five turns each way, one read-back, one blocked dose; verify the blocked dose is never spoken and record the run in docs/voice-test.md
 

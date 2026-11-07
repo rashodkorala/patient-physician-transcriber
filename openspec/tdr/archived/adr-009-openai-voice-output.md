@@ -1,7 +1,7 @@
 ---
 id: adr-009
 title: "Voice output: OpenAI text-to-speech with tone instructions; Azure keeps recognition"
-status: accepted
+status: superseded
 date: 2026-11-03
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -72,3 +72,4 @@ The `mediator-voice` OpenSpec change: a server speech endpoint, a streamed audio
   If accepted, ADR-005 needs a human note that its synthesis half is replaced by this record.
 - 2026-11-03, rashodkorala: Accepted in session. Recorded by Claude (agent) at rashodkorala's explicit request. Accepted before the Punjabi and French listening test; the test (mediator-voice task 0.4) still picks the voice per language, and Azure stays the fallback where OpenAI falls short.
 - 2026-11-03, Claude (agent): ADR-010 (accepted) replaces this record's vendor choice with ElevenLabs. Whether this record becomes superseded is for the project lead to decide.
+- 2026-11-06, rashodkorala: Superseded by ADR-010, which replaces OpenAI with ElevenLabs as the voice vendor and restates this record's safety rules. Moved to archived/. Recorded by Claude (agent) at rashodkorala's explicit request.

@@ -18,7 +18,7 @@ Only a human decides a status; an agent may record an explicit human verdict (ED
 | [ADR-006](adr/adr-006-llm-models.md) | LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary | ADR | accepted | rashodkorala | demo-night-mvp, mediator-voice |
 | [ADR-007](adr/adr-007-in-memory-state-websocket.md) | In-memory visit state with WebSocket updates; no database for the demo | ADR | accepted | rashodkorala | demo-night-mvp, mediator-voice |
 | [ADR-008](adr/adr-008-automatic-high-risk-detection.md) | Automatic high-risk moment detection: suggest only | ADR | proposed | rashodkorala | add-multilingual-medical-consultation |
-| [ADR-009](adr/adr-009-openai-voice-output.md) | Voice output: OpenAI text-to-speech with tone instructions; Azure keeps recognition | ADR | accepted | rashodkorala | mediator-voice |
+| [ADR-009](archived/adr-009-openai-voice-output.md) | Voice output: OpenAI text-to-speech with tone instructions; Azure keeps recognition | ADR | superseded | rashodkorala | mediator-voice |
 | [ADR-010](adr/adr-010-elevenlabs-voice-output.md) | Voice output: ElevenLabs Eleven v4 replaces OpenAI text-to-speech; Azure stays fallback | ADR | accepted | rashodkorala | mediator-voice |
 | [CDR-001](cdr/cdr-001-visit-websocket-events.md) | Visit WebSocket event contract | CDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |
 | [CDR-002](cdr/cdr-002-turn-result-schema.md) | Turn result schema | CDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |

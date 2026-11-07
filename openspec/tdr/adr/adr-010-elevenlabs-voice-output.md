@@ -73,3 +73,4 @@ The `mediator-voice` change, task group 3, with "OpenAI" read as "ElevenLabs" in
 - 2026-11-03, Claude (agent): Drafted at rashodkorala's request for an ElevenLabs server voice. Awaiting human review; do not implement until accepted.
   If accepted, ADR-009 moves to superseded.
 - 2026-11-03, rashodkorala: Accepted in session. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-06, rashodkorala: ADR-009 is now superseded by this record. Recorded by Claude (agent) at rashodkorala's explicit request.

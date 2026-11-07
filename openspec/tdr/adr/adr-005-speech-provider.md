@@ -63,3 +63,4 @@ Browser uses the Azure Speech SDK with tokens minted by the server. Week 1 inclu
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request. Condition: the week 1 Punjabi accuracy test (demo-night-mvp task 1.4) decides whether to switch to Google Speech.
 - 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request. Its synthesis half is replaced by ADR-009 for mediator-voice; recognition is unchanged.
+- 2026-11-06, rashodkorala: ADR-009 is superseded by ADR-010, so the synthesis half of this record is now replaced by ADR-010 (ElevenLabs, with Azure voices as the fallback); recognition is unchanged. Recorded by Claude (agent) at rashodkorala's explicit request.
