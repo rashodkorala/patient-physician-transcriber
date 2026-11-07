@@ -29,6 +29,7 @@ Only a human decides a status; an agent may record an explicit human verdict (ED
 | [IDR-001](idr/idr-001-push-to-talk-turns.md) | Push-to-talk per speaker instead of diarisation | IDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |
 | [IDR-002](idr/idr-002-kb-retrieval-chroma.md) | Chroma with local multilingual embeddings plus exact-match glossary lookup | IDR | accepted | rashodkorala | demo-night-mvp |
 | [IDR-003](idr/idr-003-hash-chain-integrity.md) | SHA-256 hash chain for the record-verified badge | IDR | accepted | rashodkorala | demo-night-mvp |
+| [IDR-004](idr/idr-004-continuous-listening-by-language.md) | Hands-free continuous listening, with the speaker found by spoken language | IDR | proposed | rashodkorala | continuous-listening |
 | [TDM-001](tdm/tdm-001-replay-mode-safety-net.md) | Replay mode and backup video as demo safety net | TDM | accepted | rashodkorala | demo-night-mvp |
 | [TDM-002](tdm/tdm-002-presenter-mismatch-control.md) | Presenter mismatch control for the blocked-dose beat | TDM | accepted | rashodkorala | demo-night-mvp |
 | [TDM-003](tdm/tdm-003-sinhala-tamil-test-languages.md) | Sinhala and Tamil as test-only languages before demo night | TDM | accepted | rashodkorala | demo-night-mvp |
