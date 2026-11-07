@@ -1,12 +1,14 @@
 "use client";
 
 /**
- * Physician controller: languages, push-to-talk, typed fallback, read-back, nudges, turns, and latency.
+ * Physician controller: languages, names, push-to-talk, typed fallback, read-back, nudges, turns, and latency.
  *
  * @implements IDR-001: Push-to-talk per speaker instead of diarisation
  * @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
  * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-002: Turn result schema
+ * @implements CDR-003: Participant names and interpreter lines on the visit channel
+ * @implements TDM-003: Sinhala and Tamil as test-only languages before demo night
  * @contract ws:/ws/visit
  */
 
@@ -17,7 +19,12 @@ import type {
   ErrorPayload,
   EscalationReason,
   InterpreterEscalation,
+  InterpreterLine,
+  IntroductionState,
   Language,
+  NameProposed,
+  NameRole,
+  Names,
   PatientLanguage,
   Speaker,
   ToneLabel,
@@ -28,15 +35,37 @@ import type {
   TurnStatus,
   VisitStateController,
 } from "@/lib/contracts";
-import { LANGUAGE_LABELS } from "@/lib/languages";
+import { NAME_MAX } from "@/lib/contracts";
+import { LANGUAGE_LABELS, ROADMAP } from "@/lib/languages";
 import { type LatencyRow, median, segments, toCsv } from "@/lib/latency";
-import { useVisitSocket } from "@/lib/socket";
+import { serverHttpUrl, useVisitSocket } from "@/lib/socket";
 import { type Capture, speak, startCapture, warmUp } from "@/lib/speech";
 import styles from "./controller.module.css";
 import Highlighted from "./Highlighted";
 
-const PATIENT_LANGUAGES: PatientLanguage[] = ["pa-IN", "fr-CA"];
 const TONE_LABELS: ToneLabel[] = ["respectful", "reassuring", "empathetic", "neutral"];
+
+// The physician's name, saved once on a clinic device so no visit has to ask for it (CDR-003).
+const DEFAULT_NAME_KEY = "interpreter.defaultPhysicianName";
+
+function readDefaultName(): string {
+  try {
+    return localStorage.getItem(DEFAULT_NAME_KEY) ?? "";
+  } catch {
+    return ""; // storage blocked: no default, the introduction asks instead
+  }
+}
+
+function writeDefaultName(name: string) {
+  try {
+    if (name) localStorage.setItem(DEFAULT_NAME_KEY, name);
+    else localStorage.removeItem(DEFAULT_NAME_KEY);
+  } catch {
+    // storage blocked: the name still applies to this visit
+  }
+}
+
+const ASKING: Partial<Record<IntroductionState, NameRole>> = { asking_physician: "physician", asking_patient: "patient" };
 
 const REASON_TEXT: Record<EscalationReason, string> = {
   low_confidence: "the translation stayed uncertain after a retry",
@@ -48,6 +77,8 @@ const REASON_TEXT: Record<EscalationReason, string> = {
 /** What happened to a turn after its analysis, as far as this controller saw it live. */
 interface Outcome {
   spoken?: boolean;
+  // The turn passed its checks but the voice failed, so the patient never heard it.
+  voiceFailed?: boolean;
   discarded?: boolean;
   escalation?: EscalationReason;
 }
@@ -83,14 +114,14 @@ function ValuesTable({ turn, only }: { turn: TurnResult; only?: "mismatched" }) 
 function statusText(turn: TurnResult, outcome: Outcome, pending: boolean): string {
   switch (turn.status) {
     case "final":
-      return "spoken";
+      return outcome.voiceFailed ? "voice failed, not spoken" : "spoken";
     case "blocked":
       return "blocked, not spoken";
     case "escalated":
       return "escalated, not spoken";
     case "readback_required":
       if (pending) return "waiting for your read-back";
-      if (outcome.spoken) return "confirmed and spoken";
+      if (outcome.spoken) return outcome.voiceFailed ? "confirmed, voice failed" : "confirmed and spoken";
       if (outcome.discarded) return "rejected, not spoken";
       return "read-back closed";
   }
@@ -108,6 +139,19 @@ export default function Controller() {
   const [recording, setRecording] = useState<Speaker | null>(null);
   const [typedSpeaker, setTypedSpeaker] = useState<Speaker>("patient");
   const [typedText, setTypedText] = useState("");
+  const [visitId, setVisitId] = useState<string | null>(null);
+  const [names, setNames] = useState<Names>({ physicianName: null, patientName: null });
+  const [physicianDraft, setPhysicianDraft] = useState("");
+  const [patientDraft, setPatientDraft] = useState("");
+  const [defaultName, setDefaultName] = useState("");
+  const defaultAppliedTo = useRef<string | null>(null);
+  // The names the server last sent: a field changes only when its own name did, never mid-typing.
+  const serverNames = useRef<Names>({});
+  const [introduction, setIntroduction] = useState<IntroductionState>("pending");
+  const [proposed, setProposed] = useState<NameProposed | null>(null);
+  const [introSkipped, setIntroSkipped] = useState(false);
+  // TDM-003: chosen when the server starts and fixed until it restarts, so it is read once.
+  const [testMode, setTestMode] = useState(false);
   const capture = useRef<Capture | null>(null);
   // Submits are sequential from this one controller, so turn.started events match them in order.
   const pendingTimes = useRef<{ endOfSpeechAt: number; submittedAt: number }[]>([]);
@@ -120,6 +164,14 @@ export default function Controller() {
   const updateOutcome = (turnId: string, patch: Outcome) =>
     setOutcomes((all) => ({ ...all, [turnId]: { ...all[turnId], ...patch } }));
 
+  const receiveNames = (current: Names) => {
+    const last = serverNames.current;
+    if (current.physicianName !== last.physicianName) setPhysicianDraft(current.physicianName ?? "");
+    if (current.patientName !== last.patientName) setPatientDraft(current.patientName ?? "");
+    serverNames.current = current;
+    setNames(current);
+  };
+
   const onEvent = useCallback((event: Envelope) => {
     switch (event.type) {
       case "visit.state": {
@@ -128,6 +180,27 @@ export default function Controller() {
         setTurns(state.turns);
         setPendingReadback(state.pendingReadback ?? null);
         setNudges(state.nudges);
+        setVisitId(event.visitId);
+        // Read here, not on first render: the page is also rendered on the server, which has no storage.
+        setDefaultName(readDefaultName());
+        receiveNames({ physicianName: state.physicianName ?? null, patientName: state.patientName ?? null });
+        setIntroduction(state.introduction ?? "pending");
+        break;
+      }
+      case "interpreter.line": {
+        const line = event.payload as InterpreterLine;
+        // speak() keeps lines in order and fetches each one's audio straight away.
+        for (const { language, text } of line.lines) {
+          speak(text, language, line.lineId).catch((error: Error) => setNotice(`Not spoken: ${error.message}`));
+        }
+        break;
+      }
+      case "visit.name_proposed":
+        setProposed(event.payload as NameProposed);
+        break;
+      case "visit.names": {
+        receiveNames(event.payload as Names);
+        setProposed(null);
         break;
       }
       case "turn.started": {
@@ -165,9 +238,12 @@ export default function Controller() {
         if (caption.status === "final" && caption.translation) {
           updateOutcome(caption.turnId, { spoken: true });
           setPendingReadback((p) => (p === caption.turnId ? null : p));
-          speak(caption.translation, caption.targetLanguage)
+          speak(caption.translation, caption.targetLanguage, caption.turnId)
             .then(({ startedAt }) => updateLatency(caption.turnId, { speechStartAt: startedAt }))
-            .catch((error: Error) => setNotice(`Not spoken: ${error.message}`));
+            .catch((error: Error) => {
+              updateOutcome(caption.turnId, { voiceFailed: true });
+              setNotice(`Not spoken: ${error.message}`);
+            });
         }
         break;
       }
@@ -188,12 +264,50 @@ export default function Controller() {
 
   const { state, send } = useVisitSocket("controller", onEvent);
 
+  useEffect(() => {
+    fetch(`${serverHttpUrl()}/api/health`)
+      .then((response) => response.json())
+      .then((health: { testLanguages?: boolean }) => setTestMode(Boolean(health.testLanguages)))
+      .catch(() => setTestMode(false)); // unreachable server: the safe answer is no test languages
+  }, []);
+
+  // Apply the saved default once per visit, so clearing the name mid-visit is not undone.
+  useEffect(() => {
+    if (state !== "open" || !visitId || !defaultName || defaultAppliedTo.current === visitId) return;
+    defaultAppliedTo.current = visitId;
+    if (!names.physicianName) send("visit.set_names", { physicianName: defaultName });
+  }, [state, visitId, defaultName, names.physicianName, send]);
+
+  const tidy = (draft: string) => draft.trim().replace(/\s+/g, " ");
+
+  const commitName = (role: "physician" | "patient", draft: string) => {
+    const name = tidy(draft);
+    const key = role === "physician" ? "physicianName" : "patientName";
+    if (name !== (names[key] ?? "")) send("visit.set_names", { [key]: name });
+  };
+
+  // Only this checkbox changes the saved default: a locum editing the name for one visit leaves it alone.
+  const isDefault = Boolean(defaultName) && defaultName === tidy(physicianDraft);
+  const toggleDefault = (save: boolean) => {
+    const name = save ? tidy(physicianDraft) : "";
+    writeDefaultName(name);
+    setDefaultName(name);
+  };
+
+  // While the interpreter asks someone their name, what they say next is their reply, not a turn.
+  const askingRole: NameRole | null = introSkipped ? null : (ASKING[introduction] ?? null);
+
   const submit = (speaker: Speaker, text: string, confidence: number, endOfSpeechAt: number) => {
     if (!text.trim()) {
       setNotice("Nothing was heard. Please try again.");
       return;
     }
     setNotice(null);
+    if (speaker === askingRole) {
+      setProposed(null);
+      send("visit.name_reply", { role: speaker, text: text.trim() });
+      return;
+    }
     pendingTimes.current.push({ endOfSpeechAt, submittedAt: Date.now() });
     send("turn.submit", { speaker, language: languageOf(speaker), text: text.trim(), recognitionConfidence: confidence });
   };
@@ -230,7 +344,8 @@ export default function Controller() {
     const keyToSpeaker: Record<string, Speaker> = { "1": "physician", "2": "patient" };
     const down = (e: KeyboardEvent) => {
       const speaker = keyToSpeaker[e.key];
-      if (speaker && !e.repeat && document.activeElement?.tagName !== "TEXTAREA") void pressTalk(speaker);
+      const typing = ["TEXTAREA", "INPUT"].includes(document.activeElement?.tagName ?? "");
+      if (speaker && !e.repeat && !typing) void pressTalk(speaker);
     };
     const up = (e: KeyboardEvent) => {
       if (keyToSpeaker[e.key]) void releaseTalk();
@@ -281,192 +396,308 @@ export default function Controller() {
         </span>
       </header>
 
-      <section className={styles.section}>
-        <h2 className={styles.eyebrow}>Visit</h2>
-        <div className={styles.visit}>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Patient language</span>
-            <select
-              value={patientLanguage}
-              disabled={turns.length > 0}
-              onChange={(e) =>
-                send("visit.set_languages", { patientLanguage: e.target.value, physicianLanguage: "en-CA" })
-              }
-            >
-              {PATIENT_LANGUAGES.map((lang) => (
-                <option key={lang} value={lang}>
-                  {LANGUAGE_LABELS[lang].own} ({LANGUAGE_LABELS[lang].english})
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className={styles.aside}>With English. Fixed once the first turn starts.</p>
-        </div>
-      </section>
-
-      <section className={styles.section}>
-        <h2 className={styles.eyebrow}>Speak</h2>
-        <div className={styles.talk}>
-          {(["physician", "patient"] as Speaker[]).map((speaker, i) => (
-            <button
-              key={speaker}
-              className={`${styles.talkButton} ${recording === speaker ? styles.recording : ""}`}
-              onPointerDown={() => void pressTalk(speaker)}
-              onPointerUp={() => void releaseTalk()}
-              onPointerLeave={() => recording === speaker && void releaseTalk()}
-            >
-              <span className={styles.eyebrow}>{recording === speaker ? "Listening" : `Hold or press ${i + 1}`}</span>
-              <span className={styles.talkRole}>{speaker === "physician" ? "Physician" : "Patient"}</span>
-              <span className={styles.talkLang}>{LANGUAGE_LABELS[languageOf(speaker)].own}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {readbackTurn && (
-        <section className={styles.readback} data-testid="readback" aria-live="assertive">
-          <h2 className={styles.eyebrow}>Read-back · check the values before they are spoken</h2>
-          <p className={styles.readbackLine} lang={readbackTurn.sourceLanguage}>
-            <Highlighted
-              text={readbackTurn.sourceText}
-              values={readbackTurn.criticalValues.map((v) => v.source)}
-              className={styles.value}
-            />
-          </p>
-          <p className={styles.readbackLine} lang={readbackTurn.targetLanguage}>
-            <Highlighted
-              text={readbackTurn.translation}
-              values={readbackTurn.criticalValues.map((v) => v.translated)}
-              className={styles.value}
-            />
-          </p>
-          <ValuesTable turn={readbackTurn} />
-          <div className={styles.actions}>
-            <button
-              className={styles.primary}
-              data-testid="readback-confirm"
-              onClick={() => decideReadback(readbackTurn.turnId, true)}
-            >
-              Confirm and speak
-            </button>
-            <button
-              className={styles.secondary}
-              data-testid="readback-reject"
-              onClick={() => decideReadback(readbackTurn.turnId, false)}
-            >
-              Reject and repeat
-            </button>
-          </div>
-        </section>
+      {testMode && (
+        <p className={styles.testBanner} role="status" data-testid="test-mode-banner">
+          Test mode: Sinhala can be selected for test scripts only. Restart without TEST_LANGUAGES before
+          any stage use.
+        </p>
       )}
 
-      {nudge && (
-        <section className={`${styles.section} ${styles.nudge}`} data-testid="nudge" aria-live="polite">
-          <div className={styles.nudgeHead}>
-            <h2 className={styles.eyebrow}>Empathy nudge · patient seems {nudge.emotion.replace("_", " ")}</h2>
-            <button className={styles.quiet} onClick={() => setDismissed((d) => new Set(d).add(nudge.turnId))}>
-              Dismiss
-            </button>
-          </div>
-          <p className={styles.suggestion}>{nudge.suggestion}</p>
-          <blockquote lang={nudge.phraseLanguage}>{nudge.phrase}</blockquote>
-        </section>
-      )}
-
-      <section className={styles.section}>
-        <h2 className={styles.eyebrow}>Typed turn</h2>
-        <div className={styles.typed}>
-          <select
-            data-testid="typed-speaker"
-            value={typedSpeaker}
-            onChange={(e) => setTypedSpeaker(e.target.value as Speaker)}
-          >
-            <option value="physician">Physician (English)</option>
-            <option value="patient">Patient ({LANGUAGE_LABELS[patientLanguage].english})</option>
-          </select>
-          <textarea
-            data-testid="typed-text"
-            value={typedText}
-            onChange={(e) => setTypedText(e.target.value)}
-            rows={2}
-            placeholder="Type what was said"
-          />
-          <button className={styles.primary} data-testid="typed-send" onClick={sendTyped} disabled={state !== "open"}>
-            Send
-          </button>
-        </div>
-        {notice && (
-          <p className={styles.notice} role="status" data-testid="notice">
-            {notice}
-          </p>
-        )}
-      </section>
-
-      <section className={styles.section}>
-        <h2 className={styles.eyebrow}>Turns · private to the physician</h2>
-        {turns.length === 0 && <p className={styles.aside}>Nothing said yet.</p>}
-        <ol className={styles.turns}>
-          {turns.map((t) => {
-            const outcome = outcomes[t.turnId] ?? {};
-            const unspoken = t.status === "blocked" || t.status === "escalated" || outcome.discarded;
-            return (
-              <li key={t.turnId} data-testid="turn" data-status={t.status}>
-                <div className={styles.turnHead}>
-                  <span className={`${styles.speaker} ${styles[t.speaker]}`}>{t.speaker}</span>
-                  <span className={`${styles.tag} ${unspoken ? styles.stop : ""}`}>
-                    {statusText(t, outcome, t.turnId === pendingReadback)}
-                  </span>
-                  {!unspoken && <span className={styles.tag}>{toneLabel(t)}</span>}
-                </div>
-                <p className={styles.line} lang={t.sourceLanguage}>
-                  {t.sourceText}
+      {/* Controls on the left; the turn log and latency, read rather than used, in a panel on the right. */}
+      <div className={styles.layout}>
+        <div className={styles.controls}>
+          <section className={styles.section}>
+            <h2 className={styles.eyebrow}>Visit</h2>
+            <div className={styles.visit}>
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Patient language</span>
+                <select
+                  data-testid="patient-language"
+                  value={patientLanguage}
+                  disabled={turns.length > 0}
+                  onChange={(e) =>
+                    send("visit.set_languages", { patientLanguage: e.target.value, physicianLanguage: "en-CA" })
+                  }
+                >
+                  {ROADMAP.map(({ own, english, language, test }) => {
+                    const selectable = Boolean(language) && (!test || testMode);
+                    let note = "";
+                    if (english === "English") note = "physician";
+                    else if (!selectable) note = "coming soon";
+                    else if (test) note = "test only";
+                    return (
+                      <option key={english} value={language ?? english} disabled={!selectable}>
+                        {own} ({english}){note && ` · ${note}`}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+              <p className={styles.aside}>With English. Fixed once the first turn starts.</p>
+            </div>
+            <div className={styles.visit}>
+              {(["physician", "patient"] as const).map((role) => {
+                const draft = role === "physician" ? physicianDraft : patientDraft;
+                const setDraft = role === "physician" ? setPhysicianDraft : setPatientDraft;
+                return (
+                  <label key={role} className={styles.field}>
+                    <span className={styles.fieldLabel}>{role === "physician" ? "Physician name" : "Patient name"}</span>
+                    <input
+                      type="text"
+                      data-testid={`name-${role}`}
+                      value={draft}
+                      maxLength={NAME_MAX}
+                      autoComplete="off"
+                      placeholder={role === "physician" ? "Dr. Thomas" : "Optional"}
+                      onChange={(e) => setDraft(e.target.value)}
+                      // Read the field itself: Enter can arrive before React re-renders with the last keystroke.
+                      onBlur={(e) => commitName(role, e.currentTarget.value)}
+                      onKeyDown={(e) => e.key === "Enter" && commitName(role, e.currentTarget.value)}
+                    />
+                  </label>
+                );
+              })}
+              <label className={styles.check}>
+                <input
+                  type="checkbox"
+                  data-testid="name-default"
+                  checked={isDefault}
+                  disabled={!isDefault && !tidy(physicianDraft)}
+                  onChange={(e) => toggleDefault(e.target.checked)}
+                />
+                <span>Use this physician name for every visit on this device</span>
+              </label>
+              {defaultName && !isDefault && (
+                <p className={styles.aside} data-testid="name-default-note">
+                  Saved default: {defaultName}
                 </p>
-                <p className={`${styles.line} ${unspoken ? styles.unspoken : ""}`} lang={t.targetLanguage}>
-                  {t.translation}
-                </p>
-                {t.status === "blocked" && (
-                  <>
-                    <ValuesTable turn={t} only="mismatched" />
-                    <p className={styles.instruction}>Ask the speaker to repeat or rephrase.</p>
-                  </>
-                )}
-                {t.status === "escalated" && (
-                  <p className={styles.instruction}>
-                    {outcome.escalation ? `Not spoken: ${REASON_TEXT[outcome.escalation]}. ` : "Not spoken. "}
-                    Offer a human interpreter.
+              )}
+            </div>
+            <div className={styles.intro} data-testid="introduction" data-state={introSkipped ? "skipped" : introduction}>
+              {introduction === "pending" && turns.length === 0 && (
+                <>
+                  <button
+                    className={styles.secondary}
+                    data-testid="intro-start"
+                    disabled={state !== "open"}
+                    onClick={() => send("visit.start_introduction", {})}
+                  >
+                    Start introduction
+                  </button>
+                  <p className={styles.aside}>The interpreter greets you both and asks for any name it does not know.</p>
+                </>
+              )}
+              {introduction === "done" && turns.length === 0 && (
+                <p className={styles.aside}>Introduction done. Every relay now uses these names.</p>
+              )}
+              {askingRole && !proposed && (
+                <>
+                  <p className={styles.introStatus}>
+                    Asking the {askingRole} for their name. Hold {askingRole === "physician" ? "1" : "2"} to answer, or
+                    type it above.
                   </p>
-                )}
-                <p className={styles.analysis}>
-                  Back: {t.backTranslation} · {t.emotion.replace("_", " ")} · certainty {t.certainty} · confidence{" "}
-                  {t.confidence.toFixed(2)} · attempts {t.attempts}
-                </p>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
+                  <button className={styles.quiet} data-testid="intro-skip" onClick={() => setIntroSkipped(true)}>
+                    Skip and start the visit
+                  </button>
+                </>
+              )}
+              {askingRole && proposed && (
+                <>
+                  <p className={styles.introStatus} data-testid="intro-proposed">
+                    Heard the {proposed.role}&rsquo;s name as <strong>{proposed.name}</strong>
+                  </p>
+                  <div className={styles.actions}>
+                    <button
+                      className={styles.primary}
+                      data-testid="intro-confirm"
+                      onClick={() => send("visit.name_confirm", { role: proposed.role })}
+                    >
+                      Use this name
+                    </button>
+                    <button
+                      className={styles.secondary}
+                      data-testid="intro-reject"
+                      onClick={() => {
+                        setProposed(null);
+                        send("visit.name_reject", { role: proposed.role });
+                      }}
+                    >
+                      Ask again
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
 
-      <section className={`${styles.section} ${styles.latency}`}>
-        <div>
-          <h2 className={styles.eyebrow}>Median end of speech to audio</h2>
-          <p className={styles.stat}>{medianMs === undefined ? "n/a" : `${(medianMs / 1000).toFixed(2)} s`}</p>
-          <p className={styles.aside}>
-            Over {measured.length} turn{measured.length === 1 ? "" : "s"}. Target under 3 s. Read-back decisions are
-            not counted.
-          </p>
-          <dl className={styles.breakdown} data-testid="latency-breakdown">
-            {breakdown.map(({ label, ms }) => (
-              <div key={label}>
-                <dt className={styles.eyebrow}>{label}</dt>
-                <dd>{ms === undefined ? "n/a" : `${(ms / 1000).toFixed(2)} s`}</dd>
+          <section className={styles.section}>
+            <h2 className={styles.eyebrow}>Speak</h2>
+            <div className={styles.talk}>
+              {(["physician", "patient"] as Speaker[]).map((speaker, i) => (
+                <button
+                  key={speaker}
+                  className={`${styles.talkButton} ${recording === speaker ? styles.recording : ""}`}
+                  onPointerDown={() => void pressTalk(speaker)}
+                  onPointerUp={() => void releaseTalk()}
+                  onPointerLeave={() => recording === speaker && void releaseTalk()}
+                >
+                  <span className={styles.eyebrow}>{recording === speaker ? "Listening" : `Hold or press ${i + 1}`}</span>
+                  <span className={styles.talkRole}>{speaker === "physician" ? "Physician" : "Patient"}</span>
+                  <span className={styles.talkLang}>{LANGUAGE_LABELS[languageOf(speaker)].own}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {readbackTurn && (
+            <section className={styles.readback} data-testid="readback" aria-live="assertive">
+              <h2 className={styles.eyebrow}>Read-back · check the values before they are spoken</h2>
+              <p className={styles.readbackLine} lang={readbackTurn.sourceLanguage}>
+                <Highlighted
+                  text={readbackTurn.sourceText}
+                  values={readbackTurn.criticalValues.map((v) => v.source)}
+                  className={styles.value}
+                />
+              </p>
+              <p className={styles.readbackLine} lang={readbackTurn.targetLanguage}>
+                <Highlighted
+                  text={readbackTurn.translation}
+                  values={readbackTurn.criticalValues.map((v) => v.translated)}
+                  className={styles.value}
+                />
+              </p>
+              <ValuesTable turn={readbackTurn} />
+              <div className={styles.actions}>
+                <button
+                  className={styles.primary}
+                  data-testid="readback-confirm"
+                  onClick={() => decideReadback(readbackTurn.turnId, true)}
+                >
+                  Confirm and speak
+                </button>
+                <button
+                  className={styles.secondary}
+                  data-testid="readback-reject"
+                  onClick={() => decideReadback(readbackTurn.turnId, false)}
+                >
+                  Reject and repeat
+                </button>
               </div>
-            ))}
-          </dl>
+            </section>
+          )}
+
+          {nudge && (
+            <section className={`${styles.section} ${styles.nudge}`} data-testid="nudge" aria-live="polite">
+              <div className={styles.nudgeHead}>
+                <h2 className={styles.eyebrow}>Empathy nudge · patient seems {nudge.emotion.replace("_", " ")}</h2>
+                <button className={styles.quiet} onClick={() => setDismissed((d) => new Set(d).add(nudge.turnId))}>
+                  Dismiss
+                </button>
+              </div>
+              <p className={styles.suggestion}>{nudge.suggestion}</p>
+              <blockquote lang={nudge.phraseLanguage}>{nudge.phrase}</blockquote>
+            </section>
+          )}
+
+          <section className={styles.section}>
+            <h2 className={styles.eyebrow}>Typed turn</h2>
+            <div className={styles.typed}>
+              <select
+                data-testid="typed-speaker"
+                value={typedSpeaker}
+                onChange={(e) => setTypedSpeaker(e.target.value as Speaker)}
+              >
+                <option value="physician">Physician (English)</option>
+                <option value="patient">Patient ({LANGUAGE_LABELS[patientLanguage].english})</option>
+              </select>
+              <textarea
+                data-testid="typed-text"
+                value={typedText}
+                onChange={(e) => setTypedText(e.target.value)}
+                rows={2}
+                placeholder="Type what was said"
+              />
+              <button className={styles.primary} data-testid="typed-send" onClick={sendTyped} disabled={state !== "open"}>
+                Send
+              </button>
+            </div>
+            {notice && (
+              <p className={styles.notice} role="status" data-testid="notice">
+                {notice}
+              </p>
+            )}
+          </section>
         </div>
-        <button className={styles.secondary} onClick={downloadCsv} disabled={!latency.length}>
-          Download CSV
-        </button>
-      </section>
+
+        <aside className={styles.panel} aria-label="Turn log and latency">
+          <section className={`${styles.section} ${styles.latency}`}>
+            <div>
+              <h2 className={styles.eyebrow}>Median end of speech to audio</h2>
+              <p className={styles.stat}>{medianMs === undefined ? "n/a" : `${(medianMs / 1000).toFixed(2)} s`}</p>
+              <p className={styles.aside}>
+                Over {measured.length} turn{measured.length === 1 ? "" : "s"}. Target under 3 s. Read-back decisions are
+                not counted.
+              </p>
+              <dl className={styles.breakdown} data-testid="latency-breakdown">
+                {breakdown.map(({ label, ms }) => (
+                  <div key={label}>
+                    <dt className={styles.eyebrow}>{label}</dt>
+                    <dd>{ms === undefined ? "n/a" : `${(ms / 1000).toFixed(2)} s`}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+            <button className={styles.secondary} onClick={downloadCsv} disabled={!latency.length}>
+              Download CSV
+            </button>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.eyebrow}>Turns · private to the physician</h2>
+            {turns.length === 0 && <p className={styles.aside}>Nothing said yet.</p>}
+            <ol className={styles.turns}>
+              {turns.map((t) => {
+                const outcome = outcomes[t.turnId] ?? {};
+                const unspoken =
+                  t.status === "blocked" || t.status === "escalated" || outcome.discarded || outcome.voiceFailed;
+                return (
+                  <li key={t.turnId} data-testid="turn" data-status={t.status}>
+                    <div className={styles.turnHead}>
+                      <span className={`${styles.speaker} ${styles[t.speaker]}`}>{t.speaker}</span>
+                      <span className={`${styles.tag} ${unspoken ? styles.stop : ""}`}>
+                        {statusText(t, outcome, t.turnId === pendingReadback)}
+                      </span>
+                      {!unspoken && <span className={styles.tag}>{toneLabel(t)}</span>}
+                    </div>
+                    <p className={styles.line} lang={t.sourceLanguage}>
+                      {t.sourceText}
+                    </p>
+                    <p className={`${styles.line} ${unspoken ? styles.unspoken : ""}`} lang={t.targetLanguage}>
+                      {t.translation}
+                    </p>
+                    {t.status === "blocked" && (
+                      <>
+                        <ValuesTable turn={t} only="mismatched" />
+                        <p className={styles.instruction}>Ask the speaker to repeat or rephrase.</p>
+                      </>
+                    )}
+                    {t.status === "escalated" && (
+                      <p className={styles.instruction}>
+                        {outcome.escalation ? `Not spoken: ${REASON_TEXT[outcome.escalation]}. ` : "Not spoken. "}
+                        Offer a human interpreter.
+                      </p>
+                    )}
+                    <p className={styles.analysis}>
+                      Back: {t.backTranslation} · {t.emotion.replace("_", " ")} · certainty {t.certainty} · confidence{" "}
+                      {t.confidence.toFixed(2)} · attempts {t.attempts}
+                    </p>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        </aside>
+      </div>
     </main>
   );
 }

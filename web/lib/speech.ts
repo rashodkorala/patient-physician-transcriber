@@ -1,12 +1,15 @@
 "use client";
 
 /**
- * Push-to-talk recognition and spoken translations with Azure Speech.
- * The key stays on the server; the browser uses short-lived tokens.
+ * Push-to-talk recognition with Azure Speech, and the interpreter's voice.
+ * The voice is the server's (ElevenLabs), asked for by turn or line id so the server decides what
+ * may be spoken; Azure speaks only when the server has no voice for that language or its vendor fails.
+ * Keys stay on the server; the browser uses short-lived Azure tokens.
  *
  * @implements ADR-005: Speech: Azure Speech primary, Google Speech backup
+ * @implements ADR-010: Voice output: ElevenLabs Eleven v4 replaces OpenAI text-to-speech; Azure stays fallback
  * @implements IDR-001: Push-to-talk per speaker instead of diarisation
- * @see openspec/tdr/adr/adr-005-speech-provider.md
+ * @see openspec/tdr/adr/adr-010-elevenlabs-voice-output.md
  */
 
 import type { Language } from "./contracts";
@@ -109,8 +112,81 @@ export async function warmUp(languages: Language[]): Promise<void> {
   await Promise.all([...new Set(languages)].map((language) => synthesizerFor(language).catch(() => undefined)));
 }
 
-/** Speaks a translation; resolves with the time audio started, for latency logging (task 1.7). */
-export async function speak(text: string, language: Language): Promise<{ startedAt: number }> {
+/**
+ * Speaks checked text, a turn's translation or an interpreter line, by its id.
+ * Resolves with the time audio started, for latency logging (task 1.7).
+ */
+export function speak(text: string, language: Language, speechId: string): Promise<{ startedAt: number }> {
+  const audio = serverSpeech(speechId, language); // fetched now, while anything before it still plays
+  const next = queue.then(async () => {
+    const response = await audio;
+    return response ? playStream(response) : speakWithAzure(text, language);
+  });
+  queue = next.catch(() => undefined);
+  return next;
+}
+
+// One voice at a time, in the order asked for, whichever voice says it.
+let queue: Promise<unknown> = Promise.resolve();
+
+/** The server's audio, or null when Azure should speak instead. */
+async function serverSpeech(speechId: string, language: Language): Promise<Response | null> {
+  let response: Response;
+  try {
+    const query = new URLSearchParams({ language });
+    response = await fetch(`${serverHttpUrl()}/api/speech/${encodeURIComponent(speechId)}?${query}`);
+  } catch {
+    return null; // server unreachable for audio: the turn already passed its checks, so Azure says it
+  }
+  if (response.ok) return response;
+  // 404 is the server refusing: this was never cleared to speak, so no voice may say it.
+  if (response.status === 404) throw new SpeechUnavailable("the server did not clear this to be spoken");
+  return null; // 503: no server voice for this language, or the vendor failed before any audio
+}
+
+async function playStream(response: Response): Promise<{ startedAt: number }> {
+  const streams = response.body && typeof MediaSource !== "undefined" && MediaSource.isTypeSupported("audio/mpeg");
+  const url = streams ? streamUrl(response.body!) : URL.createObjectURL(await response.blob());
+  const audio = new Audio(url);
+  try {
+    return await new Promise((resolve, reject) => {
+      let startedAt = 0;
+      audio.onplaying = () => (startedAt ||= Date.now());
+      audio.onended = () => resolve({ startedAt: startedAt || Date.now() });
+      audio.onerror = () => reject(new SpeechUnavailable("the voice could not be played"));
+      audio.play().catch((error: Error) => reject(new SpeechUnavailable(error.message)));
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** Feeds audio to the element as it arrives, so speech starts before synthesis finishes. */
+function streamUrl(body: ReadableStream<Uint8Array<ArrayBuffer>>): string {
+  const source = new MediaSource();
+  source.addEventListener(
+    "sourceopen",
+    async () => {
+      const buffer = source.addSourceBuffer("audio/mpeg");
+      const reader = body.getReader();
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer.appendBuffer(value);
+          await new Promise((resolve) => buffer.addEventListener("updateend", resolve, { once: true }));
+        }
+        source.endOfStream();
+      } catch {
+        if (source.readyState === "open") source.endOfStream("network");
+      }
+    },
+    { once: true },
+  );
+  return URL.createObjectURL(source);
+}
+
+async function speakWithAzure(text: string, language: Language): Promise<{ startedAt: number }> {
   const sdk = await loadSdk();
   let synthesizer: Synthesizer;
   try {

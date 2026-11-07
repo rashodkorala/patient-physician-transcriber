@@ -7,6 +7,13 @@ import "@fontsource/newsreader/400-italic.css";
 import "@fontsource/noto-sans-gurmukhi/300.css";
 import "@fontsource/noto-sans-gurmukhi/400.css";
 import "@fontsource/noto-sans-gurmukhi/500.css";
+// TDM-003 test languages.
+import "@fontsource/noto-sans-sinhala/300.css";
+import "@fontsource/noto-sans-sinhala/400.css";
+import "@fontsource/noto-sans-sinhala/500.css";
+import "@fontsource/noto-sans-tamil/300.css";
+import "@fontsource/noto-sans-tamil/400.css";
+import "@fontsource/noto-sans-tamil/500.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

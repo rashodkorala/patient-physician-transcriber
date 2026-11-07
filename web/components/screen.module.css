@@ -49,6 +49,18 @@
   content: ""; width: 0.6em; height: 0.6em; border-radius: 50%; border: 1.5px solid currentColor;
 }
 .physician::before { background: currentColor; }
+/* A name is read as a name: normal case, and cut short rather than pushing the language off the line. */
+.name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--sans); font-weight: 400; letter-spacing: 0;
+}
+.speaker, .lang { flex: none; }
+/* The interpreter's own words: serif italic, so they never read as something the physician or patient said. */
+.interpreter .text { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--text); }
+.interpreter .speaker::before { border-style: dashed; }
+/* A line spoken in one language only (a question for one person) spans the row instead of leaving half empty. */
+.interpreter .side:only-child { grid-column: 1 / -1; padding-right: 0; }
+.interpreter .side:only-child .text { max-width: 32em; }
 .lang { font-family: var(--serif); font-style: italic; color: var(--muted); font-size: clamp(16px, 1.2vw, 24px); }
 .tag {
   padding: 0.45em 0.6em; border: 1px solid var(--line); border-radius: 4px; color: var(--muted);

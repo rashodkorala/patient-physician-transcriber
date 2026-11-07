@@ -1,0 +1,15 @@
+# Sinhala empathy phrases used as tone guidance when translating into Sinhala. Drafts: Sinhala speaker to review.
+reviewer: pending
+entries:
+  - intent: acknowledgement
+    emotions: [worried]
+    phrase: ඔබට කනස්සල්ලක් ඇති බව මට තේරෙනවා, එය සම්පූර්ණයෙන්ම සාමාන්‍ය දෙයක්.
+  - intent: reassurance
+    emotions: [worried, confused]
+    phrase: අපි මෙය කලින්ම හඳුනාගත්තා, අපට කළ හැකි දේවල් බොහොමයක් තියෙනවා.
+  - intent: acknowledgement
+    emotions: [embarrassed]
+    phrase: මට කිව්වාට ස්තූතියි. එයින් ඔබට හොඳින් ප්‍රතිකාර කරන්න උදව් වෙනවා.
+  - intent: acknowledgement
+    emotions: [in_pain]
+    phrase: ඔබට වේදනාවක් තිබීම ගැන මට කනගාටුයි.

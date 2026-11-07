@@ -1,0 +1,12 @@
+# The interpreter's own lines in Punjabi. Draft by Claude: Punjabi speaker to review.
+# First-person verbs are gendered in Punjabi, so these use forms that avoid the interpreter's gender
+# (a passive "will be told" instead of ਦੱਸਾਂਗਾ or ਦੱਸਾਂਗੀ). Check they still sound natural, and that
+# ਦੁਭਾਸ਼ੀਆ suits the voice chosen in the listening test.
+reviewer: pending
+lines:
+  introduction: ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਜੀ। ਮੈਂ ਇਸ ਮੁਲਾਕਾਤ ਲਈ ਦੁਭਾਸ਼ੀਆ ਹਾਂ। ਤੁਸੀਂ ਦੋਵੇਂ ਜੋ ਵੀ ਕਹੋਗੇ, ਉਹ ਤੁਹਾਡੀ ਆਪਣੀ ਬੋਲੀ ਵਿੱਚ ਦੱਸਿਆ ਜਾਵੇਗਾ।
+  ask_physician_name: ਡਾਕਟਰ ਜੀ, ਮੈਂ ਤੁਹਾਨੂੰ ਕਿਸ ਨਾਮ ਨਾਲ ਬੁਲਾਵਾਂ?
+  ask_patient_name: ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਨਾਮ ਦੱਸੋ ਜੀ।
+  ask_patient_name_with_physician: ਅੱਜ {physician} ਤੁਹਾਡੇ ਡਾਕਟਰ ਹਨ। ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਨਾਮ ਦੱਸੋ ਜੀ।
+  welcome: ਧੰਨਵਾਦ ਜੀ। ਜਦੋਂ ਤੁਸੀਂ ਤਿਆਰ ਹੋਵੋ, ਗੱਲ ਸ਼ੁਰੂ ਕਰ ਸਕਦੇ ਹੋ।
+  welcome_with_patient: ਧੰਨਵਾਦ {patient} ਜੀ। ਜਦੋਂ ਤੁਸੀਂ ਤਿਆਰ ਹੋਵੋ, ਗੱਲ ਸ਼ੁਰੂ ਕਰ ਸਕਦੇ ਹੋ।

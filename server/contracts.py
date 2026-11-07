@@ -2,20 +2,25 @@
 
 @implements CDR-001: Visit WebSocket event contract
 @implements CDR-002: Turn result schema
+@implements CDR-003: Participant names and interpreter lines on the visit channel
 @contract ws:/ws/visit
 @contract TurnResult
 @contract TurnCaption
 @see openspec/tdr/cdr/cdr-001-visit-websocket-events.md
 @see openspec/tdr/cdr/cdr-002-turn-result-schema.md
+@see openspec/tdr/cdr/cdr-003-names-and-interpreter-lines.md
 """
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic.alias_generators import to_camel
 
-Language = Literal["pa-IN", "fr-CA", "en-CA"]
-PatientLanguage = Literal["pa-IN", "fr-CA"]
+Language = Literal["pa-IN", "fr-CA", "en-CA", "si-LK", "ta-LK"]
+PatientLanguage = Literal["pa-IN", "fr-CA", "si-LK", "ta-LK"]
+# TDM-003: patient languages the server accepts only in test mode, never on stage.
+# Selectable only in test mode (TDM-003). Tamil left test mode on 6 November 2026 (TDM-004).
+TEST_LANGUAGES: tuple[PatientLanguage, ...] = ("si-LK",)
 Speaker = Literal["patient", "physician", "companion"]
 ToneTag = Literal["reassuring", "respectful", "empathetic", "neutral", "urgent", "uncertain"]
 ToneLabel = Literal["respectful", "reassuring", "empathetic", "neutral"]
@@ -25,6 +30,10 @@ CriticalKind = Literal["dose", "unit", "frequency", "date", "number", "medicatio
 TurnStatusValue = Literal["final", "readback_required", "blocked", "escalated"]
 CaptionStatus = Literal["final", "blocked", "escalated"]
 Role = Literal["controller", "screen", "review"]
+IntroductionState = Literal["pending", "asking_physician", "asking_patient", "done", "skipped"]
+NameRole = Literal["physician", "patient"]
+LinePurpose = Literal["introduction", "ask_physician_name", "ask_patient_name", "welcome"]
+NAME_MAX = 60
 
 TONE_LABELS: tuple[ToneLabel, ...] = ("respectful", "reassuring", "empathetic", "neutral")
 
@@ -200,6 +209,10 @@ class VisitStateController(Wire):
     pending_readback: str | None = None
     nudges: list[EmpathyNudge]
     integrity: RecordIntegrity
+    # CDR-003: optional, so a client built before names ignores them.
+    physician_name: str | None = None
+    patient_name: str | None = None
+    introduction: IntroductionState = "pending"
 
 
 class VisitStatePublic(Wire):
@@ -210,6 +223,10 @@ class VisitStatePublic(Wire):
     turns: list[TurnCaption]
     current_turn: CurrentTurnPublic | None = None
     integrity: RecordIntegrity
+    # CDR-003: optional, so a client built before names ignores them.
+    physician_name: str | None = None
+    patient_name: str | None = None
+    introduction: IntroductionState = "pending"
 
 
 # ---------- CDR-001 commands ----------
@@ -218,6 +235,66 @@ class VisitStatePublic(Wire):
 class SetLanguages(Wire):
     patient_language: PatientLanguage
     physician_language: Literal["en-CA"]
+
+
+def clean_name(value: str | None) -> str | None:
+    """Trimmed, at most NAME_MAX characters, no digits; blank clears the name (CDR-003).
+
+    Digits are refused so a name can never add a number the critical value check would see.
+    """
+    if value is None:
+        return None
+    name = " ".join(value.split())
+    if not name:
+        return None
+    if len(name) > NAME_MAX:
+        raise ValueError(f"a name is at most {NAME_MAX} characters")
+    if any(c.isdigit() for c in name):
+        raise ValueError("a name cannot contain digits")
+    return name
+
+
+class Names(Wire):
+    """visit.names, and visit.set_names: a field left out of set_names keeps its current name."""
+
+    physician_name: str | None = None
+    patient_name: str | None = None
+
+    @field_validator("physician_name", "patient_name")
+    @classmethod
+    def _clean(cls, value: str | None) -> str | None:
+        return clean_name(value)
+
+
+class LineText(Wire):
+    language: Language
+    text: str
+
+
+class InterpreterLine(Wire):
+    """interpreter.line: something the interpreter says itself, in each language it is spoken in (CDR-003)."""
+
+    line_id: str
+    purpose: LinePurpose
+    lines: list[LineText]
+
+
+class NameProposed(Wire):
+    """visit.name_proposed, controller only: a name heard in a reply, waiting for confirmation."""
+
+    role: NameRole
+    name: str
+
+
+class NameReply(Wire):
+    role: NameRole
+    text: str
+
+
+class NameRef(Wire):
+    """Payload of visit.name_confirm and visit.name_reject."""
+
+    role: NameRole
 
 
 class TurnSubmit(Wire):
@@ -248,13 +325,25 @@ class Envelope(Wire):
 
 # Events the server never sends to screen or review connections (CDR-001).
 CONTROLLER_ONLY_EVENTS = frozenset(
-    {"turn.analysis", "turn.readback_required", "empathy.nudge", "demo.injection_state", "error"}
+    {
+        "turn.analysis",
+        "turn.readback_required",
+        "empathy.nudge",
+        "demo.injection_state",
+        "visit.name_proposed",
+        "error",
+    }
 )
 
 # Commands only the controller may send (CDR-001).
 CONTROLLER_COMMANDS = frozenset(
     {
         "visit.set_languages",
+        "visit.set_names",
+        "visit.start_introduction",
+        "visit.name_reply",
+        "visit.name_confirm",
+        "visit.name_reject",
         "turn.submit",
         "turn.readback_confirm",
         "turn.readback_reject",

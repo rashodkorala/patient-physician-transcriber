@@ -3,15 +3,17 @@
  *
  * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-002: Turn result schema
+ * @implements CDR-003: Participant names and interpreter lines on the visit channel
  * @contract ws:/ws/visit
  * @contract TurnResult
  * @contract TurnCaption
  * @see openspec/tdr/cdr/cdr-001-visit-websocket-events.md
  * @see openspec/tdr/cdr/cdr-002-turn-result-schema.md
+ * @see openspec/tdr/cdr/cdr-003-names-and-interpreter-lines.md
  */
 
-export type Language = "pa-IN" | "fr-CA" | "en-CA";
-export type PatientLanguage = "pa-IN" | "fr-CA";
+export type Language = "pa-IN" | "fr-CA" | "en-CA" | "si-LK" | "ta-LK";
+export type PatientLanguage = "pa-IN" | "fr-CA" | "si-LK" | "ta-LK";
 export type Speaker = "patient" | "physician" | "companion";
 export type ToneTag = "reassuring" | "respectful" | "empathetic" | "neutral" | "urgent" | "uncertain";
 export type ToneLabel = "respectful" | "reassuring" | "empathetic" | "neutral";
@@ -21,6 +23,9 @@ export type CriticalKind = "dose" | "unit" | "frequency" | "date" | "number" | "
 export type TurnStatusValue = "final" | "readback_required" | "blocked" | "escalated";
 export type CaptionStatus = "final" | "blocked" | "escalated";
 export type Role = "controller" | "screen" | "review";
+export type IntroductionState = "pending" | "asking_physician" | "asking_patient" | "done" | "skipped";
+export type NameRole = "physician" | "patient";
+export type LinePurpose = "introduction" | "ask_physician_name" | "ask_patient_name" | "welcome";
 
 export interface GlossaryEntry {
   term: string;
@@ -93,6 +98,10 @@ export interface VisitStateController {
   pendingReadback?: string | null;
   nudges: EmpathyNudge[];
   integrity: RecordIntegrity;
+  // CDR-003: optional, so a server built before names still satisfies this type.
+  physicianName?: string | null;
+  patientName?: string | null;
+  introduction?: IntroductionState;
 }
 
 export interface VisitStatePublic {
@@ -103,6 +112,10 @@ export interface VisitStatePublic {
   turns: TurnCaption[];
   currentTurn?: { turnId: string; speaker: Speaker; sourceText: string; stage: string } | null;
   integrity: RecordIntegrity;
+  // CDR-003: optional, so a server built before names still satisfies this type.
+  physicianName?: string | null;
+  patientName?: string | null;
+  introduction?: IntroductionState;
 }
 
 export interface TurnStarted {
@@ -144,6 +157,37 @@ export interface Envelope<P = unknown> {
 export interface SetLanguages {
   patientLanguage: PatientLanguage;
   physicianLanguage: "en-CA";
+}
+
+/** visit.names; as visit.set_names a field left out keeps its name and "" or null clears it. */
+export interface Names {
+  physicianName?: string | null;
+  patientName?: string | null;
+}
+
+export const NAME_MAX = 60;
+
+/** interpreter.line: something the interpreter says itself, in each language it is spoken in. */
+export interface InterpreterLine {
+  lineId: string;
+  purpose: LinePurpose;
+  lines: { language: Language; text: string }[];
+}
+
+/** visit.name_proposed, controller only: a name heard in a reply, waiting for confirmation. */
+export interface NameProposed {
+  role: NameRole;
+  name: string;
+}
+
+export interface NameReply {
+  role: NameRole;
+  text: string;
+}
+
+/** visit.name_confirm and visit.name_reject. */
+export interface NameRef {
+  role: NameRole;
 }
 
 export interface TurnSubmit {

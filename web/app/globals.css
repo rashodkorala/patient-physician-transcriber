@@ -14,8 +14,8 @@
   --signal: #a4372a;
   --chip-bg: var(--ink);
   --chip-text: var(--creme);
-  --sans: "Inter Tight", "Noto Sans Gurmukhi", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --serif: "Newsreader", "Noto Sans Gurmukhi", Georgia, "Times New Roman", serif;
+  --sans: "Inter Tight", "Noto Sans Gurmukhi", "Noto Sans Sinhala", "Noto Sans Tamil", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Newsreader", "Noto Sans Gurmukhi", "Noto Sans Sinhala", "Noto Sans Tamil", Georgia, "Times New Roman", serif;
   color-scheme: light;
 }
 

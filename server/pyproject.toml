@@ -13,6 +13,7 @@ dependencies = [
     "chromadb>=1.0",
     "pyyaml>=6",
     "rapidfuzz>=3",
+    "elevenlabs>=2.75.0",
 ]
 
 [dependency-groups]

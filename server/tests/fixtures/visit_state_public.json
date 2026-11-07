@@ -5,5 +5,8 @@
   "paused": false,
   "turns": [],
   "currentTurn": {"turnId": "t4", "speaker": "physician", "sourceText": "Hello", "stage": "translating"},
-  "integrity": {"status": "verified", "headHash": "", "brokenAt": null}
+  "integrity": {"status": "verified", "headHash": "", "brokenAt": null},
+  "physicianName": "Dr. Thomas",
+  "patientName": null,
+  "introduction": "asking_patient"
 }

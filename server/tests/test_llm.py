@@ -53,7 +53,7 @@ def test_refusal_raises_so_nothing_is_spoken():
 
 
 def test_tone_check_runs_on_haiku_without_the_fallback_beta_adr_006():
-    tone = ToneCheck(certainty_preserved=True, warmth_preserved=True, issue="")
+    tone = ToneCheck(meaning_preserved=True, certainty_preserved=True, warmth_preserved=True, issue="")
     plain = FakeMessages(SimpleNamespace(stop_reason="end_turn", parsed_output=tone))
     beta = FakeMessages(None)
     client = SimpleNamespace(messages=plain, beta=SimpleNamespace(messages=beta))

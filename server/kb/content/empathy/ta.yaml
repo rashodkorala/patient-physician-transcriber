@@ -1,0 +1,15 @@
+# Tamil empathy phrases (Sri Lankan Tamil) used as tone guidance. Drafts: Tamil speaker to review.
+reviewer: pending
+entries:
+  - intent: acknowledgement
+    emotions: [worried]
+    phrase: நீங்கள் கவலையாக இருப்பது எனக்குப் புரிகிறது, அது முற்றிலும் இயல்பானது.
+  - intent: reassurance
+    emotions: [worried, confused]
+    phrase: இதை நாங்கள் நேரத்துக்கே கண்டுபிடித்துவிட்டோம், எங்களால் நிறையச் செய்ய முடியும்.
+  - intent: acknowledgement
+    emotions: [embarrassed]
+    phrase: சொன்னதற்கு நன்றி. இது உங்களுக்குச் சரியான சிகிச்சை அளிக்க உதவுகிறது.
+  - intent: acknowledgement
+    emotions: [in_pain]
+    phrase: உங்களுக்கு வலி இருப்பதற்கு வருந்துகிறேன்.

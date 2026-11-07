@@ -7,10 +7,18 @@ import type { Language } from "./contracts";
 import en from "@/i18n/en.json";
 import fr from "@/i18n/fr.json";
 import pa from "@/i18n/pa.json";
+import si from "@/i18n/si.json";
+import ta from "@/i18n/ta.json";
 
 export type NoticeKey = "checkingDose" | "pleaseRepeat" | "interpreterOffered" | "ready";
 
-const NOTICES: Record<Language, Record<NoticeKey, string>> = { "en-CA": en, "fr-CA": fr, "pa-IN": pa };
+const NOTICES: Record<Language, Record<NoticeKey, string>> = {
+  "en-CA": en,
+  "fr-CA": fr,
+  "pa-IN": pa,
+  "si-LK": si,
+  "ta-LK": ta,
+};
 
 /** The notice in each of the turn's two languages, the speaker's first. */
 export function bilingual(key: NoticeKey, first: Language, second: Language): { lang: Language; text: string }[] {

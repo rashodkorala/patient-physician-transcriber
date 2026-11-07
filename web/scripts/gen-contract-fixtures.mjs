@@ -1,5 +1,5 @@
 // Turns the server's contract fixtures into TypeScript that must satisfy lib/contracts.ts,
-// so `npm run check:contracts` fails if the two sides drift (CDR-001, CDR-002).
+// so `npm run check:contracts` fails if the two sides drift (CDR-001, CDR-002, CDR-003).
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,9 @@ const entries = [
   ["empathyNudge", "empathy_nudge.json", "EmpathyNudge"],
   ["interpreterEscalation", "interpreter_escalation.json", "InterpreterEscalation"],
   ["turnRef", "turn_ref.json", "TurnRef"],
+  ["visitNames", "visit_names.json", "Names"],
+  ["interpreterLine", "interpreter_line.json", "InterpreterLine"],
+  ["nameProposed", "name_proposed.json", "NameProposed"],
 ];
 
 const body = entries

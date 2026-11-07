@@ -5,13 +5,16 @@
  *
  * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-002: Turn result schema
+ * @implements CDR-003: Participant names and interpreter lines on the visit channel
  * @contract TurnCaption
  */
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type {
   Envelope,
+  InterpreterLine,
   Language,
+  Names,
   Speaker,
   TurnCaption,
   TurnStarted,
@@ -48,12 +51,27 @@ function Notice({ notice, first, second }: { notice: NoticeKey; first: Language;
   );
 }
 
-/** The original, with the speaker label above it. */
-function Original({ speaker, language, children }: { speaker: Speaker; language?: Language; children: ReactNode }) {
+/** The original, with the speaker label, and their name when known, above it. */
+function Original({
+  speaker,
+  name,
+  language,
+  children,
+}: {
+  speaker: Speaker;
+  name?: string | null;
+  language?: Language;
+  children: ReactNode;
+}) {
   return (
     <div className={styles.side} lang={language}>
       <div className={styles.meta}>
         <span className={`${styles.speaker} ${styles[speaker]}`}>{SPEAKER_LABEL[speaker]}</span>
+        {name && (
+          <span className={styles.name} data-testid="speaker-name">
+            {name}
+          </span>
+        )}
         {language && <span className={styles.lang}>{LANGUAGE_LABELS[language].own}</span>}
       </div>
       {children}
@@ -65,11 +83,38 @@ function NotSpoken() {
   return <span className={`${styles.tag} ${styles.stop}`}>Not spoken</span>;
 }
 
-function Caption({ c }: { c: TurnCaption }) {
+/** The interpreter speaking for itself: the introduction and its questions, in each language spoken. */
+function Line({ line }: { line: InterpreterLine }) {
+  return (
+    <article
+      className={`${styles.turn} ${styles.interpreter}`}
+      data-testid="interpreter-line"
+      data-purpose={line.purpose}
+    >
+      {line.lines.map(({ language, text }) => (
+        <div key={language} className={styles.side} lang={language}>
+          <div className={styles.meta}>
+            <span className={styles.speaker}>Interpreter</span>
+            <span className={styles.lang}>{LANGUAGE_LABELS[language].own}</span>
+          </div>
+          <p className={styles.text}>{text}</p>
+        </div>
+      ))}
+    </article>
+  );
+}
+
+function nameOf(speaker: Speaker, names: Names): string | null {
+  if (speaker === "physician") return names.physicianName ?? null;
+  if (speaker === "patient") return names.patientName ?? null;
+  return null;
+}
+
+function Caption({ c, names }: { c: TurnCaption; names: Names }) {
   const spoken = c.status === "final" && c.translation !== null;
   return (
     <article className={styles.turn} data-testid="caption" data-turn-id={c.turnId} data-status={c.status}>
-      <Original speaker={c.speaker} language={c.sourceLanguage}>
+      <Original speaker={c.speaker} name={nameOf(c.speaker, names)} language={c.sourceLanguage}>
         <p className={styles.text}>
           <Highlighted text={c.sourceText} values={c.criticalValues.map((v) => v.source)} className={styles.value} />
         </p>
@@ -116,7 +161,7 @@ function Caption({ c }: { c: TurnCaption }) {
   );
 }
 
-function PendingTurn({ p, other }: { p: Pending; other: (lang: Language) => Language }) {
+function PendingTurn({ p, names, other }: { p: Pending; names: Names; other: (lang: Language) => Language }) {
   const source = p.language;
   const notice: NoticeKey | null =
     p.stage === "awaiting_readback"
@@ -126,7 +171,7 @@ function PendingTurn({ p, other }: { p: Pending; other: (lang: Language) => Lang
         : null;
   return (
     <article className={`${styles.turn} ${styles.pending}`} data-testid="pending" data-stage={p.stage}>
-      <Original speaker={p.speaker} language={source}>
+      <Original speaker={p.speaker} name={nameOf(p.speaker, names)} language={source}>
         {p.sourceText ? (
           <p className={styles.text}>{p.sourceText}</p>
         ) : (
@@ -153,6 +198,9 @@ export default function SharedScreen() {
     patient: "pa-IN",
     physician: "en-CA",
   });
+  const [names, setNames] = useState<Names>({ physicianName: null, patientName: null });
+  // Only lines heard live: the introduction comes before any turn, and a reconnecting screen skips it.
+  const [lines, setLines] = useState<InterpreterLine[]>([]);
   const bottom = useRef<HTMLDivElement | null>(null);
 
   const onEvent = useCallback((event: Envelope) => {
@@ -161,6 +209,7 @@ export default function SharedScreen() {
         const state = event.payload as VisitStatePublic;
         setLanguages({ patient: state.patientLanguage, physician: state.physicianLanguage });
         setCaptions(state.turns);
+        setNames({ physicianName: state.physicianName ?? null, patientName: state.patientName ?? null });
         const current = state.currentTurn;
         setPending(
           current
@@ -182,6 +231,16 @@ export default function SharedScreen() {
         setPending((p) => (p && p.turnId === status.turnId ? { ...p, stage: status.stage } : p));
         break;
       }
+      case "visit.names":
+        setNames(event.payload as Names);
+        break;
+      case "interpreter.line":
+        // Asking again replaces the question rather than stacking a copy of it.
+        setLines((prev) => {
+          const line = event.payload as InterpreterLine;
+          return [...prev.filter((l) => l.purpose !== line.purpose), line];
+        });
+        break;
       case "turn.result": {
         const caption = event.payload as TurnCaption;
         setCaptions((prev) => [...prev.filter((c) => c.turnId !== caption.turnId), caption]);
@@ -194,7 +253,10 @@ export default function SharedScreen() {
   const { state } = useVisitSocket("screen", onEvent);
   const other = (lang: Language) => (lang === languages.physician ? languages.patient : languages.physician);
 
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [captions, pending]);
+  // A block body: newer browsers return a Promise from scrollIntoView, which React would call as a cleanup.
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: "smooth" });
+  }, [captions, pending, lines]);
 
   return (
     <main className={styles.screen}>
@@ -208,11 +270,12 @@ export default function SharedScreen() {
         </span>
       </header>
       <div>
+        {captions.length === 0 && lines.slice(-3).map((line) => <Line key={line.lineId} line={line} />)}
         {captions.slice(-6).map((c) => (
-          <Caption key={c.turnId} c={c} />
+          <Caption key={c.turnId} c={c} names={names} />
         ))}
-        {pending && <PendingTurn p={pending} other={other} />}
-        {!pending && captions.length === 0 && (
+        {pending && <PendingTurn p={pending} names={names} other={other} />}
+        {!pending && captions.length === 0 && lines.length === 0 && (
           <div className={styles.ready} data-testid="ready">
             {bilingual("ready", languages.patient, languages.physician).map(({ lang, text }) => (
               <p key={lang} lang={lang}>

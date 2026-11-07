@@ -1,0 +1,39 @@
+# English to Sinhala medical glossary (ADR-002, TDM-003 test language). Drafts: Sinhala speaker to review.
+reviewer: pending
+entries:
+  - en: high blood pressure
+    aliases_en: [hypertension, raised blood pressure]
+    target: අධික රුධිර පීඩනය
+    aliases_target: [අධි රුධිර පීඩනය]
+    explanation_en: Blood pushing too hard against the artery walls; often no symptoms, but it can harm the heart and kidneys.
+    explanation_target: ධමනි බිත්ති මත රුධිරය වැඩියෙන් තද වීම. බොහෝ විට රෝග ලක්ෂණ නැති නමුත් හදවතට සහ වකුගඩුවලට හානි කළ හැකියි.
+  - en: amlodipine
+    aliases_en: []
+    target: ඇම්ලොඩිපීන්
+    aliases_target: []
+    explanation_en: A medicine that relaxes blood vessels to lower blood pressure.
+    explanation_target: රුධිර නාල ලිහිල් කර රුධිර පීඩනය අඩු කරන බෙහෙතක්.
+  - en: blood pressure reading
+    aliases_en: [blood pressure readings, home blood pressure]
+    target: රුධිර පීඩන මිනුම
+    aliases_target: [රුධිර පීඩන මිනුම්]
+    explanation_en: A measurement of blood pressure, written as two numbers.
+    explanation_target: අංක දෙකකින් ලියන රුධිර පීඩනයේ මිනුමක්.
+  - en: ECG
+    aliases_en: [electrocardiogram, EKG]
+    target: ඊසීජී (හෘද විද්‍යුත් පරීක්ෂණය)
+    aliases_target: [ඊසීජී]
+    explanation_en: A painless test that records the heart's electrical activity.
+    explanation_target: හදවතේ විදුලි ක්‍රියාකාරිත්වය සටහන් කරන වේදනා රහිත පරීක්ෂණයක්.
+  - en: chest discomfort
+    aliases_en: [chest pain, chest pressure]
+    target: පපුවේ අපහසුතාව
+    aliases_target: [පපුවේ වේදනාව]
+    explanation_en: Pain, pressure, or tightness in the chest.
+    explanation_target: පපුවේ වේදනාවක්, තද ගතියක් හෝ හිරවීමක්.
+  - en: heart attack
+    aliases_en: [myocardial infarction]
+    target: හෘදයාබාධය
+    aliases_target: [හෘදයාබාධයක්]
+    explanation_en: Damage to the heart muscle when its blood supply is suddenly blocked.
+    explanation_target: හදවතට රුධිරය සැපයීම හදිසියේ නැවතුණු විට හදවතට සිදුවන හානියක්.

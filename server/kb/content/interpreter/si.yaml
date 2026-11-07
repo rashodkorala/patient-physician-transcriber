@@ -1,0 +1,9 @@
+# The interpreter's own lines in Sinhala (TDM-003 test language). Draft by Claude: Sinhala speaker to review.
+reviewer: pending
+lines:
+  introduction: ආයුබෝවන්. මම මෙම හමුවේ භාෂා පරිවර්තකයා. ඔබ දෙදෙනාම කියන සෑම දෙයක්ම ඔබේම භාෂාවෙන් මම කියා දෙන්නම්.
+  ask_physician_name: වෛද්‍යතුමනි, මම ඔබව කුමන නමකින් හඳුන්වන්නද?
+  ask_patient_name: කරුණාකර ඔබේ නම කියන්න.
+  ask_patient_name_with_physician: අද ඔබේ වෛද්‍යවරයා {physician}. කරුණාකර ඔබේ නම කියන්න.
+  welcome: ස්තූතියි. ඔබ සූදානම් වූ විට කතා කරන්න පුළුවන්.
+  welcome_with_patient: ස්තූතියි {patient}. ඔබ සූදානම් වූ විට කතා කරන්න පුළුවන්.

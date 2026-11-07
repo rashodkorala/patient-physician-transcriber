@@ -9,3 +9,4 @@ Task 2.1 is complete only when every file names a reviewer.
 - `tone/<lang>.md`: register, forms of address, delivering news, sensitive topics, and idioms to avoid; one `##` section per retrievable chunk.
 - `empathy/<lang>.yaml`: checked phrases for reassurance, acknowledgement, apology, and encouragement.
 - `conditions/<condition>.md`: plain-language condition explainers, one `## <language code>` section per language.
+- `interpreter/<lang>.yaml`: the interpreter's own fixed lines for the visit introduction (MDD-004); spoken as written, never retrieved or rewritten by a model.

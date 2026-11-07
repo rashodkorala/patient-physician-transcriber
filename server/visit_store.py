@@ -2,6 +2,7 @@
 
 @implements ADR-007: In-memory visit state with WebSocket updates; no database for the demo
 @implements CDR-001: Visit WebSocket event contract
+@implements CDR-003: Participant names and interpreter lines on the visit channel
 @contract ws:/ws/visit
 @see openspec/tdr/adr/adr-007-in-memory-state-websocket.md
 """
@@ -17,6 +18,9 @@ from contracts import (
     CurrentTurnPublic,
     EmpathyNudge,
     Envelope,
+    InterpreterLine,
+    IntroductionState,
+    Names,
     RecordIntegrity,
     Role,
     TurnResult,
@@ -61,6 +65,16 @@ class Visit:
     nudges: list[EmpathyNudge] = field(default_factory=list)
     current_turn_id: str | None = None
     pending_readback: str | None = None
+    physician_name: str | None = None
+    patient_name: str | None = None
+    introduction: IntroductionState = "pending"
+    # Names heard in a spoken reply, waiting for the physician to confirm them.
+    proposed_names: dict[str, str] = field(default_factory=dict)
+    # Everything the interpreter said itself, by line id, so it can be spoken again by id (CDR-003).
+    interpreter_lines: dict[str, InterpreterLine] = field(default_factory=dict)
+
+    def names(self) -> Names:
+        return Names(physician_name=self.physician_name, patient_name=self.patient_name)
 
     def integrity(self) -> RecordIntegrity:
         # Hash chain arrives with IDR-003 (task 3.8); an empty chain is verified.
@@ -80,6 +94,9 @@ class Visit:
                 pending_readback=self.pending_readback,
                 nudges=self.nudges,
                 integrity=self.integrity(),
+                physician_name=self.physician_name,
+                patient_name=self.patient_name,
+                introduction=self.introduction,
             ).wire()
 
         current_public = None
@@ -104,6 +121,9 @@ class Visit:
             ],
             current_turn=current_public,
             integrity=self.integrity(),
+            physician_name=self.physician_name,
+            patient_name=self.patient_name,
+            introduction=self.introduction,
         ).wire()
 
 

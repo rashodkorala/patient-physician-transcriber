@@ -1,0 +1,10 @@
+# The interpreter's own lines in Tamil, Sri Lankan usage (TDM-003 test language). Draft by Claude: Tamil
+# speaker to review. Tamil first-person verbs here carry no gender, so any voice can say them.
+reviewer: pending
+lines:
+  introduction: வணக்கம். நான் இந்தச் சந்திப்புக்கான மொழிபெயர்ப்பாளர். நீங்கள் இருவரும் சொல்லும் அனைத்தையும் உங்கள் சொந்த மொழியில் நான் தெரிவிப்பேன்.
+  ask_physician_name: டொக்டர், நான் உங்களை எந்தப் பெயரில் அழைக்க வேண்டும்?
+  ask_patient_name: தயவுசெய்து உங்கள் பெயரைச் சொல்லுங்கள்.
+  ask_patient_name_with_physician: இன்று உங்கள் வைத்தியர் {physician}. தயவுசெய்து உங்கள் பெயரைச் சொல்லுங்கள்.
+  welcome: நன்றி. நீங்கள் தயாரானதும் பேசத் தொடங்கலாம்.
+  welcome_with_patient: நன்றி {patient}. நீங்கள் தயாரானதும் பேசத் தொடங்கலாம்.

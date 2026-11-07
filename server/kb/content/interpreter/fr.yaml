@@ -1,0 +1,10 @@
+# The interpreter's own lines in Canadian French. Draft by Claude: French speaker to review.
+# Worded to avoid the interpreter's and the listener's gender ("l'interprète", "quand vous le souhaitez").
+reviewer: pending
+lines:
+  introduction: Bonjour, je suis l'interprète de cette consultation. Je vais transmettre tout ce que chacun de vous dit, dans sa propre langue.
+  ask_physician_name: Docteur, quel nom dois-je utiliser pour vous ?
+  ask_patient_name: Puis-je avoir votre nom, s'il vous plaît ?
+  ask_patient_name_with_physician: "{physician} est votre médecin aujourd'hui. Puis-je avoir votre nom, s'il vous plaît ?"
+  welcome: Merci. Vous pouvez commencer quand vous le souhaitez.
+  welcome_with_patient: Merci, {patient}. Vous pouvez commencer quand vous le souhaitez.

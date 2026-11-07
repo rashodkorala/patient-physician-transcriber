@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from empathy import NudgeDraft
 from graph.turn_graph import Draft, ToneCheck
+from introduction import NameGuess
 from llm import ScriptedModel
 
 MEDICATIONS = ("aspirin", "nitroglycerin", "metformin", "amlodipine")
@@ -60,9 +61,12 @@ def translate(user: str) -> Draft:
 def tone_check(user: str) -> ToneCheck:
     if TONE_MARKER in field(user, "original"):
         return ToneCheck(
-            certainty_preserved=False, warmth_preserved=True, issue="Sounds more certain than the speaker."
+            meaning_preserved=True,
+            certainty_preserved=False,
+            warmth_preserved=True,
+            issue="Sounds more certain than the speaker.",
         )
-    return ToneCheck(certainty_preserved=True, warmth_preserved=True, issue="")
+    return ToneCheck(meaning_preserved=True, certainty_preserved=True, warmth_preserved=True, issue="")
 
 
 def empathy(user: str) -> NudgeDraft:
@@ -73,5 +77,15 @@ def empathy(user: str) -> NudgeDraft:
     )
 
 
+NAME_LEAD = re.compile(r"^(?:my name is|i am|i'm|it's|call me|this is)\s+", re.IGNORECASE)
+
+
+def name_extract(user: str) -> NameGuess:
+    """The reply with a leading "my name is" removed; enough for typed and scripted replies."""
+    return NameGuess(name=NAME_LEAD.sub("", field(user, "reply")).strip(" .!"))
+
+
 def fake_model() -> ScriptedModel:
-    return ScriptedModel({"translate": translate, "tone_check": tone_check, "empathy": empathy})
+    return ScriptedModel(
+        {"translate": translate, "tone_check": tone_check, "empathy": empathy, "name_extract": name_extract}
+    )

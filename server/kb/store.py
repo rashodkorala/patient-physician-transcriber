@@ -38,8 +38,8 @@ class GlossaryTerm:
     explanation_target: str
 
 
-PAIR_FILES = {"pa-IN": "en-pa.yaml", "fr-CA": "en-fr.yaml"}
-LANG_FILES = {"pa-IN": "pa", "fr-CA": "fr", "en-CA": "en"}
+PAIR_FILES = {"pa-IN": "en-pa.yaml", "fr-CA": "en-fr.yaml", "si-LK": "en-si.yaml", "ta-LK": "en-ta.yaml"}
+LANG_FILES = {"pa-IN": "pa", "fr-CA": "fr", "en-CA": "en", "si-LK": "si", "ta-LK": "ta"}
 
 
 def normalise(text: str) -> str:

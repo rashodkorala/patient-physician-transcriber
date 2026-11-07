@@ -28,7 +28,7 @@ def model(translate=None, tone_check=None):
     return ScriptedModel(handlers)
 
 
-def run(kb, m, text=DOSE, speaker="physician", source="en-CA", target="pa-IN", recognition=0.95):
+def run(kb, m, text=DOSE, speaker="physician", source="en-CA", target="pa-IN", recognition=0.95, **names):
     stages = []
 
     async def emit(stage):
@@ -43,6 +43,7 @@ def run(kb, m, text=DOSE, speaker="physician", source="en-CA", target="pa-IN", r
             text=text,
             recognition_confidence=recognition,
             emit=emit,
+            **names,
         )
     )
     return result, reason, stages
@@ -68,7 +69,12 @@ def tone_fails(times):
     def handler(user):
         calls["n"] += 1
         ok = calls["n"] > times
-        return ToneCheck(certainty_preserved=ok, warmth_preserved=True, issue="" if ok else "Sounds more serious.")
+        return ToneCheck(
+            meaning_preserved=True,
+            certainty_preserved=ok,
+            warmth_preserved=True,
+            issue="" if ok else "Sounds more serious.",
+        )
 
     return handler
 
@@ -154,3 +160,88 @@ def test_retry_repeats_only_translate_and_tone_check_adr_004(kb):
     m = model(translate=mistranslate_dose(1))
     run(kb, m)
     assert [purpose for purpose, _ in m.calls] == ["translate", "tone_check", "translate", "tone_check"]
+
+
+# ---------- mediator voice (MDD-004) ----------
+
+
+def translate_prompt(m) -> str:
+    return next(user for purpose, user in m.calls if purpose == "translate")
+
+
+@pytest.mark.parametrize(
+    ("speaker", "source", "target", "names", "speaker_name", "listener_name"),
+    [
+        (
+            "physician",
+            "en-CA",
+            "pa-IN",
+            {"physician_name": "Dr. Thomas", "patient_name": "Harpreet"},
+            "Dr. Thomas",
+            "Harpreet",
+        ),
+        ("physician", "en-CA", "pa-IN", {}, "your doctor", "unknown"),
+        (
+            "patient",
+            "pa-IN",
+            "en-CA",
+            {"physician_name": "Dr. Thomas", "patient_name": "Harpreet"},
+            "Harpreet",
+            "Dr. Thomas",
+        ),
+        ("patient", "pa-IN", "en-CA", {}, "the patient", "unknown"),
+        ("companion", "pa-IN", "en-CA", {"physician_name": "Dr. Thomas"}, "the patient's companion", "Dr. Thomas"),
+    ],
+)
+def test_translate_names_the_speaker_and_listener_mdd_004(
+    kb, speaker, source, target, names, speaker_name, listener_name
+):
+    m = model()
+    run(kb, m, text="Hello.", speaker=speaker, source=source, target=target, **names)
+    user = translate_prompt(m)
+    assert field(user, "speaker_name") == speaker_name
+    assert field(user, "listener_name") == listener_name
+
+
+def test_translate_instructions_ask_for_reported_speech_and_relay_only_mdd_004():
+    from graph.turn_graph import TONE_SYSTEM, TRANSLATE_SYSTEM
+
+    for rule in ("reported speech that names the speaker", "never soften, strengthen, add, or drop", "Relay only"):
+        assert rule in TRANSLATE_SYSTEM
+    assert "keeping its reporting frame" in TRANSLATE_SYSTEM
+    assert "are expected: never count them as a problem" in " ".join(TONE_SYSTEM.split())
+
+
+def relay(frame):
+    """A faithful relay with a reporting frame in front, as the live model writes it."""
+
+    def handler(user):
+        draft = fake_model.translate(user)
+        back = f"{field(user, 'speaker_name')} is saying: {draft.back_translation}"
+        return Draft(**{**draft.model_dump(), "translation": f"{frame} {draft.translation}", "back_translation": back})
+
+    return handler
+
+
+def test_reporting_frame_keeps_critical_values_matched_mdd_004(kb):
+    result, _, _ = run(kb, model(translate=relay("ਡਾ. ਥਾਮਸ ਕਹਿ ਰਹੇ ਹਨ ਕਿ")), physician_name="Dr. Thomas")
+    assert result.status == "readback_required" and result.attempts == 1
+    assert all(v.matched for v in result.critical_values)
+
+
+def test_frame_only_relay_is_not_escalated_mdd_004(kb):
+    result, reason, _ = run(kb, model(translate=relay("ਡਾ. ਥਾਮਸ ਕਹਿ ਰਹੇ ਹਨ ਕਿ")), text="Hello, how are you?")
+    assert result.status == "final" and reason is None
+
+
+def test_dropped_instruction_fails_the_tone_check_and_escalates_mdd_004(kb):
+    def dropped(user):
+        return ToneCheck(
+            meaning_preserved=False,
+            certainty_preserved=True,
+            warmth_preserved=True,
+            issue="The rash warning was dropped.",
+        )
+
+    result, reason, _ = run(kb, model(tone_check=dropped), text="Stop the medicine at once if you get a rash.")
+    assert result.status == "escalated" and reason == "tone_failure" and result.attempts == 2

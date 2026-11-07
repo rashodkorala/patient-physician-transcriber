@@ -66,3 +66,28 @@ def test_every_content_file_has_a_reviewer_field(kb):
         if path.name == "README.md":
             continue
         assert "reviewer:" in path.read_text(encoding="utf-8"), path.name
+
+
+# ---------- TDM-003 test languages ----------
+
+
+def test_glossary_english_to_sinhala_and_tamil_tdm_003(kb):
+    assert terms(kb.glossary_hits("Your high blood pressure needs amlodipine.", "en-CA", "si-LK")) == [
+        "high blood pressure",
+        "amlodipine",
+    ]
+    hits = kb.glossary_hits("You have type 2 diabetes; take metformin with meals.", "en-CA", "ta-LK")
+    assert terms(hits) == ["type 2 diabetes", "metformin", "with meals"]
+    assert hits[0].translation.startswith("வகை 2 நீரிழிவு")
+
+
+def test_glossary_from_sinhala_tdm_003(kb):
+    hits = kb.glossary_hits("මට අධික රුධිර පීඩනය තියෙනවා.", "si-LK", "en-CA")
+    assert terms(hits) == ["අධික රුධිර පීඩනය"] and hits[0].translation == "high blood pressure"
+
+
+def test_sinhala_and_tamil_guidance_stay_in_their_language_tdm_003(kb):
+    sinhala = kb.tone_guidance("how to address an older patient respectfully", "si-LK", k=10)
+    assert sinhala and any("ඔබ" in g for g in sinhala) and not any("நீங்கள்" in g for g in sinhala)
+    tamil = kb.condition_explainers("blood sugar too high", "ta-LK")
+    assert tamil and "சலரோகம்" in tamil[0]

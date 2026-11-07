@@ -28,6 +28,7 @@ def make_client(kb, translate=None, tone_check=None):
             "translate": translate or fake_model.translate,
             "tone_check": tone_check or fake_model.tone_check,
             "empathy": fake_model.empathy,
+            "name_extract": fake_model.name_extract,
         }
     )
     return TestClient(create_app(model=model, settings=SETTINGS, kb=kb))
@@ -228,7 +229,9 @@ def test_blocked_dose_never_reaches_screen(kb):
 
 
 def test_tone_failure_escalates_with_reason(kb):
-    failing = lambda user: ToneCheck(certainty_preserved=False, warmth_preserved=True, issue="x")  # noqa: E731
+    def failing(user):
+        return ToneCheck(meaning_preserved=True, certainty_preserved=False, warmth_preserved=True, issue="x")
+
     with (
         make_client(kb, tone_check=failing) as client,
         client.websocket_connect("/ws/visit?role=controller") as ctl,
@@ -261,3 +264,252 @@ def test_empathy_nudge_reaches_controller_only(client):
     ):
         assert not contains_private(late.receive_json())
         assert ctl2.receive_json()["payload"]["nudges"][0]["emotion"] == "worried"
+
+
+# ---------- names (CDR-003) ----------
+
+
+def set_names(ws, **names):
+    ws.send_json({"type": "visit.set_names", "payload": names})
+
+
+def test_set_names_reaches_every_screen_and_snapshot(client):
+    with (
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        assert ctl.receive_json()["payload"]["introduction"] == "pending"
+        tv.receive_json()
+        set_names(ctl, physicianName="  Dr. Thomas ", patientName="Harpreet")
+        for ws in (ctl, tv):
+            event = ws.receive_json()
+            assert event["type"] == "visit.names"
+            assert event["payload"] == {"physicianName": "Dr. Thomas", "patientName": "Harpreet"}
+    with client.websocket_connect("/ws/visit?role=screen") as tv:
+        state = tv.receive_json()["payload"]
+        assert (state["physicianName"], state["patientName"]) == ("Dr. Thomas", "Harpreet")
+
+
+def test_set_names_keeps_a_name_left_out_and_clears_a_blank(client):
+    with client.websocket_connect("/ws/visit?role=controller") as ctl:
+        ctl.receive_json()
+        set_names(ctl, physicianName="Dr. Thomas", patientName="Harpreet")
+        ctl.receive_json()
+        set_names(ctl, patientName="Harpreet Kaur")
+        assert ctl.receive_json()["payload"] == {"physicianName": "Dr. Thomas", "patientName": "Harpreet Kaur"}
+        set_names(ctl, physicianName="")
+        assert ctl.receive_json()["payload"] == {"physicianName": None, "patientName": "Harpreet Kaur"}
+
+
+@pytest.mark.parametrize("name", ["x" * 61, "Room 4"])
+def test_set_names_rejects_long_or_numbered_names(client, name):
+    with client.websocket_connect("/ws/visit?role=controller") as ctl:
+        ctl.receive_json()
+        set_names(ctl, physicianName=name)
+        event = ctl.receive_json()
+        assert event["type"] == "error" and event["payload"]["command"] == "visit.set_names"
+    assert client.app.state.hub.visit.physician_name is None
+
+
+def test_set_names_mid_visit_leaves_earlier_turns_alone(client):
+    with client.websocket_connect("/ws/visit?role=controller") as ctl:
+        ctl.receive_json()
+        submit(ctl, "physician", "en-CA", "Hello.")
+        before = drain_until(ctl, "turn.result")[-1]["payload"]
+        set_names(ctl, patientName="Harpreet")
+        assert drain_until(ctl, "visit.names")[-1]["payload"]["patientName"] == "Harpreet"
+    with client.websocket_connect("/ws/visit?role=screen") as tv:
+        assert tv.receive_json()["payload"]["turns"][0] == before
+
+
+def test_screen_cannot_set_names(client):
+    with client.websocket_connect("/ws/visit?role=screen") as tv:
+        tv.receive_json()
+        set_names(tv, patientName="Someone")
+    assert client.app.state.hub.visit.patient_name is None
+
+
+def test_visit_names_reach_the_translate_prompt_mdd_004(kb):
+    model = ScriptedModel(
+        {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "empathy": fake_model.empathy}
+    )
+    with (
+        TestClient(create_app(model=model, settings=SETTINGS, kb=kb)) as c,
+        c.websocket_connect("/ws/visit?role=controller") as ctl,
+    ):
+        ctl.receive_json()
+        set_names(ctl, physicianName="Dr. Thomas", patientName="Harpreet")
+        ctl.receive_json()
+        submit(ctl, "physician", "en-CA", "Hello.")
+        drain_until(ctl, "turn.result")
+    user = next(u for purpose, u in model.calls if purpose == "translate")
+    assert fake_model.field(user, "speaker_name") == "Dr. Thomas"
+    assert fake_model.field(user, "listener_name") == "Harpreet"
+
+
+# ---------- introduction (CDR-003, MDD-004) ----------
+
+
+def command(ws, type_, **payload):
+    ws.send_json({"type": type_, "payload": payload})
+
+
+def lines_of(events, purpose):
+    return [e["payload"] for e in events if e["type"] == "interpreter.line" and e["payload"]["purpose"] == purpose]
+
+
+def test_introduction_asks_physician_then_patient_then_welcomes(client):
+    with (
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        ctl.receive_json(), tv.receive_json()
+        command(ctl, "visit.start_introduction")
+        events = drain_until(ctl, "interpreter.line")
+        intro = lines_of(events, "introduction")[0]
+        assert [line["language"] for line in intro["lines"]] == ["en-CA", "pa-IN"]
+        events = drain_until(ctl, "interpreter.line")
+        assert events[0]["payload"]["introduction"] == "asking_physician"
+        assert lines_of(events, "ask_physician_name")[0]["lines"][0]["language"] == "en-CA"
+
+        command(ctl, "visit.name_reply", role="physician", text="I'm Dr. Thomas.")
+        proposed = drain_until(ctl, "visit.name_proposed")[-1]["payload"]
+        assert proposed == {"role": "physician", "name": "Dr. Thomas"}
+        command(ctl, "visit.name_confirm", role="physician")
+        events = drain_until(ctl, "interpreter.line")
+        assert events[0]["payload"]["physicianName"] == "Dr. Thomas"
+        ask = lines_of(events, "ask_patient_name")[0]["lines"][0]
+        assert ask["language"] == "pa-IN" and "Dr. Thomas" in ask["text"]
+
+        command(ctl, "visit.name_reply", role="patient", text="Harpreet")
+        drain_until(ctl, "visit.name_proposed")
+        command(ctl, "visit.name_confirm", role="patient")
+        welcome = lines_of(drain_until(ctl, "interpreter.line"), "welcome")[0]
+        assert "Harpreet" in welcome["lines"][0]["text"]
+
+        tv_events = drain_until(tv, "interpreter.line")
+        while len(lines_of(tv_events, "welcome")) == 0:
+            tv_events += drain_until(tv, "interpreter.line")
+        assert "visit.name_proposed" not in types(tv_events)  # proposals stay on the controller
+    assert client.app.state.hub.visit.introduction == "done"
+
+
+def test_introduction_skips_a_saved_physician_name(client):
+    with client.websocket_connect("/ws/visit?role=controller") as ctl:
+        ctl.receive_json()
+        set_names(ctl, physicianName="Dr. Thomas")
+        ctl.receive_json()
+        command(ctl, "visit.start_introduction")
+        drain_until(ctl, "interpreter.line")  # introduction
+        events = drain_until(ctl, "interpreter.line")
+        assert events[0]["payload"]["introduction"] == "asking_patient"
+        assert lines_of(events, "ask_patient_name")
+
+
+def test_rejected_name_asks_again_and_typed_name_answers(client):
+    with client.websocket_connect("/ws/visit?role=controller") as ctl:
+        ctl.receive_json()
+        command(ctl, "visit.start_introduction")
+        drain_until(ctl, "interpreter.line")
+        drain_until(ctl, "interpreter.line")
+        command(ctl, "visit.name_reply", role="physician", text="Dr. Tomas")
+        drain_until(ctl, "visit.name_proposed")
+        command(ctl, "visit.name_reject", role="physician")
+        assert lines_of(drain_until(ctl, "interpreter.line"), "ask_physician_name")
+        set_names(ctl, physicianName="Dr. Thomas")
+        events = drain_until(ctl, "interpreter.line")
+        assert events[0]["payload"] == {"physicianName": "Dr. Thomas", "patientName": None}
+        assert lines_of(events, "ask_patient_name")
+    assert client.app.state.hub.visit.proposed_names == {}
+
+
+def test_reply_without_a_name_is_an_error(client):
+    with client.websocket_connect("/ws/visit?role=controller") as ctl:
+        ctl.receive_json()
+        command(ctl, "visit.start_introduction")
+        drain_until(ctl, "interpreter.line")
+        drain_until(ctl, "interpreter.line")
+        command(ctl, "visit.name_reply", role="physician", text="")
+        assert drain_until(ctl, "error")[-1]["payload"]["command"] == "visit.name_reply"
+        command(ctl, "visit.name_reply", role="patient", text="Harpreet")  # not the role being asked
+        assert "patient" in drain_until(ctl, "error")[-1]["payload"]["message"]
+
+
+def test_first_turn_skips_the_introduction_and_it_cannot_start_after(client):
+    with client.websocket_connect("/ws/visit?role=controller") as ctl:
+        ctl.receive_json()
+        submit(ctl, "physician", "en-CA", "Hello.")
+        events = drain_until(ctl, "turn.result")
+        assert events[0]["type"] == "visit.state" and events[0]["payload"]["introduction"] == "skipped"
+        command(ctl, "visit.start_introduction")
+        assert drain_until(ctl, "error")[-1]["payload"]["command"] == "visit.start_introduction"
+
+
+def test_turn_part_way_through_skips_the_rest(client):
+    with client.websocket_connect("/ws/visit?role=controller") as ctl:
+        ctl.receive_json()
+        command(ctl, "visit.start_introduction")
+        drain_until(ctl, "interpreter.line")
+        drain_until(ctl, "interpreter.line")
+        submit(ctl, "physician", "en-CA", "Let's just start.")
+        drain_until(ctl, "turn.result")
+    assert client.app.state.hub.visit.introduction == "skipped"
+
+
+def test_screen_cannot_drive_the_introduction(client):
+    with client.websocket_connect("/ws/visit?role=screen") as tv:
+        tv.receive_json()
+        command(tv, "visit.start_introduction")
+    assert client.app.state.hub.visit.introduction == "pending"
+
+
+# ---------- test languages (TDM-003) ----------
+
+
+def set_patient_language(ws, language):
+    command(ws, "visit.set_languages", patientLanguage=language, physicianLanguage="en-CA")
+
+
+def test_test_languages_are_refused_without_test_mode(client):
+    assert client.get("/api/health").json()["testLanguages"] is False
+    with client.websocket_connect("/ws/visit?role=controller") as ctl:
+        ctl.receive_json()
+        set_patient_language(ctl, "si-LK")
+        event = ctl.receive_json()
+        assert event["type"] == "error" and "coming soon" in event["payload"]["message"]
+    assert client.app.state.hub.visit.patient_language == "pa-IN"
+
+
+def test_tamil_is_live_without_test_mode_tdm_004(client):
+    assert client.get("/api/health").json()["testLanguages"] is False
+    with client.websocket_connect("/ws/visit?role=controller") as ctl:
+        ctl.receive_json()
+        set_patient_language(ctl, "ta-LK")
+        assert ctl.receive_json()["payload"]["patientLanguage"] == "ta-LK"
+        submit(ctl, "physician", "en-CA", "Your blood sugar is too high.")
+        caption = drain_until(ctl, "turn.result")[-1]["payload"]
+        # A Tamil dose gets the same read-back as in Punjabi and French.
+        submit(ctl, "physician", "en-CA", "Take metformin 500 mg twice a day.")
+        drain_until(ctl, "turn.readback_required")
+    assert caption["targetLanguage"] == "ta-LK" and "இரத்தச் சீனி அளவு" in caption["translation"]
+
+
+def test_test_mode_allows_sinhala_and_relays_it(kb):
+    settings = Settings(translator="fake", azure_speech_key=None, azure_speech_region=None, test_languages=True)
+    model = ScriptedModel(
+        {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "empathy": fake_model.empathy}
+    )
+    with TestClient(create_app(model=model, settings=settings, kb=kb)) as c:
+        assert c.get("/api/health").json()["testLanguages"] is True
+        with c.websocket_connect("/ws/visit?role=controller") as ctl:
+            ctl.receive_json()
+            set_patient_language(ctl, "si-LK")
+            assert ctl.receive_json()["payload"]["patientLanguage"] == "si-LK"
+            submit(ctl, "physician", "en-CA", "Your high blood pressure can be treated.")
+            caption = drain_until(ctl, "turn.result")[-1]["payload"]
+            # A dose in Sinhala gets the same read-back as in Punjabi and French.
+            submit(ctl, "physician", "en-CA", "Take amlodipine 5 mg once a day.")
+            drain_until(ctl, "turn.readback_required")
+    assert caption["targetLanguage"] == "si-LK" and caption["translation"].startswith("[si-LK]")
+    user = next(u for purpose, u in model.calls if purpose == "translate")
+    assert "අධික රුධිර පීඩනය" in fake_model.field(user, "glossary")  # the Sinhala glossary reached the prompt

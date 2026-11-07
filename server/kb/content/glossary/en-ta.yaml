@@ -1,0 +1,34 @@
+# English to Tamil medical glossary (ADR-002, TDM-003 test language). Sri Lankan Tamil usage.
+# Drafts: Tamil speaker to review.
+reviewer: pending
+entries:
+  - en: type 2 diabetes
+    aliases_en: [diabetes, type two diabetes]
+    target: வகை 2 நீரிழிவு (சலரோகம்)
+    aliases_target: [சலரோகம், நீரிழிவு]
+    explanation_en: A long-term condition where the body does not use insulin well, so blood sugar stays too high.
+    explanation_target: உடல் இன்சுலினைச் சரியாகப் பயன்படுத்தாததால் இரத்தத்தில் சீனி அளவு அதிகமாக இருக்கும் நீண்டகால நிலை.
+  - en: metformin
+    aliases_en: []
+    target: மெட்ஃபோர்மின்
+    aliases_target: []
+    explanation_en: A tablet that lowers blood sugar; taken with meals to avoid an upset stomach.
+    explanation_target: இரத்தச் சீனி அளவைக் குறைக்கும் மாத்திரை; வயிற்றுக் கோளாறைத் தவிர்க்க உணவுடன் எடுக்கப்படுகிறது.
+  - en: HbA1c
+    aliases_en: [A1c, HbA1c blood test]
+    target: HbA1c (நீண்டகால சராசரி சீனி அளவு)
+    aliases_target: [HbA1c]
+    explanation_en: A blood test showing the average blood sugar over the last 3 months.
+    explanation_target: கடந்த 3 மாதங்களின் சராசரி இரத்தச் சீனி அளவைக் காட்டும் இரத்தப் பரிசோதனை.
+  - en: blood sugar
+    aliases_en: [blood glucose, sugar level]
+    target: இரத்தச் சீனி அளவு
+    aliases_target: [இரத்தச் சர்க்கரை]
+    explanation_en: The amount of sugar in the blood.
+    explanation_target: இரத்தத்தில் உள்ள சீனியின் அளவு.
+  - en: with meals
+    aliases_en: [with food]
+    target: உணவுடன்
+    aliases_target: []
+    explanation_en: Taken during or just after eating.
+    explanation_target: சாப்பிடும்போது அல்லது சாப்பிட்ட உடனே எடுப்பது.

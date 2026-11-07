@@ -28,11 +28,19 @@ await control.waitForSelector('[data-testid="connection"]:text("open")', { timeo
 console.log("ok: /control connected");
 
 const line = "ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਡਾਕਟਰ ਜੀ।";
+// Wait for a new last caption: on a visit that already has turns, the last one is an old turn.
+const lastTurnId = () =>
+  screen.evaluate(() => [...document.querySelectorAll('[data-testid="caption"]')].at(-1)?.dataset.turnId ?? null);
+const before = await lastTurnId();
 await control.fill('[data-testid="typed-text"]', line);
 await control.click('[data-testid="typed-send"]');
 
+await screen.waitForFunction(
+  (id) => ([...document.querySelectorAll('[data-testid="caption"]')].at(-1)?.dataset.turnId ?? null) !== id,
+  before,
+  { timeout: 15000 },
+);
 const caption = screen.locator('[data-testid="caption"]').last();
-await caption.waitFor({ timeout: 15000 });
 const text = await caption.innerText();
 if (!text.includes(line)) await fail(`original missing from caption: ${text}`);
 if (!text.includes(`[en-CA] ${line}`)) await fail(`translation missing from caption: ${text}`);

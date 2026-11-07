@@ -44,7 +44,9 @@ class ClaudeModel:
         # Live turns favour latency (under 3 seconds); tune with the tone set (EDR-002).
         self.effort = effort
         # ADR-006 amended 2026-10-25: the tone check runs on Haiku; every other call on model_id.
-        self.models_by_purpose = {"tone_check": TONE_MODEL} if models_by_purpose is None else models_by_purpose
+        self.models_by_purpose = (
+            {"tone_check": TONE_MODEL, "name_extract": TONE_MODEL} if models_by_purpose is None else models_by_purpose
+        )
 
     async def parse(self, *, purpose: str, system: str, user: str, schema: type[T]) -> T:
         model = self.models_by_purpose.get(purpose, self.model_id)

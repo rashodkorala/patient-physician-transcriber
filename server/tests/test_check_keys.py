@@ -34,7 +34,9 @@ def test_env_problems_catch_common_mistakes():
 
 def test_voices_come_from_the_web_app():
     voices = configured_voices(LANGUAGES_TS.read_text())
-    assert set(voices) == {"pa-IN", "fr-CA", "en-CA"} and voices["pa-IN"].endswith("Neural")
+    # Sinhala and Tamil are TDM-003 test languages; check_keys confirms their voices too.
+    assert set(voices) == {"pa-IN", "fr-CA", "en-CA", "si-LK", "ta-LK"}
+    assert all(v.endswith("Neural") for v in voices.values())
 
 
 def azure(token_status: int, voice_names: list[str]) -> httpx.AsyncClient:

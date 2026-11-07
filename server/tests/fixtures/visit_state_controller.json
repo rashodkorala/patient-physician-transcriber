@@ -71,5 +71,8 @@
     "status": "verified",
     "headHash": "",
     "brokenAt": null
-  }
+  },
+  "physicianName": "Dr. Thomas",
+  "patientName": "Harpreet",
+  "introduction": "done"
 }

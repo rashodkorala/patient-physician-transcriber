@@ -9,12 +9,17 @@ latency mitigation ADR-004 names, applied 2026-10-25. Retrieval is local, so it 
 
 Outcome order when several apply: blocked, escalated, readback_required, final (CDR-002).
 
+The interpreter relays each turn as a person between the two, in reported speech that names the
+speaker ("Dr. Thomas is saying ..."), with every clinical detail kept exactly (MDD-004).
+
 @implements ADR-004: LangGraph for the per-turn translation graph
 @implements ADR-002: Knowledge base feeding translation
 @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
 @implements CDR-002: Turn result schema
+@implements MDD-004: Mediator voice: the interpreter speaks as a person between the parties, in reported speech
 @contract TurnResult
 @see openspec/tdr/adr/adr-004-langgraph-turn-graph.md
+@see openspec/tdr/mdd/mdd-004-mediator-voice.md
 """
 
 import operator
@@ -33,7 +38,16 @@ from llm import Model
 LOW_CONFIDENCE = 0.7
 MAX_ATTEMPTS = 2
 
-LANGUAGE_NAMES = {"pa-IN": "Punjabi (Gurmukhi script)", "fr-CA": "Canadian French", "en-CA": "English"}
+LANGUAGE_NAMES = {
+    "pa-IN": "Punjabi (Gurmukhi script)",
+    "fr-CA": "Canadian French",
+    "en-CA": "English",
+    "si-LK": "Sinhala (Sinhala script)",
+    "ta-LK": "Sri Lankan Tamil (Tamil script)",
+}
+
+# How the interpreter refers to someone whose name it does not know (MDD-004).
+UNNAMED = {"physician": "your doctor", "patient": "the patient", "companion": "the patient's companion"}
 
 Emit = Callable[[str], Awaitable[None]]
 
@@ -53,6 +67,7 @@ class Draft(BaseModel):
 
 
 class ToneCheck(BaseModel):
+    meaning_preserved: bool
     certainty_preserved: bool
     warmth_preserved: bool
     issue: str
@@ -67,6 +82,8 @@ class TurnState(TypedDict, total=False):
     source: str
     target: str
     text: str
+    speaker_name: str
+    listener_name: str | None
     recognition_confidence: float
     glossary: list[GlossaryEntry]
     guidance: list[str]
@@ -83,22 +100,45 @@ class TurnState(TypedDict, total=False):
 
 # ---------- prompts ----------
 
-TRANSLATE_SYSTEM = """You interpret a medical consultation between a patient and a physician who do not share a language.
+TRANSLATE_SYSTEM = """You are the interpreter in a medical consultation, sitting between a patient and a physician
+who do not share a language. You are a person in the room relaying what each of them says to the other.
 First read the speaker: emotion is how they feel, certainty is how sure they sound, and medications lists
 every medication name exactly as said (empty list if none).
-Then translate the utterance faithfully into the target language for the listener.
+Then relay the utterance to the listener in the target language, in reported speech that names the speaker,
+as a warm human interpreter would. For example, "Take this medicine two times a day after every meal" from the
+physician becomes "Dr. Thomas is saying you should take this medicine 2 times a day after every meal".
 Rules:
+- Open the turn with one short frame naming the speaker as speaker_name gives it ("Dr. Thomas is saying",
+  "your doctor is asking"), then speak to the listener as "you". Do not repeat the frame in every sentence.
+  Write a name as it sounds, in the target language's script.
+- Use indirect speech throughout: the speaker is never "I" in your relay, and never quote them after a colon.
+- Never guess anyone's gender from their name. In English, use "they" for someone whose gender you were not
+  told. In a language that needs a gender, repeat the name or role, or use a respectful form that avoids it.
+- Keep everything that was said: every instruction, warning, condition, and question, and every count,
+  including "one" or "a" before a medicine or a dose ("one aspirin", "one spray"). Plain everyday words are
+  welcome, but never soften, strengthen, add, or drop anything.
+- An instruction keeps its force: a plain instruction such as "call 911" becomes "you should call 911", never
+  "you can call 911". Use "must" only when the speaker said "must" or "have to".
+- Relay only. Never answer a question yourself, and never add advice, explanation, glosses, or reassurance the
+  speaker did not give.
 - Keep the speaker's emotion and level of certainty: never make news sound more or less serious than it was said.
 - Keep warmth and reassurance, and use the respectful form of address the guidance describes.
 - Use the approved glossary translations for any listed medical term.
 - Write every number as digits and never change numbers, doses, units, frequencies, dates, or medication names.
 - Translate meaning, not idioms.
-Then translate your translation back into the source language as back_translation.
-tone_tags describe the register of your translation. confidence (0 to 1) is how sure you are the meaning was kept."""
+Then translate your relay back into the source language as back_translation, keeping its reporting frame.
+tone_tags describe the register of your relay. confidence (0 to 1) is how sure you are the meaning was kept."""
 
 TONE_SYSTEM = """You check an interpretation in a medical consultation.
+The interpreter relays each utterance in reported speech that names the speaker, for example "Dr. Thomas is
+saying you should rest". That reporting frame, the change from first to third person, and a plain instruction
+("rest") reported as "you should rest" are expected: never count them as a problem.
 Compare the original utterance with the back-translation of the interpretation.
-certainty_preserved: the interpretation is neither more nor less certain or serious than the original.
+meaning_preserved: every instruction, warning, condition, and question in the original is there, and nothing
+was added, such as advice or an answer the speaker did not give.
+certainty_preserved: the interpretation is neither more nor less certain or serious than the original. A small
+word a fluent speaker adds for natural grammar, such as "still" in "still not better after 5 minutes", does not
+change it.
 warmth_preserved: reassurance, warmth, and respect in the original survive.
 issue: one short sentence describing any problem, or an empty string."""
 
@@ -110,6 +150,8 @@ def tag(name: str, value: str) -> str:
 def _translate_user(state: TurnState) -> str:
     lines = [
         tag("speaker", state["speaker"]),
+        tag("speaker_name", state["speaker_name"]),
+        tag("listener_name", state.get("listener_name") or "unknown"),
         tag("source_language", LANGUAGE_NAMES[state["source"]]),
         tag("target_language", LANGUAGE_NAMES[state["target"]]),
         tag("target_code", state["target"]),
@@ -198,7 +240,7 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
         failures = []
         if not all(v.matched for v in critical):
             failures.append("critical")
-        if not (tone.certainty_preserved and tone.warmth_preserved):
+        if not (tone.meaning_preserved and tone.certainty_preserved and tone.warmth_preserved):
             failures.append("tone")
         if confidence < LOW_CONFIDENCE:
             failures.append("confidence")
@@ -265,8 +307,13 @@ class TurnPipeline:
         target: str,
         text: str,
         recognition_confidence: float,
+        physician_name: str | None = None,
+        patient_name: str | None = None,
         emit: Emit | None = None,
     ) -> tuple[TurnResult, str | None]:
+        # The listener is the patient when the physician speaks, and the physician otherwise.
+        names = {"physician": physician_name, "patient": patient_name}
+        listener = "patient" if speaker == "physician" else "physician"
         state: dict[str, Any] = await self.graph.ainvoke(
             {
                 "turn_id": turn_id,
@@ -274,6 +321,8 @@ class TurnPipeline:
                 "source": source,
                 "target": target,
                 "text": text,
+                "speaker_name": names.get(speaker) or UNNAMED[speaker],
+                "listener_name": names[listener],
                 "recognition_confidence": recognition_confidence,
                 "attempts": 0,
                 "stages": [],
