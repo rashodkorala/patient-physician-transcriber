@@ -1,0 +1,34 @@
+# Tasks
+
+## 0. Human decision review gate
+
+TDRs: CDR-004
+
+- [x] 0.1 Project lead reviews CDR-004 (interpreter voice playback on the visit channel) and sets it to accepted or rejected; verify `python3 scripts/check_tdr.py` no longer lists CDR-004 as awaiting review
+- [x] 0.2 Project lead adds `orb-speaking-state` to `related_changes` of ADR-001, ADR-007, CDR-001, CDR-003, and EDR-002, or drafts replacements; verify each record lists the change
+
+## 1. Playback on the visit channel
+
+TDRs: CDR-004, CDR-001, CDR-003, ADR-007, EDR-002
+
+- [ ] 1.1 Add `voice.started`, `voice.ended`, `voice.speaking`, and `visit.state.speaking` to `server/contracts.py` and `web/lib/contracts.ts`, add both commands to `CONTROLLER_COMMANDS`, and regenerate `web/lib/generated/`; verify contract tests and `npm run check:contracts` pass
+- [ ] 1.2 Handle both commands in `server/main.py` against the existing speak gate, with one speaking state on the in-memory visit; verify pytest covers refused ids (blocked, escalated, rejected, unsettled, unknown, wrong language), a repeated start, and a stale end
+- [ ] 1.3 Clear the state when the starting controller disconnects and after 60 seconds without an end, with an injectable clock; verify pytest covers both, and that a screen connecting mid-speech receives `speaking` in `visit.state`
+- [ ] 1.4 Verify pytest shows a screen's `voice.started` and `voice.ended` have no effect and produce no event
+
+## 2. Controller reports playback
+
+TDRs: CDR-004, CDR-003
+
+Also depends on the continuous-listening change's speaking signal; add its decision record's id to this line once it is on the main branch.
+Built by the continuous-listening work, which owns `web/lib/speech.ts` and `web/components/Controller.tsx`.
+
+- [ ] 2.1 Send `voice.started` and `voice.ended` with the speech id and language from the shared speaking signal, on every end path (finished, failed, stopped); verify with the fake-model stack that each spoken relay and interpreter line produces exactly one start and one end, including when the voice fails
+
+## 3. Speaking state on the shared screen
+
+TDRs: CDR-004, ADR-001
+
+- [ ] 3.1 Add a Speaking mode to the orb (both speakers' colours, rings moving out, still under reduced motion); verify screenshots at 1440, 960, and 390 pixels and a reduced-motion check
+- [ ] 3.2 Drive it in `web/components/SharedScreen.tsx` from `voice.speaking` and `visit.state.speaking`, with Speaking taking precedence over the pending turn's state; verify an e2e script with a controller socket shows Speaking on start, leaves it on end, and leaves it when the controller disconnects
+- [ ] 3.3 Run `node e2e/week1.mjs` against the fake-model stack; verify it still passes

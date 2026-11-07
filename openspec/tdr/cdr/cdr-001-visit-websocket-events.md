@@ -10,7 +10,7 @@ proposed_by: agent
 category: api-contract
 related_decisions: [adr-001, adr-007]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice]
+related_changes: [demo-night-mvp, mediator-voice, orb-speaking-state]
 ai_context:
   implementation_priorities:
     - "Single WebSocket per screen"

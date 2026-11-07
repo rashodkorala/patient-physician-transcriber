@@ -10,7 +10,7 @@ proposed_by: agent
 category: architecture
 related_decisions: [adr-001, mdd-003]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice]
+related_changes: [demo-night-mvp, mediator-voice, orb-speaking-state]
 ai_context:
   implementation_priorities:
     - "One active visit at a time held in server memory"

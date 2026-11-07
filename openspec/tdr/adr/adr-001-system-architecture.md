@@ -10,7 +10,7 @@ proposed_by: human
 category: architecture
 related_decisions: [mdd-001, mdd-003]
 related_specs: [demo-consultation-flow]
-related_changes: [demo-night-mvp, mediator-voice]
+related_changes: [demo-night-mvp, mediator-voice, orb-speaking-state]
 ai_context:
   implementation_priorities:
     - "Server owns visit state and all AI calls"

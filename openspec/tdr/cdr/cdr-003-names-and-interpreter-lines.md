@@ -10,7 +10,7 @@ proposed_by: agent
 category: contract
 related_decisions: [cdr-001, cdr-002, mdd-004, adr-009, adr-007]
 related_specs: [visit-introduction, interpreter-voice]
-related_changes: [mediator-voice]
+related_changes: [mediator-voice, orb-speaking-state]
 ai_context:
   implementation_priorities:
     - "Additive to CDR-001: new commands and events only; no existing event changes shape except new optional fields"

@@ -23,6 +23,7 @@ Only a human decides a status; an agent may record an explicit human verdict (ED
 | [CDR-001](cdr/cdr-001-visit-websocket-events.md) | Visit WebSocket event contract | CDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |
 | [CDR-002](cdr/cdr-002-turn-result-schema.md) | Turn result schema | CDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |
 | [CDR-003](cdr/cdr-003-names-and-interpreter-lines.md) | Participant names and interpreter lines on the visit channel | CDR | accepted | rashodkorala | mediator-voice |
+| [CDR-004](cdr/cdr-004-interpreter-voice-playback-events.md) | Interpreter voice playback on the visit channel | CDR | accepted | rashodkorala | orb-speaking-state |
 | [EDR-001](edr/edr-001-agent-working-rules.md) | Agent working rules: TDR gates, annotations, commits, and reviews | EDR | accepted | rashodkorala | add-multilingual-medical-consultation, demo-night-mvp |
 | [EDR-002](edr/edr-002-testing-strategy.md) | Testing: pytest with mocked LLM, speaker-rated tone set, latency check | EDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |
 | [IDR-001](idr/idr-001-push-to-talk-turns.md) | Push-to-talk per speaker instead of diarisation | IDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |

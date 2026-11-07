@@ -10,7 +10,7 @@ proposed_by: agent
 category: engineering-practice
 related_decisions: [mdd-003, adr-004]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice]
+related_changes: [demo-night-mvp, mediator-voice, orb-speaking-state]
 ai_context:
   implementation_priorities:
     - "Unit tests never call real AI services"
