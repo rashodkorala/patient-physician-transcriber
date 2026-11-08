@@ -27,7 +27,7 @@ TDRs: CDR-004, CDR-003
 Also depends on the continuous-listening change's speaking signal; add its decision record's id to this line once it is on the main branch.
 Built by the continuous-listening work, which owns `web/lib/speech.ts` and `web/components/Controller.tsx`.
 
-- [ ] 2.1 Send `voice.started` and `voice.ended` with the speech id and language from the shared speaking signal, on every end path (finished, failed, stopped); verify with the fake-model stack that each spoken relay and interpreter line produces exactly one start and one end, including when the voice fails
+- [x] 2.1 Send `voice.started` and `voice.ended` with the speech id and language from the shared speaking signal, on every end path (finished, failed, stopped); verify with the fake-model stack that each spoken relay and interpreter line produces exactly one start and one end, including when the voice fails (2026-11-07: a Sinhala relay spoken by Azure, three introduction lines spoken by ElevenLabs, and a voice that errors mid-playback each gave exactly one start and one end, accepted by the server, with /screen ending silent; mapping unit-tested in `web/lib/speaking.test.mjs`)
 
 ## 3. Speaking state on the shared screen
 

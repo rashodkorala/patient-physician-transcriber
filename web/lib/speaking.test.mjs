@@ -1,7 +1,7 @@
 // Unit tests for the shared speaking signal (continuous-listening task 1.2). Usage: npm test
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createSpeakingState } from "./speaking.ts";
+import { createSpeakingState, playbackMessages } from "./speaking.ts";
 
 const turn = { speechId: "turn-1", language: "pa-IN" };
 const line = { speechId: "line-1", language: "en-CA" };
@@ -67,4 +67,48 @@ test("an unsubscribed listener hears nothing more", () => {
   unsubscribe();
   state.started(turn);
   assert.deepEqual(seen, [null]);
+});
+
+test("each change of the signal maps to the CDR-004 commands", () => {
+  assert.deepEqual(playbackMessages(null, null), []);
+  assert.deepEqual(playbackMessages(null, line), [{ type: "voice.started", payload: line }]);
+  assert.deepEqual(playbackMessages(line, null), [{ type: "voice.ended", payload: line }]);
+  assert.deepEqual(playbackMessages(line, line), []);
+  assert.deepEqual(playbackMessages(line, turn), [
+    { type: "voice.ended", payload: line },
+    { type: "voice.started", payload: turn },
+  ]);
+});
+
+// What the controller sends: each signal change mapped to commands, as Controller.tsx does.
+const sent = (state) => {
+  const messages = [];
+  let previous = null;
+  state.onSpeaking((next) => {
+    for (const { type, payload } of playbackMessages(previous, next)) messages.push(`${type} ${payload.speechId}`);
+    previous = next;
+  });
+  return messages;
+};
+
+test("back-to-back items send one start and one end each, in order", () => {
+  const state = createSpeakingState();
+  const messages = sent(state);
+  state.started(line)();
+  state.started(turn)();
+  assert.deepEqual(messages, ["voice.started line-1", "voice.ended line-1", "voice.started turn-1", "voice.ended turn-1"]);
+});
+
+test("a direct handover ends the first item before starting the next, and its late end sends nothing", () => {
+  const state = createSpeakingState();
+  const messages = sent(state);
+  const endLine = state.started(line);
+  const endTurn = state.started(turn);
+  endLine();
+  endTurn();
+  assert.deepEqual(messages, ["voice.started line-1", "voice.ended line-1", "voice.started turn-1", "voice.ended turn-1"]);
+});
+
+test("subscribing while nothing plays sends nothing", () => {
+  assert.deepEqual(sent(createSpeakingState()), []);
 });

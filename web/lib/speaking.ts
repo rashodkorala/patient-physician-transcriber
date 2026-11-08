@@ -19,6 +19,24 @@ export interface SpeakingState<Item> {
   started(item: Item): () => void;
 }
 
+export interface PlaybackMessage<Item> {
+  type: "voice.started" | "voice.ended";
+  payload: Item;
+}
+
+/**
+ * The CDR-004 commands for one change of the signal: an end for the item that stopped, then a start for
+ * the one that began. A direct handover sends both, so the server never holds two speeches.
+ * @implements CDR-004: Interpreter voice playback on the visit channel
+ */
+export function playbackMessages<Item>(previous: Item | null, next: Item | null): PlaybackMessage<Item>[] {
+  if (previous === next) return [];
+  const messages: PlaybackMessage<Item>[] = [];
+  if (previous !== null) messages.push({ type: "voice.ended", payload: previous });
+  if (next !== null) messages.push({ type: "voice.started", payload: next });
+  return messages;
+}
+
 export function createSpeakingState<Item>(): SpeakingState<Item> {
   // A fresh object per start, so an item spoken twice still ends only its own stretch.
   let audible: { item: Item } | null = null;

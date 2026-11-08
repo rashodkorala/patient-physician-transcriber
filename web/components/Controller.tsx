@@ -8,6 +8,7 @@
  * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-002: Turn result schema
  * @implements CDR-003: Participant names and interpreter lines on the visit channel
+ * @implements CDR-004: Interpreter voice playback on the visit channel
  * @implements TDM-003: Sinhala and Tamil as test-only languages before demo night
  * @contract ws:/ws/visit
  */
@@ -39,7 +40,8 @@ import { NAME_MAX } from "@/lib/contracts";
 import { LANGUAGE_LABELS, ROADMAP } from "@/lib/languages";
 import { type LatencyRow, median, segments, toCsv } from "@/lib/latency";
 import { serverHttpUrl, useVisitSocket } from "@/lib/socket";
-import { type Capture, speak, startCapture, warmUp } from "@/lib/speech";
+import { playbackMessages } from "@/lib/speaking";
+import { type Capture, current, onSpeaking, speak, startCapture, warmUp } from "@/lib/speech";
 import styles from "./controller.module.css";
 import Highlighted from "./Highlighted";
 
@@ -256,9 +258,13 @@ export default function Controller() {
       case "empathy.nudge":
         setNudges((prev) => [...prev, event.payload as EmpathyNudge]);
         break;
-      case "error":
-        setNotice((event.payload as ErrorPayload).message);
+      case "error": {
+        const error = event.payload as ErrorPayload;
+        // CDR-004: a refused start only means the screen will not show it; the voice itself is unaffected.
+        if (error.command === "voice.started") console.warn(`voice.started refused: ${error.message}`);
+        else setNotice(error.message);
         break;
+      }
     }
   }, []);
 
@@ -333,6 +339,21 @@ export default function Controller() {
     const heard = await active.stop();
     submit(speaker, heard.text, heard.confidence, heard.endOfSpeechAt);
   };
+
+  // CDR-004: tell the visit what the interpreter's voice is playing, so the shared screen can show it.
+  useEffect(() => {
+    let previous: ReturnType<typeof current> = null;
+    return onSpeaking((next) => {
+      for (const { type, payload } of playbackMessages(previous, next)) send(type, payload);
+      previous = next;
+    });
+  }, [send]);
+
+  // The server forgets the speech when this connection drops, so a reconnect mid-speech reports it again.
+  useEffect(() => {
+    const playing = current();
+    if (state === "open" && playing) send("voice.started", playing);
+  }, [state, send]);
 
   // Open the Azure voices for this visit's languages before the first turn, so speech starts at once.
   useEffect(() => {
