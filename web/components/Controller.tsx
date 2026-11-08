@@ -336,8 +336,13 @@ export default function Controller() {
     capture.current = null;
     setRecording(null);
     if (!speaker || !active) return;
-    const heard = await active.stop();
-    submit(speaker, heard.text, heard.confidence, heard.endOfSpeechAt);
+    try {
+      const heard = await active.stop();
+      submit(speaker, heard.text, heard.confidence, heard.endOfSpeechAt);
+    } catch (error) {
+      const reason = (error as Error).message.replace(/[\s.]+$/, "");
+      setNotice(`Speech recognition failed: ${reason}. Try again or use typed input.`);
+    }
   };
 
   // CDR-004: tell the visit what the interpreter's voice is playing, so the shared screen can show it.

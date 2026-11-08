@@ -14,7 +14,7 @@
  */
 
 import type { Language } from "./contracts";
-import { VOICES } from "./languages";
+import { RECOGNITION, VOICES } from "./languages";
 import { serverHttpUrl } from "./socket";
 import { createSpeakingState } from "./speaking";
 
@@ -52,9 +52,16 @@ export async function startCapture(language: Language): Promise<Capture> {
   const sdk = await loadSdk();
   const { token: authToken, region } = await token();
   const config = sdk.SpeechConfig.fromAuthorizationToken(authToken, region);
-  config.speechRecognitionLanguage = language;
+  config.speechRecognitionLanguage = RECOGNITION[language];
   config.outputFormat = sdk.OutputFormat.Detailed;
   const recognizer = new sdk.SpeechRecognizer(config, sdk.AudioConfig.fromDefaultMicrophoneInput());
+
+  // A refused locale, an expired token, or a dropped connection cancels recognition; without this the
+  // physician only saw "Nothing was heard".
+  let failure: string | null = null;
+  recognizer.canceled = (_sender, event) => {
+    if (event.reason === sdk.CancellationReason.Error) failure ??= event.errorDetails || "recognition was cancelled";
+  };
 
   const parts: string[] = [];
   const confidences: number[] = [];
@@ -75,9 +82,12 @@ export async function startCapture(language: Language): Promise<Capture> {
   return {
     stop: async () => {
       const releasedAt = Date.now();
-      await new Promise<void>((resolve, reject) => recognizer.stopContinuousRecognitionAsync(resolve, reject));
+      await new Promise<void>((resolve, reject) => recognizer.stopContinuousRecognitionAsync(resolve, reject)).catch(
+        (error) => void (failure ??= String(error)),
+      );
       recognizer.close();
       const confidence = confidences.length ? confidences.reduce((a, b) => a + b, 0) / confidences.length : 0;
+      if (failure && !parts.length) throw new SpeechUnavailable(failure);
       // Push-to-talk: speech ends at release, so the recognition flush after it counts as latency.
       return { text: parts.join(" ").trim(), confidence, endOfSpeechAt: releasedAt };
     },

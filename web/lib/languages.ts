@@ -42,3 +42,18 @@ export const VOICES: Record<Language, string> = {
   "si-LK": "si-LK-ThiliniNeural",
   "ta-LK": "ta-LK-SaranyaNeural",
 };
+
+/**
+ * The Azure locale each language is recognised in. Azure has a Sri Lankan Tamil voice but no Sri Lankan
+ * Tamil recognition (it refuses ta-LK), so Tamil is heard with the Indian Tamil model and stays ta-LK
+ * everywhere else: the visit language, the voice, and the record.
+ * @implements ADR-005: Speech: Azure Speech primary, Google Speech backup
+ * @implements TDM-004: Tamil is the chosen live language, alongside Punjabi and French, spoken by ElevenLabs
+ */
+export const RECOGNITION: Record<Language, string> = {
+  "pa-IN": "pa-IN",
+  "fr-CA": "fr-CA",
+  "en-CA": "en-CA",
+  "si-LK": "si-LK",
+  "ta-LK": "ta-IN",
+};
