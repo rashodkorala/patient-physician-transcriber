@@ -40,7 +40,7 @@ TDRs: ADR-003, ADR-006, IDR-003, CDR-001, CDR-002
 
 - [x] 3.1 Language picker with thirteen languages in their own scripts; verify only Punjabi and French are selectable (2026-11-03: thirteen languages in their own scripts, others coming soon; `node e2e/test-languages.mjs off` passes)
 - [ ] 3.2 Consent screen in Punjabi and French; verify conversation is blocked until consent
-- [ ] 3.3 Off-the-record pause, human interpreter button with connecting state, and "mark high risk" on the controller; verify all notices appear in both languages and a high-risk mark offers an interpreter
+- [x] 3.3 Off-the-record pause, human interpreter button with connecting state, and "mark high risk" on the controller; verify all notices appear in both languages and a high-risk mark offers an interpreter (2026-11-08: `tests/test_demo_beats.py` covers pause, request, mark, refusals, and role rules; `node e2e/demo-beats.mjs` checks the paused, offered, connecting, and simulated notices in Punjabi and English on `/screen`. Notice translations are `_reviewer: pending`. The buttons are on the controller only; the server also accepts pause and request from `/screen`, which has no buttons)
 - [ ] 3.4 Explain-back chain and view; verify a missed frequency is flagged
 - [ ] 3.5 Transcript review with re-speak corrections keeping originals; verify history shows both
 - [ ] 3.6 Note with provenance tags and click-to-source; verify every sentence has a tag and a link
@@ -61,8 +61,8 @@ TDRs: TDM-001, EDR-002
 
 TDRs: TDM-002, ADR-004, CDR-001, CDR-002
 
-- [ ] 5.1 Implement the presenter-only `demo.inject_mismatch` and `demo.cancel_injection` commands, the `demo.injection_state` event, and the one-shot injection in the turn graph; verify tests show the armed flag waits through a turn without critical values, multiplies the first dose number by 10 on the next one, that turn is blocked on both attempts, the following turn is unaffected, cancel works, and no screen or review connection receives injection state, live or via `visit.state`
-- [ ] 5.2 Mark injections on the controller and in the record view only, show the injected turn on the review screen as blocked, then repeated, and add the simulated interpreter connection close; verify all three in a scripted run of docs/demo-script.md beats 5, 6, and 8
+- [x] 5.1 Implement the presenter-only `demo.inject_mismatch` and `demo.cancel_injection` commands, the `demo.injection_state` event, and the one-shot injection in the turn graph; verify tests show the armed flag waits through a turn without critical values, multiplies the first dose number by 10 on the next one, that turn is blocked on both attempts, the following turn is unaffected, cancel works, and no screen or review connection receives injection state, live or via `visit.state` (2026-11-08: `tests/test_turn_graph.py` and `tests/test_demo_beats.py`, server suite 208 passed)
+- [ ] 5.2 Mark injections on the controller and in the record view only, show the injected turn on the review screen as blocked, then repeated, and add the simulated interpreter connection close; verify all three in a scripted run of docs/demo-script.md beats 5, 6, and 8 (2026-11-08: controller mark and the simulated close done, and `/screen` shows the injected turn as blocked, then repeated, verified by `node e2e/demo-beats.mjs` for beats 5 and 6; the record view and review screen wait for tasks 3.5 and 3.6, so beat 8 is not run yet)
 
 ## 6. Sinhala and Tamil test runs (test mode only)
 

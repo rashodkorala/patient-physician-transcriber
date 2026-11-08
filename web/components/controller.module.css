@@ -143,6 +143,32 @@
   font-family: var(--serif); font-style: italic; font-size: 24px; line-height: 1.35;
 }
 
+/* ADR-003: off the record is a signal-coloured line that cannot be missed; the interpreter is an outlined block. */
+.paused {
+  display: flex; align-items: center; gap: 10px; margin: 0; color: var(--signal); font-weight: 500;
+}
+.paused::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.interpreter { display: grid; gap: 10px; padding: 20px 24px 24px; border: 1px solid var(--text); border-radius: 6px; }
+.interpreterText { margin: 0; font-family: var(--serif); font-style: italic; font-size: 24px; line-height: 1.35; }
+.interpreter .actions { align-items: center; gap: 12px 24px; margin-top: 4px; }
+
+/* TDM-002: the presenter's fold sits last in the controls, quiet until it is opened. */
+.presenter { padding: 24px 0 0; }
+.presenter summary {
+  display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; list-style: none;
+}
+.presenter summary::-webkit-details-marker { display: none; }
+.presenter summary::before {
+  content: ""; width: 6px; height: 6px; border-right: 1px solid var(--muted); border-bottom: 1px solid var(--muted);
+  transform: rotate(-45deg); transition: transform 0.15s;
+}
+.presenter[open] summary::before { transform: rotate(45deg); }
+.presenter summary:hover .eyebrow { color: var(--text); }
+.presenterBody { display: grid; gap: 12px; padding: 8px 0 0 18px; }
+.presenterBody .actions { margin-top: 0; }
+.injection { margin: 0; font-size: 15px; }
+.injection[data-state="armed"], .injection[data-state="fired"] { color: var(--signal); font-weight: 500; }
+
 .typed { display: grid; grid-template-columns: 220px 1fr auto; gap: 12px; align-items: stretch; }
 .typed textarea { width: 100%; }
 .notice { margin: 0; padding: 12px 16px; border-left: 2px solid var(--text); background: var(--field); }
@@ -150,6 +176,9 @@
 .turns { list-style: none; margin: 0; padding: 0; }
 .turns li { display: grid; gap: 6px; padding: 20px 0; border-top: 1px solid var(--line); }
 .turns li:first-child { border-top: none; padding-top: 4px; }
+.turns .marker { display: flex; align-items: center; gap: 8px; padding: 12px 0; }
+.turns .marker .eyebrow { color: var(--text); }
+.turns .marker::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1px dashed currentColor; }
 .turnHead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
 .speaker { display: inline-flex; align-items: center; gap: 8px; margin-right: 6px; }
 .speaker::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1px solid currentColor; }

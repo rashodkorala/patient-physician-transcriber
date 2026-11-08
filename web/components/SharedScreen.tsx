@@ -7,12 +7,14 @@
  * @implements CDR-002: Turn result schema
  * @implements CDR-003: Participant names and interpreter lines on the visit channel
  * @implements CDR-004: Interpreter voice playback on the visit channel
+ * @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
  * @contract TurnCaption
  */
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type {
   Envelope,
+  InterpreterEscalation,
   InterpreterLine,
   Language,
   Names,
@@ -23,7 +25,13 @@ import type {
   VisitStatePublic,
   VoiceSpeaking,
 } from "@/lib/contracts";
-import { bilingual, type NoticeKey } from "@/lib/i18n";
+import {
+  INTERPRETER_CONNECTING_MS,
+  INTERPRETER_SIMULATED_MS,
+  type InterpreterPhase,
+  type NoticeKey,
+  bilingual,
+} from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
 import { type ConnectionState, useVisitSocket } from "@/lib/socket";
 import Highlighted from "./Highlighted";
@@ -99,6 +107,66 @@ function Line({ line }: { line: InterpreterLine }) {
           <div className={styles.meta}>
             <span className={styles.speaker}>Interpreter</span>
             <span className={styles.lang}>{LANGUAGE_LABELS[language].own}</span>
+          </div>
+          <p className={styles.text}>{text}</p>
+        </div>
+      ))}
+    </article>
+  );
+}
+
+/** The resting orb over a quiet line in both languages: before the first turn, and while off the record. */
+function Resting({
+  notice,
+  testId,
+  languages,
+}: {
+  notice: NoticeKey;
+  testId: string;
+  languages: { patient: Language; physician: Language };
+}) {
+  return (
+    <div className={styles.ready} data-testid={testId} aria-live="polite">
+      <Orb mode="ready" className={styles.readyOrb} />
+      {bilingual(notice, languages.patient, languages.physician).map(({ lang, text }) => (
+        <p key={lang} lang={lang}>
+          {text}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+const PHASE_NOTICE: Record<InterpreterPhase, NoticeKey> = {
+  offered: "interpreterAvailable",
+  connecting: "interpreterConnecting",
+  simulated: "interpreterSimulated",
+};
+
+/** ADR-003: a human interpreter offered, connecting, or (simulated) joining, as an Interpreter row in both languages. */
+function InterpreterNotice({
+  phase,
+  patient,
+  physician,
+}: {
+  phase: InterpreterPhase;
+  patient: Language;
+  physician: Language;
+}) {
+  return (
+    <article
+      className={`${styles.turn} ${styles.interpreter} ${styles.escalation}`}
+      data-testid="interpreter-notice"
+      data-phase={phase}
+      aria-live="polite"
+    >
+      {bilingual(PHASE_NOTICE[phase], patient, physician).map(({ lang, text }) => (
+        <div key={lang} className={styles.side} lang={lang}>
+          <div className={styles.meta}>
+            <span className={styles.speaker}>Interpreter</span>
+            <span className={styles.lang}>{LANGUAGE_LABELS[lang].own}</span>
+            {phase === "connecting" && <span className={styles.tag}>Connecting</span>}
+            {phase === "simulated" && <span className={styles.tag}>Simulated</span>}
           </div>
           <p className={styles.text}>{text}</p>
         </div>
@@ -236,12 +304,28 @@ export default function SharedScreen() {
   // Only lines heard live: the introduction comes before any turn, and a reconnecting screen skips it.
   const [lines, setLines] = useState<InterpreterLine[]>([]);
   const [speaking, setSpeaking] = useState<VoiceSpeaking | null>(null);
+  const [paused, setPaused] = useState(false);
+  // ADR-003: only heard live; the simulated call has no state on the server to restore.
+  const [interpreter, setInterpreter] = useState<InterpreterPhase | null>(null);
+  const callTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const bottom = useRef<HTMLDivElement | null>(null);
+
+  const startCall = useCallback(() => {
+    callTimers.current.forEach(clearTimeout);
+    setInterpreter("connecting");
+    callTimers.current = [
+      setTimeout(() => setInterpreter("simulated"), INTERPRETER_CONNECTING_MS),
+      setTimeout(() => setInterpreter(null), INTERPRETER_CONNECTING_MS + INTERPRETER_SIMULATED_MS),
+    ];
+  }, []);
+
+  useEffect(() => () => callTimers.current.forEach(clearTimeout), []);
 
   const onEvent = useCallback((event: Envelope) => {
     switch (event.type) {
       case "visit.state": {
         const state = event.payload as VisitStatePublic;
+        setPaused(state.paused);
         setLanguages({ patient: state.patientLanguage, physician: state.physicianLanguage });
         setCaptions(state.turns);
         setNames({ physicianName: state.physicianName ?? null, patientName: state.patientName ?? null });
@@ -286,8 +370,21 @@ export default function SharedScreen() {
         setPending((p) => (p && p.turnId === caption.turnId ? null : p));
         break;
       }
+      case "visit.paused":
+        setPaused(true);
+        break;
+      case "visit.resumed":
+        setPaused(false);
+        break;
+      case "interpreter.escalation": {
+        const { reason } = event.payload as InterpreterEscalation;
+        if (reason === "requested") startCall();
+        // An uncertain turn already says an interpreter is offered in its own caption; a high-risk mark has none.
+        else if (reason === "high_risk") setInterpreter((phase) => phase ?? "offered");
+        break;
+      }
     }
-  }, []);
+  }, [startCall]);
 
   const { state } = useVisitSocket("screen", onEvent);
   const other = (lang: Language) => (lang === languages.physician ? languages.patient : languages.physician);
@@ -295,7 +392,7 @@ export default function SharedScreen() {
   // A block body: newer browsers return a Promise from scrollIntoView, which React would call as a cleanup.
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
-  }, [captions, pending, lines, speaking]);
+  }, [captions, pending, lines, speaking, interpreter, paused]);
 
   return (
     <main className={styles.screen}>
@@ -309,21 +406,24 @@ export default function SharedScreen() {
         </span>
       </header>
       <div>
-        {captions.length === 0 && lines.slice(-3).map((line) => <Line key={line.lineId} line={line} />)}
-        {captions.slice(-6).map((c) => (
-          <Caption key={c.turnId} c={c} names={names} />
-        ))}
-        {speaking?.speaking && <Speaking language={speaking.language} />}
-        {pending && <PendingTurn p={pending} names={names} other={other} />}
-        {!pending && !speaking?.speaking && captions.length === 0 && lines.length === 0 && (
-          <div className={styles.ready} data-testid="ready">
-            <Orb mode="ready" className={styles.readyOrb} />
-            {bilingual("ready", languages.patient, languages.physician).map(({ lang, text }) => (
-              <p key={lang} lang={lang}>
-                {text}
-              </p>
+        {/* Off the record: no captions at all, only the notice in both languages, until the visit resumes. */}
+        {paused ? (
+          <Resting notice="paused" testId="paused" languages={languages} />
+        ) : (
+          <>
+            {captions.length === 0 && lines.slice(-3).map((line) => <Line key={line.lineId} line={line} />)}
+            {captions.slice(-6).map((c) => (
+              <Caption key={c.turnId} c={c} names={names} />
             ))}
-          </div>
+            {interpreter && (
+              <InterpreterNotice phase={interpreter} patient={languages.patient} physician={languages.physician} />
+            )}
+            {speaking?.speaking && <Speaking language={speaking.language} />}
+            {pending && <PendingTurn p={pending} names={names} other={other} />}
+            {!interpreter && !pending && !speaking?.speaking && captions.length === 0 && lines.length === 0 && (
+              <Resting notice="ready" testId="ready" languages={languages} />
+            )}
+          </>
         )}
         <div ref={bottom} />
       </div>

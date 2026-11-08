@@ -12,11 +12,13 @@
  * @implements CDR-003: Participant names and interpreter lines on the visit channel
  * @implements CDR-004: Interpreter voice playback on the visit channel
  * @implements TDM-003: Sinhala and Tamil as test-only languages before demo night
+ * @implements TDM-002: Presenter mismatch control for the blocked-dose beat
  * @contract ws:/ws/visit
  */
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type {
+  DemoInjectionState,
   EmpathyNudge,
   Envelope,
   ErrorPayload,
@@ -39,6 +41,7 @@ import type {
   VisitStateController,
 } from "@/lib/contracts";
 import { NAME_MAX } from "@/lib/contracts";
+import { INTERPRETER_CONNECTING_MS, INTERPRETER_SIMULATED_MS, type InterpreterPhase } from "@/lib/i18n";
 import { LANGUAGE_LABELS, RECOGNITION, ROADMAP } from "@/lib/languages";
 import { type ListeningState, type Side, VOICE_TAIL_MS, isShortReply, listeningState, sideFor } from "@/lib/listening";
 import { type LatencyRow, median, segments, toCsv } from "@/lib/latency";
@@ -95,6 +98,25 @@ const REASON_TEXT: Record<EscalationReason, string> = {
   high_risk: "this moment was marked high risk",
   requested: "an interpreter was requested",
 };
+
+const INTERPRETER_TEXT: Record<InterpreterPhase, string> = {
+  offered: "A human interpreter is offered on the shared screen.",
+  connecting: "Connecting to a human interpreter.",
+  simulated: "Interpreter would join here (simulated). The consultation continues.",
+};
+
+const INJECTION_TEXT: Record<DemoInjectionState["state"], string> = {
+  armed: "Armed: the next physician dose will be multiplied by 10 in translation, so it is blocked.",
+  fired: "Fired on the turn marked in the log. Ask the physician to repeat the dose.",
+  cancelled: "Cancelled before it fired. Doses are translated normally.",
+};
+
+/** An interpreter request or high-risk mark in the turn log, after the turn it followed (null: before any). */
+interface Marker {
+  id: number;
+  reason: "high_risk" | "requested";
+  after: string | null;
+}
 
 /** What happened to a turn after its analysis, as far as this controller saw it live. */
 interface Outcome {
@@ -186,6 +208,18 @@ export default function Controller() {
   const heldIds = useRef(0);
   // Submits are sequential from this one controller, so turn.started events match them in order.
   const pendingTimes = useRef<{ endOfSpeechAt: number; submittedAt: number }[]>([]);
+  // Off the record (CDR-001 visit.paused): nothing is captured, so speaking and sending are switched off.
+  const [paused, setPaused] = useState(false);
+  // ADR-003: the interpreter offer and the simulated call, timed exactly as on the shared screen.
+  const [interpreter, setInterpreter] = useState<{ phase: InterpreterPhase; reason: EscalationReason } | null>(null);
+  const callTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const [markers, setMarkers] = useState<Marker[]>([]);
+  const markerIds = useRef(0);
+  // TDM-002: the presenter's mismatch control, and the turns it fired on (marked here and nowhere public).
+  const [injection, setInjection] = useState<DemoInjectionState["state"] | null>(null);
+  const [injected, setInjected] = useState<Set<string>>(new Set());
+  const lastStarted = useRef<string | null>(null);
+  const lastTurn = useRef<string | null>(null);
 
   const physicianLanguage: Language = "en-CA";
   const languageOf = (speaker: Speaker): Language => (speaker === "physician" ? physicianLanguage : patientLanguage);
@@ -194,6 +228,17 @@ export default function Controller() {
     setLatency((rows) => rows.map((r) => (r.turnId === turnId ? { ...r, ...patch } : r)));
   const updateOutcome = (turnId: string, patch: Outcome) =>
     setOutcomes((all) => ({ ...all, [turnId]: { ...all[turnId], ...patch } }));
+
+  const startCall = () => {
+    callTimers.current.forEach(clearTimeout);
+    setInterpreter({ phase: "connecting", reason: "requested" });
+    callTimers.current = [
+      setTimeout(() => setInterpreter({ phase: "simulated", reason: "requested" }), INTERPRETER_CONNECTING_MS),
+      setTimeout(() => setInterpreter(null), INTERPRETER_CONNECTING_MS + INTERPRETER_SIMULATED_MS),
+    ];
+  };
+
+  useEffect(() => () => callTimers.current.forEach(clearTimeout), []);
 
   const receiveNames = (current: Names) => {
     const last = serverNames.current;
@@ -216,6 +261,22 @@ export default function Controller() {
         setDefaultName(readDefaultName());
         receiveNames({ physicianName: state.physicianName ?? null, patientName: state.patientName ?? null });
         setIntroduction(state.introduction ?? "pending");
+        setPaused(state.paused);
+        lastTurn.current = state.turns.at(-1)?.turnId ?? null;
+        break;
+      }
+      case "visit.paused":
+        setPaused(true);
+        break;
+      case "visit.resumed":
+        setPaused(false);
+        break;
+      case "demo.injection_state": {
+        const { state } = event.payload as DemoInjectionState;
+        setInjection(state);
+        // Fired while the turn that carries it is being translated: the one started last.
+        const turnId = lastStarted.current;
+        if (state === "fired" && turnId) setInjected((all) => new Set(all).add(turnId));
         break;
       }
       case "interpreter.line": {
@@ -236,6 +297,7 @@ export default function Controller() {
       }
       case "turn.started": {
         const started = event.payload as TurnStarted;
+        lastStarted.current = started.turnId;
         const now = Date.now();
         const times = pendingTimes.current.shift() ?? { endOfSpeechAt: now, submittedAt: now };
         setLatency((rows) => [...rows, { turnId: started.turnId, speaker: started.speaker, ...times }]);
@@ -254,6 +316,7 @@ export default function Controller() {
         const result = event.payload as TurnResult;
         updateLatency(result.turnId, { analysisAt: Date.now() });
         setTurns((prev) => [...prev.filter((t) => t.turnId !== result.turnId), result]);
+        lastTurn.current = result.turnId;
         if (result.status === "blocked") {
           setNotice("Blocked: a value changed in translation. Ask the speaker to repeat or rephrase.");
         }
@@ -279,9 +342,19 @@ export default function Controller() {
         break;
       }
       case "interpreter.escalation": {
-        const escalation = event.payload as InterpreterEscalation;
-        if (escalation.turnId) updateOutcome(escalation.turnId, { escalation: escalation.reason });
-        setNotice(`Not spoken: ${REASON_TEXT[escalation.reason]}. Offer a human interpreter.`);
+        const { reason, turnId } = event.payload as InterpreterEscalation;
+        if (reason === "requested" || reason === "high_risk") {
+          // Recorded in the visit by the server; shown in the log where it happened.
+          const after = turnId ?? lastTurn.current;
+          setMarkers((all) => [...all, { id: ++markerIds.current, reason, after }]);
+        }
+        if (reason === "requested") {
+          startCall();
+          break;
+        }
+        if (turnId) updateOutcome(turnId, { escalation: reason });
+        setInterpreter((current) => (current && current.phase !== "offered" ? current : { phase: "offered", reason }));
+        if (reason !== "high_risk") setNotice(`Not spoken: ${REASON_TEXT[reason]}. Offer a human interpreter.`);
         break;
       }
       case "empathy.nudge":
@@ -333,6 +406,11 @@ export default function Controller() {
   const askingRole: NameRole | null = introSkipped ? null : (ASKING[introduction] ?? null);
 
   const submit = (speaker: Speaker, text: string, confidence: number, endOfSpeechAt: number) => {
+    if (paused) {
+      // Heard just as the pause began: dropped here, and the server would refuse it anyway.
+      setNotice("Paused: nothing is recorded. Resume to continue.");
+      return;
+    }
     if (!text.trim()) {
       setNotice("Nothing was heard. Please try again.");
       return;
@@ -349,6 +427,10 @@ export default function Controller() {
 
   const pressTalk = async (speaker: Speaker) => {
     if (recording) return;
+    if (paused) {
+      setNotice("Paused: nothing is recorded. Resume to speak.");
+      return;
+    }
     setNotice(null);
     setRecording(speaker);
     try {
@@ -457,10 +539,11 @@ export default function Controller() {
     pushToTalk: recording !== null,
   });
 
+  // Off the record, hands-free hears nothing at all, not even to throw it away.
   useEffect(() => {
-    muted.current = listenState !== "listening";
+    muted.current = listenState !== "listening" || paused;
     listening.current?.mute(muted.current);
-  }, [listenState, handsFree]);
+  }, [listenState, handsFree, paused]);
 
   const resolveHeld = (speaker: Speaker | null) => {
     const [first, ...rest] = held;
@@ -516,6 +599,18 @@ export default function Controller() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  /** Interpreter requests and high-risk marks, in the log after the turn they followed. */
+  const markersAfter = (turnId: string | null) =>
+    markers
+      .filter((m) => m.after === turnId)
+      .map((m) => (
+        <li key={`marker-${m.id}`} className={styles.marker} data-testid="marker" data-reason={m.reason}>
+          <span className={styles.eyebrow}>
+            {m.reason === "high_risk" ? "Marked high risk · interpreter offered" : "Human interpreter requested"}
+          </span>
+        </li>
+      ));
 
   const readbackTurn = turns.find((t) => t.turnId === pendingReadback);
   const nudge = [...nudges].reverse().find((n) => !dismissed.has(n.turnId));
@@ -684,8 +779,13 @@ export default function Controller() {
               </label>
             </div>
             {handsFree && (
-              <p className={styles.listening} data-testid="listening" data-state={listenState} aria-live="polite">
-                {LISTENING_TEXT[listenState]}
+              <p
+                className={styles.listening}
+                data-testid="listening"
+                data-state={paused ? "paused" : listenState}
+                aria-live="polite"
+              >
+                {paused ? "Paused: off the record" : LISTENING_TEXT[listenState]}
                 {lastHeard && (
                   <span className={styles.lastHeard}>
                     {" "}
@@ -730,6 +830,70 @@ export default function Controller() {
                 </button>
               ))}
             </div>
+          </section>
+
+          {/* ADR-003 and CDR-001: off the record, a human interpreter, and high-risk moments. */}
+          <section className={styles.section} data-testid="safety">
+            <h2 className={styles.eyebrow}>Privacy and interpreter</h2>
+            {paused && (
+              <p className={styles.paused} data-testid="paused" role="status">
+                Off the record. Nothing is captured until you resume.
+              </p>
+            )}
+            <div className={styles.actions}>
+              <button
+                className={paused ? styles.primary : styles.secondary}
+                data-testid={paused ? "resume" : "pause"}
+                disabled={state !== "open"}
+                onClick={() => send(paused ? "visit.resume" : "visit.pause", {})}
+              >
+                {paused ? "Resume recording" : "Pause, off the record"}
+              </button>
+              <button
+                className={styles.secondary}
+                data-testid="interpreter-request"
+                disabled={state !== "open" || interpreter?.phase === "connecting"}
+                onClick={() => send("interpreter.request", {})}
+              >
+                Request interpreter
+              </button>
+              <button
+                className={styles.secondary}
+                data-testid="mark-high-risk"
+                disabled={state !== "open"}
+                onClick={() => send("visit.mark_high_risk", {})}
+              >
+                Mark high risk
+              </button>
+            </div>
+            {interpreter && (
+              <div
+                className={styles.interpreter}
+                data-testid="interpreter"
+                data-phase={interpreter.phase}
+                aria-live="polite"
+              >
+                <p className={styles.eyebrow}>
+                  Human interpreter
+                  {interpreter.phase === "offered" && ` · ${REASON_TEXT[interpreter.reason]}`}
+                </p>
+                <p className={styles.interpreterText}>{INTERPRETER_TEXT[interpreter.phase]}</p>
+                {interpreter.phase === "offered" && (
+                  <div className={styles.actions}>
+                    <button
+                      className={styles.primary}
+                      data-testid="interpreter-accept"
+                      onClick={() => send("interpreter.request", {})}
+                    >
+                      Connect interpreter
+                    </button>
+                    <button className={styles.quiet} onClick={() => setInterpreter(null)}>
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           {readbackTurn && (
@@ -800,7 +964,12 @@ export default function Controller() {
                 rows={2}
                 placeholder="Type what was said"
               />
-              <button className={styles.primary} data-testid="typed-send" onClick={sendTyped} disabled={state !== "open"}>
+              <button
+                className={styles.primary}
+                data-testid="typed-send"
+                onClick={sendTyped}
+                disabled={state !== "open" || paused}
+              >
                 Send
               </button>
             </div>
@@ -810,6 +979,48 @@ export default function Controller() {
               </p>
             )}
           </section>
+
+          {/* TDM-002: folded away so it is never pressed by accident; its state shows on the fold itself. */}
+          <details className={styles.presenter} data-testid="presenter">
+            <summary>
+              <span className={styles.eyebrow}>Presenter</span>
+              {injection === "armed" && (
+                <span className={`${styles.tag} ${styles.stop}`} data-testid="injection-state">
+                  mismatch armed
+                </span>
+              )}
+            </summary>
+            <div className={styles.presenterBody}>
+              <p className={styles.aside}>
+                Mismatch control for the blocked-dose beat. Never shown on the shared screen or the review screen.
+              </p>
+              {injection && (
+                <p className={styles.injection} data-testid="injection" data-state={injection}>
+                  {INJECTION_TEXT[injection]}
+                </p>
+              )}
+              <div className={styles.actions}>
+                {injection === "armed" ? (
+                  <button
+                    className={styles.secondary}
+                    data-testid="injection-cancel"
+                    onClick={() => send("demo.cancel_injection", {})}
+                  >
+                    Cancel mismatch
+                  </button>
+                ) : (
+                  <button
+                    className={styles.secondary}
+                    data-testid="injection-arm"
+                    disabled={state !== "open"}
+                    onClick={() => send("demo.inject_mismatch", {})}
+                  >
+                    Arm mismatch
+                  </button>
+                )}
+              </div>
+            </div>
+          </details>
         </div>
 
         <aside className={styles.panel} aria-label="Turn log and latency">
@@ -837,20 +1048,27 @@ export default function Controller() {
 
           <section className={styles.section}>
             <h2 className={styles.eyebrow}>Turns · private to the physician</h2>
-            {turns.length === 0 && <p className={styles.aside}>Nothing said yet.</p>}
+            {turns.length === 0 && markers.length === 0 && <p className={styles.aside}>Nothing said yet.</p>}
             <ol className={styles.turns}>
-              {turns.map((t) => {
+              {markersAfter(null)}
+              {turns.flatMap((t) => {
                 const outcome = outcomes[t.turnId] ?? {};
                 const unspoken =
                   t.status === "blocked" || t.status === "escalated" || outcome.discarded || outcome.voiceFailed;
-                return (
-                  <li key={t.turnId} data-testid="turn" data-status={t.status}>
+                const wasInjected = injected.has(t.turnId);
+                return [
+                  <li key={t.turnId} data-testid="turn" data-status={t.status} data-injected={wasInjected || undefined}>
                     <div className={styles.turnHead}>
                       <span className={`${styles.speaker} ${styles[t.speaker]}`}>{t.speaker}</span>
                       <span className={`${styles.tag} ${unspoken ? styles.stop : ""}`}>
                         {statusText(t, outcome, t.turnId === pendingReadback)}
                       </span>
                       {!unspoken && <span className={styles.tag}>{toneLabel(t)}</span>}
+                      {wasInjected && (
+                        <span className={`${styles.tag} ${styles.stop}`} data-testid="injected">
+                          presenter mismatch
+                        </span>
+                      )}
                     </div>
                     <p className={styles.line} lang={t.sourceLanguage}>
                       {t.sourceText}
@@ -862,6 +1080,12 @@ export default function Controller() {
                       <>
                         <ValuesTable turn={t} only="mismatched" />
                         <p className={styles.instruction}>Ask the speaker to repeat or rephrase.</p>
+                        {wasInjected && (
+                          <p className={styles.analysis}>
+                            The presenter injected this mismatch (TDM-002): the dose was multiplied by 10 after
+                            translation, on both attempts.
+                          </p>
+                        )}
                       </>
                     )}
                     {t.status === "escalated" && (
@@ -874,8 +1098,9 @@ export default function Controller() {
                       Back: {t.backTranslation} · {t.emotion.replace("_", " ")} · certainty {t.certainty} · confidence{" "}
                       {t.confidence.toFixed(2)} · attempts {t.attempts}
                     </p>
-                  </li>
-                );
+                  </li>,
+                  ...markersAfter(t.turnId),
+                ];
               })}
             </ol>
           </section>

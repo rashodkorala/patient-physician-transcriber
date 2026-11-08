@@ -3,5 +3,9 @@
   "checkingDose": "Checking the dose",
   "pleaseRepeat": "Please repeat",
   "interpreterOffered": "Not sure of this translation. A human interpreter is offered.",
-  "ready": "Ready when you are"
+  "ready": "Ready when you are",
+  "paused": "Paused. Nothing is being recorded.",
+  "interpreterAvailable": "A human interpreter is offered for this conversation.",
+  "interpreterConnecting": "Connecting to a human interpreter",
+  "interpreterSimulated": "Interpreter would join here (simulated)"
 }

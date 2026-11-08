@@ -61,6 +61,8 @@
 /* A line spoken in one language only (a question for one person) spans the row instead of leaving half empty. */
 .interpreter .side:only-child { grid-column: 1 / -1; padding-right: 0; }
 .interpreter .side:only-child .text { max-width: 32em; }
+/* ADR-003: an interpreter offered or (simulated) joining reads as the interpreter speaking, at the caption size. */
+.escalation .text { font-size: clamp(24px, 2.4vw, 44px); }
 .lang { font-family: var(--serif); font-style: italic; color: var(--muted); font-size: clamp(16px, 1.2vw, 24px); }
 .tag {
   padding: 0.45em 0.6em; border: 1px solid var(--line); border-radius: 4px; color: var(--muted);

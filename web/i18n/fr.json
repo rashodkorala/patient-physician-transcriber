@@ -3,5 +3,9 @@
   "checkingDose": "Vérification de la dose",
   "pleaseRepeat": "Veuillez répéter",
   "interpreterOffered": "Traduction incertaine. Un interprète humain est proposé.",
-  "ready": "Prêt quand vous l'êtes"
+  "ready": "Prêt quand vous l'êtes",
+  "paused": "En pause. Rien n'est enregistré.",
+  "interpreterAvailable": "Un interprète humain est proposé pour cette conversation.",
+  "interpreterConnecting": "Connexion à un interprète humain",
+  "interpreterSimulated": "L'interprète se joindrait à nous ici (simulation)"
 }
