@@ -22,6 +22,8 @@ const entries = [
   ["nameProposed", "name_proposed.json", "NameProposed"],
   ["voicePlayback", "voice_playback.json", "VoicePlayback"],
   ["voiceSpeaking", "voice_speaking.json", "VoiceSpeaking"],
+  ["demoInjectionState", "demo_injection_state.json", "DemoInjectionState"],
+  ["markHighRisk", "mark_high_risk.json", "MarkHighRisk"],
 ];
 
 const body = entries

@@ -245,3 +245,90 @@ def test_dropped_instruction_fails_the_tone_check_and_escalates_mdd_004(kb):
 
     result, reason, _ = run(kb, model(tone_check=dropped), text="Stop the medicine at once if you get a rash.")
     assert result.status == "escalated" and reason == "tone_failure" and result.attempts == 2
+
+
+# ---------- presenter mismatch control (TDM-002, task 5.1) ----------
+
+
+class Arming:
+    """The visit's one-shot injection as the graph sees it: claimed once, then spent."""
+
+    def __init__(self, armed=True):
+        self.armed = armed
+        self.claims = 0
+
+    async def claim(self):
+        self.claims += 1
+        fired, self.armed = self.armed, False
+        return fired
+
+
+def run_armed(kb, m, arming, text=DOSE):
+    return asyncio.run(
+        TurnPipeline(m, kb).run(
+            turn_id="t1",
+            speaker="physician",
+            source="en-CA",
+            target="pa-IN",
+            text=text,
+            recognition_confidence=0.95,
+            claim_injection=arming.claim,
+        )
+    )
+
+
+def test_injection_multiplies_the_first_dose_by_ten_on_both_attempts_and_blocks_tdm_002(kb):
+    m = model()
+    arming = Arming()
+    result, reason = run_armed(kb, m, arming)
+    assert result.status == "blocked" and result.attempts == 2 and reason is None
+    assert "4 ਮਿਲੀਗ੍ਰਾਮ" in result.translation and "0.4" not in result.translation
+    dose = next(v for v in result.critical_values if v.source == "0.4 milligrams")
+    assert dose.matched is False
+    # The model translated faithfully both times; the control changed the number after it, on both attempts.
+    assert [p for p, _ in m.calls] == ["translate", "tone_check", "translate", "tone_check"]
+    assert "Keep exactly: 0.4 milligrams" in field([u for p, u in m.calls if p == "translate"][1], "fix_these")
+    assert arming.claims == 1 and arming.armed is False
+
+
+def test_injection_waits_through_a_turn_without_a_critical_value_tdm_002(kb):
+    arming = Arming()
+    result, _ = run_armed(kb, model(), arming, text="You did not have a heart attack.")
+    assert result.status == "final" and arming.armed is True and arming.claims == 0
+
+
+def test_injection_waits_through_a_number_that_is_not_a_dose_tdm_002(kb):
+    arming = Arming()
+    result, _ = run_armed(kb, model(), arming, text="If the pain is not better after 5 minutes, call 911.")
+    assert result.status == "readback_required" and arming.armed is True and arming.claims == 0
+    assert all(v.matched for v in result.critical_values)
+
+
+def test_following_turn_after_firing_is_unaffected_tdm_002(kb):
+    arming = Arming()
+    run_armed(kb, model(), arming)
+    repeated, _ = run_armed(kb, model(), arming)
+    assert repeated.status == "readback_required" and "0.4" in repeated.translation
+    assert all(v.matched for v in repeated.critical_values)
+
+
+def test_unarmed_injection_leaves_the_dose_alone_tdm_002(kb):
+    result, _ = run_armed(kb, model(), Arming(armed=False))
+    assert result.status == "readback_required" and "0.4" in result.translation
+
+
+@pytest.mark.parametrize(
+    ("translation", "language", "expected"),
+    [
+        ("[pa-IN] 0.4 ਮਿਲੀਗ੍ਰਾਮ, 1 ਸਪਰੇਅ", "pa-IN", "[pa-IN] 4 ਮਿਲੀਗ੍ਰਾਮ, 1 ਸਪਰੇਅ"),
+        ("Après 5 minutes, 0,4 milligramme", "fr-CA", "Après 5 minutes, 4 milligramme"),
+        ("take 81 mg once a day", "en-CA", "take 810 mg once a day"),
+        ("੦.੪ ਮਿਲੀਗ੍ਰਾਮ", "pa-IN", "4 ਮਿਲੀਗ੍ਰਾਮ"),  # noqa: RUF001  (Gurmukhi digits)
+        ("0.4 மில்லிகிராம் மருந்து", "ta-LK", "4 மில்லிகிராம் மருந்து"),
+        ("call 911 after 5 minutes", "en-CA", None),
+    ],
+)
+def test_multiply_first_dose_tdm_002(translation, language, expected):
+    from graph.turn_graph import multiply_first_dose
+
+    assert multiply_first_dose(translation, language) == expected

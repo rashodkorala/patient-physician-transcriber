@@ -9,9 +9,11 @@ from pydantic import ValidationError
 from contracts import (
     CONTROLLER_COMMANDS,
     CONTROLLER_ONLY_EVENTS,
+    DemoInjectionState,
     EmpathyNudge,
     InterpreterEscalation,
     InterpreterLine,
+    MarkHighRisk,
     NameProposed,
     Names,
     TurnCaption,
@@ -60,6 +62,8 @@ def test_visit_state_public_fixture_validates_cdr_001():
         ("name_proposed.json", NameProposed),
         ("voice_playback.json", VoicePlayback),
         ("voice_speaking.json", VoiceSpeaking),
+        ("demo_injection_state.json", DemoInjectionState),
+        ("mark_high_risk.json", MarkHighRisk),
     ],
 )
 def test_controller_payload_fixtures_validate_cdr_001(name, model):
@@ -142,6 +146,23 @@ def test_voice_speaking_carries_no_content_cdr_004():
 def test_voice_commands_are_controller_only_and_the_event_is_public_cdr_004():
     assert {"voice.started", "voice.ended"} <= CONTROLLER_COMMANDS
     assert "voice.speaking" not in CONTROLLER_ONLY_EVENTS
+
+
+def test_demo_commands_are_controller_only_and_injection_state_is_private_cdr_001():
+    # TDM-002: presenter commands come from the controller; their state never reaches screen or review.
+    assert {"demo.inject_mismatch", "demo.cancel_injection", "visit.mark_high_risk"} <= CONTROLLER_COMMANDS
+    assert "demo.injection_state" in CONTROLLER_ONLY_EVENTS
+
+
+def test_pause_and_interpreter_request_are_open_to_any_screen_cdr_001():
+    assert not {"visit.pause", "visit.resume", "interpreter.request"} & CONTROLLER_COMMANDS
+    assert not {"visit.paused", "visit.resumed", "interpreter.escalation"} & CONTROLLER_ONLY_EVENTS
+
+
+@pytest.mark.parametrize("state", ["primed", ""])
+def test_demo_injection_state_is_armed_fired_or_cancelled_tdm_002(state):
+    with pytest.raises(ValidationError):
+        DemoInjectionState.model_validate({"state": state})
 
 
 def test_visit_state_without_speaking_still_validates_cdr_004():

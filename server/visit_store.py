@@ -4,6 +4,8 @@
 @implements CDR-001: Visit WebSocket event contract
 @implements CDR-003: Participant names and interpreter lines on the visit channel
 @implements CDR-004: Interpreter voice playback on the visit channel
+@implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
+@implements TDM-002: Presenter mismatch control for the blocked-dose beat
 @contract ws:/ws/visit
 @see openspec/tdr/adr/adr-007-in-memory-state-websocket.md
 """
@@ -20,6 +22,7 @@ from contracts import (
     CurrentTurnPublic,
     EmpathyNudge,
     Envelope,
+    EscalationReason,
     InterpreterLine,
     IntroductionState,
     Names,
@@ -46,6 +49,20 @@ class TurnRecord:
     # Settled turns (spoken, blocked, or escalated) are the only ones shared screens see.
     settled: bool = False
     readback_confirmed: bool = False
+
+
+@dataclass(frozen=True)
+class EscalationRecord:
+    """An interpreter offer or request, or a physician's high-risk mark, as recorded in the visit (ADR-003)."""
+
+    reason: EscalationReason
+    at: str
+    turn_id: str | None = None
+    note: str | None = None
+
+
+def now() -> str:
+    return datetime.now(UTC).isoformat()
 
 
 @dataclass
@@ -92,6 +109,13 @@ class Visit:
     interpreter_lines: dict[str, InterpreterLine] = field(default_factory=dict)
     # CDR-004: one voice at a time; None is silent, so a new visit starts silent.
     speech: Speech | None = None
+    # ADR-003: every interpreter offer and request, and every high-risk mark, in order. Kept with the
+    # visit as its transcript record; no visit.state field carries it (CDR-001 defines none).
+    escalations: list[EscalationRecord] = field(default_factory=list)
+    # TDM-002: the presenter's one-shot mismatch, and the turns it fired on. Never in a public snapshot,
+    # and not in the controller's either, which CDR-001 gives no field for.
+    injection_armed: bool = False
+    injected_turns: set[str] = field(default_factory=set)
 
     def names(self) -> Names:
         return Names(physician_name=self.physician_name, patient_name=self.patient_name)
@@ -177,7 +201,7 @@ class Hub:
             type=event_type,
             visit_id=self.visit.visit_id,
             seq=conn.seq,
-            ts=datetime.now(UTC).isoformat(),
+            ts=now(),
             payload=payload,
         ).wire()
 

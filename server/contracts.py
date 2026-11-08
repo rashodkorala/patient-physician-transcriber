@@ -4,6 +4,8 @@
 @implements CDR-002: Turn result schema
 @implements CDR-003: Participant names and interpreter lines on the visit channel
 @implements CDR-004: Interpreter voice playback on the visit channel
+@implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
+@implements TDM-002: Presenter mismatch control for the blocked-dose beat
 @contract ws:/ws/visit
 @contract TurnResult
 @contract TurnCaption
@@ -168,8 +170,13 @@ class EmpathyNudge(Wire):
     phrase_language: Language
 
 
+EscalationReason = Literal["low_confidence", "tone_failure", "high_risk", "requested"]
+
+
 class InterpreterEscalation(Wire):
-    reason: Literal["low_confidence", "tone_failure", "high_risk", "requested"]
+    """interpreter.escalation, every role: a human interpreter offered (or, with "requested", asked for)."""
+
+    reason: EscalationReason
     turn_id: str | None = None
 
 
@@ -187,6 +194,8 @@ class RecordIntegrity(Wire):
 
 
 class DemoInjectionState(Wire):
+    """demo.injection_state, controller only (TDM-002): the presenter's mismatch injection."""
+
     state: Literal["armed", "fired", "cancelled"]
 
 

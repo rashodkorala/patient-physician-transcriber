@@ -11,6 +11,7 @@ Run with the app factory so nothing loads on import: uvicorn main:create_app --f
 @implements TDM-003: Sinhala and Tamil as test-only languages before demo night
 @implements TDM-004: Tamil is the chosen live language, alongside Punjabi and French, spoken by ElevenLabs
 @implements ADR-010: Voice output: ElevenLabs Eleven v4 replaces OpenAI text-to-speech; Azure stays fallback
+@implements TDM-002: Presenter mismatch control for the blocked-dose beat
 @contract ws:/ws/visit
 @contract http:GET /api/speech/{speech_id}
 @see openspec/tdr/adr/adr-001-system-architecture.md
@@ -30,10 +31,13 @@ from config import LIVE_MODEL, TONE_MODEL, Settings, load_settings
 from contracts import (
     CONTROLLER_COMMANDS,
     TEST_LANGUAGES,
+    DemoInjectionState,
     ErrorPayload,
+    EscalationReason,
     InterpreterEscalation,
     InterpreterLine,
     Language,
+    MarkHighRisk,
     NameProposed,
     NameRef,
     NameReply,
@@ -53,7 +57,7 @@ from kb.embeddings import make_embedder
 from kb.store import KnowledgeBase
 from llm import ClaudeModel, Model
 from speech_token import SpeechNotConfigured, issue_token
-from visit_store import Connection, Hub, Speech, TurnRecord, Visit
+from visit_store import Connection, EscalationRecord, Hub, Speech, TurnRecord, Visit, now
 from voice import (
     DEFAULT_MODEL,
     DEFAULT_VOICE,
@@ -202,6 +206,13 @@ def create_app(
         hub.visit.physician_language = cmd.physician_language
         await hub.publish_state()
 
+    async def refuse_while_paused(conn: Connection, command: str) -> bool:
+        """Off the record: nothing said is captured or relayed until the visit resumes (demo spec, CDR-001)."""
+        if hub.visit.paused:
+            await error(conn, "Paused: nothing is recorded until you resume", command)
+            return True
+        return False
+
     async def say(line: InterpreterLine) -> None:
         hub.visit.interpreter_lines[line.line_id] = line
         await hub.publish("interpreter.line", line.wire())
@@ -223,6 +234,8 @@ def create_app(
 
     async def start_introduction(conn: Connection, payload: dict) -> None:
         visit = hub.visit
+        if await refuse_while_paused(conn, "visit.start_introduction"):
+            return
         if visit.turns:
             await error(conn, "The introduction is only offered before the first turn", "visit.start_introduction")
             return
@@ -235,6 +248,8 @@ def create_app(
     async def name_reply(conn: Connection, payload: dict) -> None:
         cmd = NameReply.model_validate(payload)
         visit = hub.visit
+        if await refuse_while_paused(conn, "visit.name_reply"):
+            return
         if visit.introduction != f"asking_{cmd.role}":
             await error(conn, f"The interpreter is not asking for the {cmd.role}'s name", "visit.name_reply")
             return
@@ -293,6 +308,8 @@ def create_app(
     async def submit_turn(conn: Connection, payload: dict) -> None:
         cmd = TurnSubmit.model_validate(payload)
         visit = hub.visit
+        if await refuse_while_paused(conn, "turn.submit"):
+            return
         if visit.pending_readback:
             await error(conn, "Confirm or reject the highlighted dose before the next turn", "turn.submit")
             return
@@ -315,6 +332,15 @@ def create_app(
             "turn.started", TurnStarted(turn_id=turn_id, speaker=cmd.speaker, language=cmd.language).wire()
         )
 
+        async def claim_injection() -> bool:
+            # TDM-002: one shot; spent on the first physician turn with a dose number, then disarmed.
+            if not visit.injection_armed:
+                return False
+            visit.injection_armed = False
+            visit.injected_turns.add(turn_id)
+            await hub.publish("demo.injection_state", DemoInjectionState(state="fired").wire())
+            return True
+
         started = time.perf_counter()
         try:
             result, reason = await pipeline.run(
@@ -327,6 +353,7 @@ def create_app(
                 physician_name=visit.physician_name,
                 patient_name=visit.patient_name,
                 emit=lambda stage: status(turn_id, stage),
+                claim_injection=claim_injection if cmd.speaker == "physician" else None,
             )
         except Exception as exc:  # refusal or API failure: nothing is spoken
             log.exception("turn pipeline failed")
@@ -351,7 +378,7 @@ def create_app(
         record.stage = {"final": "spoken"}.get(result.status, result.status)
         await hub.publish("turn.result", to_caption(result).wire())
         if result.status == "escalated" and reason:
-            await hub.publish("interpreter.escalation", InterpreterEscalation(reason=reason, turn_id=turn_id).wire())  # type: ignore[arg-type]
+            await escalate(reason, turn_id)  # type: ignore[arg-type]
         if result.status == "final" and result.speaker == "patient":
             task = asyncio.create_task(send_nudge(turn_id, result.emotion, result.translation))
             background.add(task)
@@ -374,6 +401,47 @@ def create_app(
         record.readback_confirmed = True
         record.stage = "spoken"
         await hub.publish("turn.result", to_caption(record.result, readback_confirmed=True).wire())  # type: ignore[arg-type]
+
+    # ---------- ADR-003 and CDR-001: off-the-record pause, interpreter, and high-risk marks ----------
+
+    async def escalate(reason: EscalationReason, turn_id: str | None = None, note: str | None = None) -> None:
+        """Record an interpreter offer, request, or high-risk mark in the visit, and tell every screen."""
+        hub.visit.escalations.append(EscalationRecord(reason=reason, at=now(), turn_id=turn_id, note=note))
+        await hub.publish("interpreter.escalation", InterpreterEscalation(reason=reason, turn_id=turn_id).wire())
+
+    async def set_paused(conn: Connection, paused: bool) -> None:
+        command = "visit.pause" if paused else "visit.resume"
+        if hub.visit.paused == paused:
+            await error(conn, "The visit is already paused" if paused else "The visit is not paused", command)
+            return
+        hub.visit.paused = paused
+        await hub.publish("visit.paused" if paused else "visit.resumed", {})
+
+    async def request_interpreter(conn: Connection, payload: dict) -> None:
+        # Either party, from any screen, at any time, paused or not (ADR-003).
+        await escalate("requested")
+
+    async def mark_high_risk(conn: Connection, payload: dict) -> None:
+        cmd = MarkHighRisk.model_validate(payload)
+        if cmd.turn_id is not None and cmd.turn_id not in hub.visit.turns:
+            await error(conn, "No turn with that id in this visit", "visit.mark_high_risk")
+            return
+        note = " ".join((cmd.note or "").split()) or None
+        await escalate("high_risk", cmd.turn_id, note)
+
+    # ---------- TDM-002: presenter mismatch control ----------
+
+    async def inject_mismatch(conn: Connection, payload: dict) -> None:
+        # Arming again while armed changes nothing: it still fires once.
+        hub.visit.injection_armed = True
+        await hub.publish("demo.injection_state", DemoInjectionState(state="armed").wire())
+
+    async def cancel_injection(conn: Connection, payload: dict) -> None:
+        if not hub.visit.injection_armed:
+            await error(conn, "No mismatch injection is armed", "demo.cancel_injection")
+            return
+        hub.visit.injection_armed = False
+        await hub.publish("demo.injection_state", DemoInjectionState(state="cancelled").wire())
 
     # ---------- CDR-004: interpreter voice playback ----------
 
@@ -422,6 +490,12 @@ def create_app(
         "turn.readback_reject": lambda conn, payload: readback(conn, payload, False),
         "voice.started": voice_started,
         "voice.ended": voice_ended,
+        "visit.pause": lambda conn, payload: set_paused(conn, True),
+        "visit.resume": lambda conn, payload: set_paused(conn, False),
+        "interpreter.request": request_interpreter,
+        "visit.mark_high_risk": mark_high_risk,
+        "demo.inject_mismatch": inject_mismatch,
+        "demo.cancel_injection": cancel_injection,
     }
 
     @app.websocket("/ws/visit")
@@ -433,6 +507,9 @@ def create_app(
         await ws.accept()
         conn = hub.add(ws, role)  # type: ignore[arg-type]
         await hub.send_state(conn)
+        if hub.visit.injection_armed:
+            # TDM-002: a controller that reloads still sees the control armed; send_to keeps it from screens.
+            await hub.send_to(conn, "demo.injection_state", DemoInjectionState(state="armed").wire())
         try:
             while True:
                 message = await ws.receive_json()

@@ -5,6 +5,7 @@
  * @implements CDR-002: Turn result schema
  * @implements CDR-003: Participant names and interpreter lines on the visit channel
  * @implements CDR-004: Interpreter voice playback on the visit channel
+ * @implements TDM-002: Presenter mismatch control for the blocked-dose beat
  * @contract ws:/ws/visit
  * @contract TurnResult
  * @contract TurnCaption
@@ -140,6 +141,17 @@ export type EscalationReason = "low_confidence" | "tone_failure" | "high_risk" |
 export interface InterpreterEscalation {
   reason: EscalationReason;
   turnId?: string | null;
+}
+
+/** visit.mark_high_risk, controller only: the server records it and offers an interpreter (reason high_risk). */
+export interface MarkHighRisk {
+  turnId?: string | null;
+  note?: string | null;
+}
+
+/** demo.injection_state, controller only (TDM-002): the presenter's one-shot mismatch injection. */
+export interface DemoInjectionState {
+  state: "armed" | "fired" | "cancelled";
 }
 
 /** turn.readback_required, turn.readback_confirm, and turn.readback_reject. */

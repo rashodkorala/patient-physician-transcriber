@@ -12,18 +12,27 @@ Outcome order when several apply: blocked, escalated, readback_required, final (
 The interpreter relays each turn as a person between the two, in reported speech that names the
 speaker ("Dr. Thomas is saying ..."), with every clinical detail kept exactly (MDD-004).
 
+Demo night only (TDM-002): a presenter can arm a one-shot mismatch. On the first attempt of a turn whose
+translation has a dose number, translate claims it; once claimed, that number is multiplied by 10 on every
+attempt of the turn, and the normal verify node blocks it. The graph never sets the status itself.
+
 @implements ADR-004: LangGraph for the per-turn translation graph
 @implements ADR-002: Knowledge base feeding translation
 @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
 @implements CDR-002: Turn result schema
 @implements MDD-004: Mediator voice: the interpreter speaks as a person between the parties, in reported speech
+@implements TDM-002: Presenter mismatch control for the blocked-dose beat
 @contract TurnResult
 @see openspec/tdr/adr/adr-004-langgraph-turn-graph.md
 @see openspec/tdr/mdd/mdd-004-mediator-voice.md
+@see openspec/tdr/tdm/tdm-002-presenter-mismatch-control.md
 """
 
 import operator
+import re
+import unicodedata
 from collections.abc import Awaitable, Callable
+from decimal import Decimal
 from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.runnables import RunnableConfig
@@ -50,6 +59,8 @@ LANGUAGE_NAMES = {
 UNNAMED = {"physician": "your doctor", "patient": "the patient", "companion": "the patient's companion"}
 
 Emit = Callable[[str], Awaitable[None]]
+# TDM-002: asks the visit for the armed injection; True means it was armed and is now spent on this turn.
+ClaimInjection = Callable[[], Awaitable[bool]]
 
 
 # ---------- model outputs ----------
@@ -95,6 +106,8 @@ class TurnState(TypedDict, total=False):
     failures: list[str]
     status: str
     escalation_reason: str | None
+    # TDM-002: whether this turn carries the presenter's injected mismatch.
+    injected: bool
     stages: Annotated[list[str], operator.add]
 
 
@@ -191,6 +204,34 @@ def medication_forms(medications: list[str], glossary: list[GlossaryEntry]) -> d
     return forms
 
 
+# ---------- TDM-002: presenter mismatch control ----------
+
+# A number written as digits and the unit after it, read as critical_values reads them in any language.
+_NUMBER_WITH_UNIT = re.compile(rf"(?<![\w.,])(\d+(?:[.,]\d+)?)\s*({critical_values._UNIT})", re.IGNORECASE)
+
+
+def multiply_first_dose(translation: str, language: str) -> str | None:
+    """The translation with its first dose number multiplied by 10 (0.4 mg becomes 4 mg), or None without one.
+
+    Only digits before a dose unit count, so the change is always one the critical value check reads as a
+    different dose.
+    """
+    text = unicodedata.normalize("NFC", translation)
+    # One character for one, so a position in the digit-mapped text is the same position in the text.
+    prepared = text.translate(critical_values.DIGIT_MAP)
+    for m in _NUMBER_WITH_UNIT.finditer(prepared):
+        if critical_values._unit_key(m.group(2)) not in critical_values.DOSE_UNITS:
+            continue
+        raw = m.group(1)
+        decimal_comma = "," in raw and (critical_values.lang_key(language) == "fr" or len(raw.split(",")[1]) != 3)
+        value = Decimal(raw.replace(",", "." if decimal_comma else ""))
+        tenfold = f"{(value * 10).normalize():f}"
+        if decimal_comma:
+            tenfold = tenfold.replace(".", ",")
+        return text[: m.start(1)] + tenfold + text[m.end(1) :]
+    return None
+
+
 # ---------- graph ----------
 
 
@@ -199,6 +240,17 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
         callback = (config.get("configurable") or {}).get("emit")
         if callback:
             await callback(stage)
+
+    async def inject(state: TurnState, config: RunnableConfig, draft: Draft, attempts: int) -> tuple[Draft, bool]:
+        """TDM-002: claim the armed injection on a first attempt that can carry it, then apply it on every attempt."""
+        injected = state.get("injected", False)
+        altered = multiply_first_dose(draft.translation, state["target"])
+        claim: ClaimInjection | None = (config.get("configurable") or {}).get("claim_injection")
+        if not injected and attempts == 1 and altered is not None and claim is not None:
+            injected = await claim()
+        if injected and altered is not None:
+            draft = draft.model_copy(update={"translation": altered})
+        return draft, injected
 
     async def retrieve(state: TurnState, config: RunnableConfig) -> dict:
         await emit(config, "checking_glossary")
@@ -214,7 +266,8 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
         draft = await model.parse(
             purpose="translate", system=TRANSLATE_SYSTEM, user=_translate_user(state), schema=Draft
         )
-        return {"draft": draft, "attempts": attempts, "stages": [stage]}
+        draft, injected = await inject(state, config, draft, attempts)
+        return {"draft": draft, "attempts": attempts, "injected": injected, "stages": [stage]}
 
     async def verify(state: TurnState, config: RunnableConfig) -> dict:
         await emit(config, "verifying")
@@ -310,6 +363,7 @@ class TurnPipeline:
         physician_name: str | None = None,
         patient_name: str | None = None,
         emit: Emit | None = None,
+        claim_injection: ClaimInjection | None = None,
     ) -> tuple[TurnResult, str | None]:
         # The listener is the patient when the physician speaks, and the physician otherwise.
         names = {"physician": physician_name, "patient": patient_name}
@@ -325,9 +379,10 @@ class TurnPipeline:
                 "listener_name": names[listener],
                 "recognition_confidence": recognition_confidence,
                 "attempts": 0,
+                "injected": False,
                 "stages": [],
             },
-            config={"configurable": {"emit": emit}},
+            config={"configurable": {"emit": emit, "claim_injection": claim_injection}},
         )
         draft: Draft = state["draft"]
         # A glossary translation may carry a gloss in brackets the model can leave out.
