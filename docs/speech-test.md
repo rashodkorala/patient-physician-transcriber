@@ -27,3 +27,23 @@ Use the patient lines from `docs/demo-script.md` (Run 1), spoken naturally by th
 **Decision rule (ADR-005):** if numbers are misheard in more than one line, or more than one word in five is wrong overall, repeat with Google Speech and record both. The project lead decides which provider to keep.
 
 **Verdict:**
+
+## Continuous-listening task 2.1: language identification for hands-free
+
+Run on 2026-11-07 with synthesised speech, not a live speaker: Azure voices spoke each line, and the audio was fed to Azure recognition.
+The live run with the speakers stays open until native-speaker testing starts.
+Continuous language identification compared English (`en-CA`) with each patient language.
+
+| Pair | Full sentences | One-word reply | Notes |
+|---|---|---|---|
+| `en-CA` alone vs each patient language | English every time | "Yes." heard as English | |
+| `en-CA` / `pa-IN` | Punjabi, both sentences | "ਹਾਂ ਜੀ।" heard as Punjabi | |
+| `en-CA` / `fr-CA` | French, both sentences | "Oui." heard as English "We." | |
+| `en-CA` / `ta-IN` (Tamil) | Tamil, both sentences | "ஆமாம்." heard as English "Ah, Mum." | `ta-LK` is refused for recognition (websocket code 1007), so Tamil is identified and recognised as `ta-IN` |
+| `en-CA` / `si-LK` | Sinhala, both sentences | "ඔව්." heard as English "Oh." | |
+
+Azure reports no confidence for continuous identification: every result said "Unknown".
+
+**Outcome:** language identification separates the two sides on full sentences in every pair.
+One- and two-word replies are often heard as English, so hands-free holds them on the controller for a Physician or Patient tap before sending (rashodkorala's decision, 2026-11-07).
+Tamil recognition had the same `ta-LK` problem in push-to-talk, fixed by recognising Tamil as `ta-IN` (commit 2b9bd7f).

@@ -15,10 +15,15 @@ The physician speaks English and the patient speaks the visit's patient language
 
 ## Decisions
 
-- **Recognition**: one continuous recogniser with language identification over the visit's two languages, per IDR-004 on the speech provider chosen in ADR-005.
+- **Recognition**: one continuous recogniser with language identification over the visit's two recognition locales, per IDR-004 on the speech provider chosen in ADR-005.
+  Tamil is identified and recognised as `ta-IN`, because Azure refuses `ta-LK` for recognition; the visit language, voice, and record stay `ta-LK` (TDM-004; `RECOGNITION` in `web/lib/languages.ts`, shared with push-to-talk).
+  Azure reports no confidence for continuous identification, so no rule depends on one.
 - **Turn boundary**: the recogniser's end-of-utterance silence detection, with a configurable silence timeout (starting at about 800 ms) so a mid-sentence pause does not split a turn, per IDR-004.
 - **Speaker**: physician language means physician, patient language means patient, per IDR-004; the turn is then submitted through the existing controller path, so name replies, read-back, and latency rows behave as for push-to-talk (CDR-001 unchanged).
-- **Echo**: listening pauses while the shared speaking signal (below) says the voice is playing, and resumes after a short tail (about 300 ms, owned by the listener) once it stops, per IDR-004.
+- **Short replies**: a turn of one or two words is held on the controller with Physician and Patient buttons and sent only when one is tapped, because identification often hears a one-word reply in the patient's language as English (task 2.1); longer turns go straight through (rashodkorala's decision, 2026-11-07).
+  This also covers a spoken name during the introduction, which is short and language-neutral.
+- **Echo**: the recogniser listens to an echo-cancelled microphone stream, and that stream's track is muted while the shared speaking signal (below) says the voice is playing and for a short tail (about 300 ms) after, per IDR-004.
+  A muted track sends silence, so the recogniser keeps running and nothing restarts; any result that still arrives while muted is dropped.
 - **Other pauses**: while a dose read-back is pending, and while a push-to-talk control is held (the override), per IDR-004.
 - **No correction**: the interpreter routes each utterance by its detected language into the other party's language, so a misdetection gives a redundant translation, not a lost one; push-to-talk covers anything said again, per IDR-004 (amended 2026-11-07).
   No visit channel change is needed (CDR-001 unchanged).

@@ -42,3 +42,10 @@ The system SHALL show the physician which speaker each hands-free turn was given
 #### Scenario: Patient answers in English
 - **WHEN** hands-free is on and the patient answers in English
 - **THEN** the turn is recorded as the physician's, in English, and translated into the patient's language; nothing is lost, and the physician can use push-to-talk if it needs saying again
+
+### Requirement: Short replies are confirmed
+The system SHALL hold a hands-free turn of one or two words on the physician's controller, showing the words heard, until the physician chooses whose words they were, and SHALL send longer turns without waiting.
+
+#### Scenario: Patient says yes
+- **WHEN** hands-free is on and the patient says a one-word reply
+- **THEN** the controller shows the reply with Physician and Patient choices, and the turn is recorded only after the physician chooses, with that speaker and language

@@ -18,20 +18,22 @@ TDRs: ADR-005
 
 TDRs: ADR-005, IDR-004
 
-- [ ] 2.1 Confirm Azure continuous language identification supports `en-CA` with each of `pa-IN`, `fr-CA`, `ta-LK`, and `si-LK`; verify by a short live run per pair on the laptop, logged in `docs/speech-test.md`
+- [x] 2.1 Confirm Azure continuous language identification supports `en-CA` with each of `pa-IN`, `fr-CA`, `ta-LK`, and `si-LK`; verify with synthesised speech per pair, logged in `docs/speech-test.md` (2026-11-07: full sentences identified in every pair; Tamil only as `ta-IN`, since Azure refuses `ta-LK`; one-word replies mostly heard as English; no confidence is reported)
+- [ ] 2.2 Repeat 2.1 with the live speakers on the laptop, logged in `docs/speech-test.md` (end-of-project speaker testing)
 
 ## 3. Continuous capture
 
 TDRs: ADR-005, IDR-001, IDR-004, CDR-001
 
-- [ ] 3.1 Add the continuous capture with two-language identification, silence segmentation, pause and resume, and token refresh to `web/lib/speech.ts`; verify the web typecheck and lint pass
+- [ ] 3.1 Add the continuous capture with two-language identification over the visit's recognition locales (`RECOGNITION` in `web/lib/languages.ts`), silence segmentation, muting, and token refresh to `web/lib/speech.ts`; verify the web typecheck and lint pass
 - [ ] 3.2 Pause listening on the shared speaking signal and resume after a short tail; verify with a unit test of the pause rule
 - [ ] 3.3 Add the hands-free toggle, language-to-speaker mapping, last-speaker indicator, read-back pause, and push-to-talk override to `web/components/Controller.tsx`; verify with a unit test of the mapping
 - [ ] 3.4 Route each hands-free turn into the other party's language by its detected language, with no speaker correction; verify with a unit test that an English turn while the patient language is set goes to the patient's language
+- [ ] 3.5 Hold one- and two-word hands-free turns on the controller for a Physician or Patient tap before sending; verify with a unit test of the rule and the end-to-end run in 4.1
 
 ## 4. Verification
 
 TDRs: EDR-002, IDR-004
 
-- [ ] 4.1 Add a hands-free run to `web/e2e/` with a fake recogniser feeding alternating languages; verify speakers and languages are correct and no spoken translation is resubmitted
+- [ ] 4.1 Add a hands-free run to `web/e2e/` with a fake recogniser feeding alternating languages; verify speakers and languages are correct, short replies are held, Tamil is routed as `ta-LK`, and no spoken translation is resubmitted
 - [ ] 4.2 Run a ten-turn hands-free visit on the laptop with the Punjabi and Tamil speakers; verify mislabels and echo turns are counted in `docs/speech-test.md` and latency is comparable with push-to-talk
