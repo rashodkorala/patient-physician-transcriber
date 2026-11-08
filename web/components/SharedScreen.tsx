@@ -6,6 +6,7 @@
  * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-002: Turn result schema
  * @implements CDR-003: Participant names and interpreter lines on the visit channel
+ * @implements CDR-004: Interpreter voice playback on the visit channel
  * @contract TurnCaption
  */
 
@@ -20,6 +21,7 @@ import type {
   TurnStarted,
   TurnStatus,
   VisitStatePublic,
+  VoiceSpeaking,
 } from "@/lib/contracts";
 import { bilingual, type NoticeKey } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
@@ -174,7 +176,23 @@ const ORB_LABEL: Record<OrbMode, string> = {
   physician: "listening",
   patient: "listening",
   translating: "translating",
+  speaking: "speaking",
 };
+
+/** The interpreter's voice playing in the room: its own row, so it never reads as the next speaker's state. */
+function Speaking({ language }: { language: Language }) {
+  return (
+    <article className={`${styles.turn} ${styles.interpreter}`} data-testid="speaking" data-language={language}>
+      <div className={styles.side} lang={language}>
+        <div className={styles.meta}>
+          <span className={styles.speaker}>Interpreter</span>
+          <span className={styles.lang}>{LANGUAGE_LABELS[language].own}</span>
+        </div>
+        <Orb mode="speaking" label={ORB_LABEL.speaking} className={styles.pendingOrb} />
+      </div>
+    </article>
+  );
+}
 
 function PendingTurn({ p, names, other }: { p: Pending; names: Names; other: (lang: Language) => Language }) {
   const mode = orbMode(p);
@@ -217,6 +235,7 @@ export default function SharedScreen() {
   const [names, setNames] = useState<Names>({ physicianName: null, patientName: null });
   // Only lines heard live: the introduction comes before any turn, and a reconnecting screen skips it.
   const [lines, setLines] = useState<InterpreterLine[]>([]);
+  const [speaking, setSpeaking] = useState<VoiceSpeaking | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
 
   const onEvent = useCallback((event: Envelope) => {
@@ -226,6 +245,7 @@ export default function SharedScreen() {
         setLanguages({ patient: state.patientLanguage, physician: state.physicianLanguage });
         setCaptions(state.turns);
         setNames({ physicianName: state.physicianName ?? null, patientName: state.patientName ?? null });
+        setSpeaking(state.speaking ?? null);
         const current = state.currentTurn;
         setPending(
           current
@@ -250,6 +270,9 @@ export default function SharedScreen() {
       case "visit.names":
         setNames(event.payload as Names);
         break;
+      case "voice.speaking":
+        setSpeaking(event.payload as VoiceSpeaking);
+        break;
       case "interpreter.line":
         // Asking again replaces the question rather than stacking a copy of it.
         setLines((prev) => {
@@ -272,7 +295,7 @@ export default function SharedScreen() {
   // A block body: newer browsers return a Promise from scrollIntoView, which React would call as a cleanup.
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
-  }, [captions, pending, lines]);
+  }, [captions, pending, lines, speaking]);
 
   return (
     <main className={styles.screen}>
@@ -290,8 +313,9 @@ export default function SharedScreen() {
         {captions.slice(-6).map((c) => (
           <Caption key={c.turnId} c={c} names={names} />
         ))}
+        {speaking?.speaking && <Speaking language={speaking.language} />}
         {pending && <PendingTurn p={pending} names={names} other={other} />}
-        {!pending && captions.length === 0 && lines.length === 0 && (
+        {!pending && !speaking?.speaking && captions.length === 0 && lines.length === 0 && (
           <div className={styles.ready} data-testid="ready">
             <Orb mode="ready" className={styles.readyOrb} />
             {bilingual("ready", languages.patient, languages.physician).map(({ lang, text }) => (

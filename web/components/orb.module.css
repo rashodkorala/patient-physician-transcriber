@@ -57,6 +57,9 @@
   animation: spin 1.1s linear infinite;
 }
 
+/* Speaking: rings moving out from the ball, one after the other. */
+.ripple { position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--c1); opacity: 0; }
+
 .ready { --spd: 2.6; --glow: 0.1; --c1: #f3efe6; --c2: #8f8a7e; --c3: #c9c2b2; --c4: #f3efe6; }
 .ready .blob { opacity: 0.42; }
 .physician { --c1: #5b9dff; --c2: #46d6c6; --c3: #8a7dff; --c4: #d6e8ff; }
@@ -66,13 +69,21 @@
 .translating { --spd: 0.38; --glow: 0.22; --c1: #b9b3ff; --c2: #f3efe6; --c3: #6c8cff; --c4: #ffffff; }
 .translating .core { transform: scale(0.8); }
 .translating .ring { opacity: 1; }
+/* Speaking: both speakers' colours, because the interpreter speaks for one to the other. */
+.speaking { --spd: 0.72; --glow: 0.5; --c1: #5b9dff; --c2: #ff8a6b; --c3: #46d6c6; --c4: #ffd27a; }
+.speaking .core { animation: listen 1.4s ease-in-out infinite; }
+.speaking .ripple { animation: ripple 2.4s ease-out infinite; }
+.speaking .later { animation-delay: 1.2s; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes morph { to { border-radius: 58% 42% 40% 60% / 56% 60% 40% 44%; } }
 @keyframes breathe { 0%, 100% { transform: scale(0.97); } 50% { transform: scale(1.02); } }
+/* 1.45 keeps the ring inside the 16px phone gutter when the orb sits at the left edge of a row. */
+@keyframes ripple { from { transform: scale(1); opacity: 0.45; } to { transform: scale(1.45); opacity: 0; } }
 @keyframes listen { 0%, 100% { transform: scale(0.9); } 30% { transform: scale(1.04); } 60% { transform: scale(0.96); } }
 
-/* Still, but the colours and the ring still tell the state apart. */
+/* Still, but the colours, the ring, and a resting ring for speaking still tell the states apart. */
 @media (prefers-reduced-motion: reduce) {
   .orb, .orb * { animation: none !important; }
+  .speaking .ripple:not(.later) { opacity: 0.35; transform: scale(1.18); }
 }

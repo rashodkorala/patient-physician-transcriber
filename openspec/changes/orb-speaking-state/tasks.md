@@ -33,6 +33,9 @@ Built by the continuous-listening work, which owns `web/lib/speech.ts` and `web/
 
 TDRs: CDR-004, ADR-001
 
-- [ ] 3.1 Add a Speaking mode to the orb (both speakers' colours, rings moving out, still under reduced motion); verify screenshots at 1440, 960, and 390 pixels and a reduced-motion check
-- [ ] 3.2 Drive it in `web/components/SharedScreen.tsx` from `voice.speaking` and `visit.state.speaking`, with Speaking taking precedence over the pending turn's state; verify an e2e script with a controller socket shows Speaking on start, leaves it on end, and leaves it when the controller disconnects
-- [ ] 3.3 Run `node e2e/week1.mjs` against the fake-model stack; verify it still passes
+- [x] 3.1 Add a Speaking mode to the orb (both speakers' colours, rings moving out, still under reduced motion); verify screenshots at 1440, 960, and 390 pixels and a reduced-motion check
+  - 2026-11-07: screenshots of all five states at 1440, Ready and Speaking at 960 and 390 in light and dark, no overflow; under reduced motion no animation runs and Speaking keeps a still ring.
+- [x] 3.2 Drive it in `web/components/SharedScreen.tsx` from `voice.speaking` and `visit.state.speaking`, as its own Interpreter row above any pending turn (so the voice is never shown under the next speaker's label), and hide the ready line while speaking; verify an e2e script with a controller socket shows Speaking on start, leaves it on end, and leaves it when the controller disconnects
+  - 2026-11-07: `node e2e/orb-speaking.mjs http://localhost:3200 8200` passes: refused id never shown, Speaking while playing, a screen joining mid-speech, cleared on end and on controller disconnect. Placement changed from "precedence over the pending turn" during build; see the change's review.
+- [x] 3.3 Run `node e2e/week1.mjs` against the fake-model stack; verify it still passes
+  - 2026-11-07: `node e2e/week1.mjs http://localhost:3200` passes on the fake-model stack.
