@@ -1,5 +1,6 @@
 """Visit channel tests: role routing, snapshots, languages, read-back, blocking, escalation,
-and empathy nudges, run against the full turn graph with a scripted model (CDR-001, CDR-002)."""
+empathy nudges, names, the introduction, and voice playback, run against the full turn graph with a scripted
+model (CDR-001, CDR-002, CDR-003, CDR-004)."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,7 +23,7 @@ def kb():
     return KnowledgeBase(HashingEmbedder())
 
 
-def make_client(kb, translate=None, tone_check=None):
+def make_client(kb, translate=None, tone_check=None, **app_options):
     model = ScriptedModel(
         {
             "translate": translate or fake_model.translate,
@@ -31,7 +32,7 @@ def make_client(kb, translate=None, tone_check=None):
             "name_extract": fake_model.name_extract,
         }
     )
-    return TestClient(create_app(model=model, settings=SETTINGS, kb=kb))
+    return TestClient(create_app(model=model, settings=SETTINGS, kb=kb, **app_options))
 
 
 @pytest.fixture
@@ -513,3 +514,197 @@ def test_test_mode_allows_sinhala_and_relays_it(kb):
     assert caption["targetLanguage"] == "si-LK" and caption["translation"].startswith("[si-LK]")
     user = next(u for purpose, u in model.calls if purpose == "translate")
     assert "අධික රුධිර පීඩනය" in fake_model.field(user, "glossary")  # the Sinhala glossary reached the prompt
+
+
+# ---------- voice playback (CDR-004) ----------
+
+
+def play(ws, type_, speech_id, language):
+    command(ws, type_, speechId=speech_id, language=language)
+
+
+def spoken_turn(ctl, tv):
+    """A settled final physician turn, spoken in Punjabi; a physician turn sends no empathy nudge to interleave."""
+    submit(ctl, "physician", "en-CA", "Hello.")
+    turn_id = drain_until(ctl, "turn.result")[-1]["payload"]["turnId"]
+    drain_until(tv, "turn.result")
+    return turn_id
+
+
+def speaking(event):
+    assert event["type"] == "voice.speaking", event["type"]
+    return event["payload"]
+
+
+def nothing_published(ctl, tv):
+    """A marker event both roles receive; if voice.speaking had been published, it would arrive first."""
+    set_names(ctl, patientName="Marker")
+    assert tv.receive_json()["type"] == "visit.names"
+    assert drain_until(ctl, "visit.names")[-1]["type"] == "visit.names"
+
+
+def test_voice_playback_reaches_every_role_and_ends(client):
+    with (
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        ctl.receive_json(), tv.receive_json()
+        turn_id = spoken_turn(ctl, tv)
+        play(ctl, "voice.started", turn_id, "pa-IN")
+        assert speaking(tv.receive_json()) == {"speaking": True, "speechId": turn_id, "language": "pa-IN"}
+        assert speaking(ctl.receive_json())["speaking"] is True
+        play(ctl, "voice.ended", turn_id, "pa-IN")
+        assert speaking(tv.receive_json()) == {"speaking": False, "speechId": None, "language": None}
+
+
+def test_interpreter_lines_speak_back_to_back_and_a_stale_end_is_ignored(client):
+    with (
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        ctl.receive_json(), tv.receive_json()
+        command(ctl, "visit.start_introduction")
+        line_id = lines_of(drain_until(tv, "interpreter.line"), "introduction")[0]["lineId"]
+        play(ctl, "voice.started", line_id, "en-CA")
+        assert speaking(drain_until(tv, "voice.speaking")[-1])["language"] == "en-CA"
+        play(ctl, "voice.started", line_id, "pa-IN")  # the next language replaces the first
+        assert speaking(tv.receive_json())["language"] == "pa-IN"
+        play(ctl, "voice.ended", line_id, "en-CA")  # the queue reports the first end late
+        play(ctl, "voice.ended", line_id, "pa-IN")
+        assert speaking(tv.receive_json())["speaking"] is False  # the stale end published nothing
+
+
+def test_a_repeated_start_publishes_nothing(client):
+    with (
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        ctl.receive_json(), tv.receive_json()
+        turn_id = spoken_turn(ctl, tv)
+        play(ctl, "voice.started", turn_id, "pa-IN")
+        assert speaking(tv.receive_json())["speaking"] is True
+        play(ctl, "voice.started", turn_id, "pa-IN")
+        play(ctl, "voice.ended", turn_id, "pa-IN")
+        assert speaking(tv.receive_json())["speaking"] is False
+
+
+def test_voice_started_is_refused_for_unknown_ids_wrong_languages_and_unconfirmed_doses(client):
+    with (
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        ctl.receive_json(), tv.receive_json()
+        turn_id = spoken_turn(ctl, tv)
+        play(ctl, "voice.started", "unknown", "pa-IN")
+        assert drain_until(ctl, "error")[-1]["payload"]["command"] == "voice.started"
+        play(ctl, "voice.started", turn_id, "en-CA")  # spoken in Punjabi, not English
+        assert drain_until(ctl, "error")[-1]["payload"]["command"] == "voice.started"
+
+        submit(ctl, "physician", "en-CA", DOSE)
+        dose_id = drain_until_stage(ctl, "awaiting_readback")[-1]["payload"]["turnId"]
+        drain_until_stage(tv, "awaiting_readback")
+        play(ctl, "voice.started", dose_id, "pa-IN")  # not confirmed yet
+        assert drain_until(ctl, "error")[-1]["payload"]["command"] == "voice.started"
+        ctl.send_json({"type": "turn.readback_reject", "payload": {"turnId": dose_id}})
+        drain_until_stage(tv, "discarded")
+        drain_until_stage(ctl, "discarded")
+        play(ctl, "voice.started", dose_id, "pa-IN")  # rejected
+        assert drain_until(ctl, "error")[-1]["payload"]["command"] == "voice.started"
+        nothing_published(ctl, tv)
+
+
+def test_voice_started_is_refused_for_a_blocked_turn(kb):
+    def wrong(user):
+        d = fake_model.translate(user)
+        return Draft(**{**d.model_dump(), "translation": d.translation.replace("0.4", "4")})
+
+    with (
+        make_client(kb, translate=wrong) as client,
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        ctl.receive_json(), tv.receive_json()
+        submit(ctl, "physician", "en-CA", DOSE)
+        turn_id = drain_until(ctl, "turn.result")[-1]["payload"]["turnId"]
+        drain_until(tv, "turn.result")
+        play(ctl, "voice.started", turn_id, "pa-IN")
+        assert drain_until(ctl, "error")[-1]["payload"]["command"] == "voice.started"
+        nothing_published(ctl, tv)
+
+
+def test_voice_started_is_refused_for_an_escalated_turn(kb):
+    def failing(user):
+        return ToneCheck(meaning_preserved=True, certainty_preserved=False, warmth_preserved=True, issue="x")
+
+    with (
+        make_client(kb, tone_check=failing) as client,
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        ctl.receive_json(), tv.receive_json()
+        submit(ctl, "physician", "en-CA", "This is very unlikely to be serious.")
+        turn_id = drain_until(ctl, "turn.result")[-1]["payload"]["turnId"]
+        drain_until(tv, "interpreter.escalation")
+        drain_until(ctl, "interpreter.escalation")
+        play(ctl, "voice.started", turn_id, "pa-IN")
+        assert drain_until(ctl, "error")[-1]["payload"]["command"] == "voice.started"
+        nothing_published(ctl, tv)
+
+
+def test_screen_cannot_report_voice_playback(client):
+    with (
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        ctl.receive_json(), tv.receive_json()
+        turn_id = spoken_turn(ctl, tv)
+        play(tv, "voice.started", turn_id, "pa-IN")
+        play(tv, "voice.ended", turn_id, "pa-IN")
+        nothing_published(ctl, tv)
+    assert client.app.state.hub.visit.speech is None
+
+
+def test_controller_disconnect_mid_speech_clears_it(client):
+    with (
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        ctl.receive_json(), tv.receive_json()
+        turn_id = spoken_turn(ctl, tv)
+        with client.websocket_connect("/ws/visit?role=controller") as laptop:
+            laptop.receive_json()
+            play(laptop, "voice.started", turn_id, "pa-IN")
+            assert speaking(tv.receive_json())["speaking"] is True
+            # Disconnect as a browser does; leaving the block would also cancel the server task mid-cleanup.
+            laptop.close()
+            assert speaking(tv.receive_json())["speaking"] is False
+
+
+def test_speech_without_an_end_clears_after_the_ceiling(kb):
+    with (
+        make_client(kb, voice_ceiling_s=0.05) as client,
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        ctl.receive_json(), tv.receive_json()
+        turn_id = spoken_turn(ctl, tv)
+        play(ctl, "voice.started", turn_id, "pa-IN")
+        assert speaking(tv.receive_json())["speaking"] is True
+        assert speaking(tv.receive_json())["speaking"] is False  # no voice.ended was sent
+
+
+def test_screen_connecting_mid_speech_sees_it_in_its_snapshot(client):
+    with (
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        ctl.receive_json(), tv.receive_json()
+        turn_id = spoken_turn(ctl, tv)
+        play(ctl, "voice.started", turn_id, "pa-IN")
+        tv.receive_json()
+        with client.websocket_connect("/ws/visit?role=screen") as late:
+            state = late.receive_json()
+            assert state["payload"]["speaking"] == {"speaking": True, "speechId": turn_id, "language": "pa-IN"}
+    with client.websocket_connect("/ws/visit?role=screen") as after:
+        # The controller that started it has gone, so the speech ended with it.
+        assert after.receive_json()["payload"]["speaking"]["speaking"] is False

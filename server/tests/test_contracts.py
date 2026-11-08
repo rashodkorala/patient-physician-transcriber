@@ -1,4 +1,4 @@
-"""Contract tests for CDR-001 and CDR-002 (task 1.2)."""
+"""Contract tests for CDR-001, CDR-002, CDR-003, and CDR-004."""
 
 import json
 from pathlib import Path
@@ -7,6 +7,8 @@ import pytest
 from pydantic import ValidationError
 
 from contracts import (
+    CONTROLLER_COMMANDS,
+    CONTROLLER_ONLY_EVENTS,
     EmpathyNudge,
     InterpreterEscalation,
     InterpreterLine,
@@ -17,6 +19,8 @@ from contracts import (
     TurnResult,
     VisitStateController,
     VisitStatePublic,
+    VoicePlayback,
+    VoiceSpeaking,
     to_caption,
 )
 
@@ -54,6 +58,8 @@ def test_visit_state_public_fixture_validates_cdr_001():
         ("visit_names.json", Names),
         ("interpreter_line.json", InterpreterLine),
         ("name_proposed.json", NameProposed),
+        ("voice_playback.json", VoicePlayback),
+        ("voice_speaking.json", VoiceSpeaking),
     ],
 )
 def test_controller_payload_fixtures_validate_cdr_001(name, model):
@@ -107,3 +113,38 @@ def test_visit_state_without_names_still_validates_cdr_003():
     for key in ("physicianName", "patientName", "introduction"):
         state.pop(key)
     assert VisitStatePublic.model_validate(state).introduction == "pending"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"speaking": True, "speechId": None, "language": None},
+        {"speaking": True, "speechId": "t1", "language": None},
+        {"speaking": False, "speechId": "t1", "language": "pa-IN"},
+        {"speaking": False, "speechId": None, "language": "pa-IN"},
+    ],
+)
+def test_voice_speaking_sets_id_and_language_exactly_when_speaking_cdr_004(payload):
+    with pytest.raises(ValidationError):
+        VoiceSpeaking.model_validate(payload)
+
+
+@pytest.mark.parametrize("speech_id", ["", "x" * 65])
+def test_voice_playback_rejects_empty_or_long_ids_cdr_004(speech_id):
+    with pytest.raises(ValidationError):
+        VoicePlayback.model_validate({"speechId": speech_id, "language": "pa-IN"})
+
+
+def test_voice_speaking_carries_no_content_cdr_004():
+    assert set(load("voice_speaking.json")) == {"speaking", "speechId", "language"}
+
+
+def test_voice_commands_are_controller_only_and_the_event_is_public_cdr_004():
+    assert {"voice.started", "voice.ended"} <= CONTROLLER_COMMANDS
+    assert "voice.speaking" not in CONTROLLER_ONLY_EVENTS
+
+
+def test_visit_state_without_speaking_still_validates_cdr_004():
+    state = load("visit_state_public.json")
+    state.pop("speaking")
+    assert VisitStatePublic.model_validate(state).speaking is None

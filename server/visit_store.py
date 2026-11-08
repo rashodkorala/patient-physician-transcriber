@@ -3,6 +3,7 @@
 @implements ADR-007: In-memory visit state with WebSocket updates; no database for the demo
 @implements CDR-001: Visit WebSocket event contract
 @implements CDR-003: Participant names and interpreter lines on the visit channel
+@implements CDR-004: Interpreter voice playback on the visit channel
 @contract ws:/ws/visit
 @see openspec/tdr/adr/adr-007-in-memory-state-websocket.md
 """
@@ -15,6 +16,7 @@ from typing import Any, Protocol
 
 from contracts import (
     CONTROLLER_ONLY_EVENTS,
+    SILENT,
     CurrentTurnPublic,
     EmpathyNudge,
     Envelope,
@@ -26,6 +28,7 @@ from contracts import (
     TurnResult,
     VisitStateController,
     VisitStatePublic,
+    VoiceSpeaking,
     to_caption,
 )
 
@@ -54,6 +57,21 @@ class Connection:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
+@dataclass(eq=False)
+class Speech:
+    """What the interpreter's voice is playing now, and the controller connection that reported it (CDR-004).
+
+    Compared by identity, so a ceiling timer clears only the speech it was started for.
+    """
+
+    speech_id: str
+    language: str
+    conn: Connection
+
+    def is_(self, speech_id: str, language: str) -> bool:
+        return (self.speech_id, self.language) == (speech_id, language)
+
+
 @dataclass
 class Visit:
     visit_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
@@ -72,9 +90,16 @@ class Visit:
     proposed_names: dict[str, str] = field(default_factory=dict)
     # Everything the interpreter said itself, by line id, so it can be spoken again by id (CDR-003).
     interpreter_lines: dict[str, InterpreterLine] = field(default_factory=dict)
+    # CDR-004: one voice at a time; None is silent, so a new visit starts silent.
+    speech: Speech | None = None
 
     def names(self) -> Names:
         return Names(physician_name=self.physician_name, patient_name=self.patient_name)
+
+    def speaking(self) -> VoiceSpeaking:
+        if self.speech is None:
+            return SILENT
+        return VoiceSpeaking(speaking=True, speech_id=self.speech.speech_id, language=self.speech.language)  # type: ignore[arg-type]
 
     def integrity(self) -> RecordIntegrity:
         # Hash chain arrives with IDR-003 (task 3.8); an empty chain is verified.
@@ -97,6 +122,7 @@ class Visit:
                 physician_name=self.physician_name,
                 patient_name=self.patient_name,
                 introduction=self.introduction,
+                speaking=self.speaking(),
             ).wire()
 
         current_public = None
@@ -124,6 +150,7 @@ class Visit:
             physician_name=self.physician_name,
             patient_name=self.patient_name,
             introduction=self.introduction,
+            speaking=self.speaking(),
         ).wire()
 
 

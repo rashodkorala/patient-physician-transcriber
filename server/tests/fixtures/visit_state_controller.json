@@ -74,5 +74,10 @@
   },
   "physicianName": "Dr. Thomas",
   "patientName": "Harpreet",
-  "introduction": "done"
+  "introduction": "done",
+  "speaking": {
+    "speaking": true,
+    "speechId": "t0",
+    "language": "pa-IN"
+  }
 }

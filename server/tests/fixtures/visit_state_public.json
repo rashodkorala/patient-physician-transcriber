@@ -8,5 +8,6 @@
   "integrity": {"status": "verified", "headHash": "", "brokenAt": null},
   "physicianName": "Dr. Thomas",
   "patientName": null,
-  "introduction": "asking_patient"
+  "introduction": "asking_patient",
+  "speaking": {"speaking": false, "speechId": null, "language": null}
 }

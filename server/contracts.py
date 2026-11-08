@@ -3,17 +3,19 @@
 @implements CDR-001: Visit WebSocket event contract
 @implements CDR-002: Turn result schema
 @implements CDR-003: Participant names and interpreter lines on the visit channel
+@implements CDR-004: Interpreter voice playback on the visit channel
 @contract ws:/ws/visit
 @contract TurnResult
 @contract TurnCaption
 @see openspec/tdr/cdr/cdr-001-visit-websocket-events.md
 @see openspec/tdr/cdr/cdr-002-turn-result-schema.md
 @see openspec/tdr/cdr/cdr-003-names-and-interpreter-lines.md
+@see openspec/tdr/cdr/cdr-004-interpreter-voice-playback-events.md
 """
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
 Language = Literal["pa-IN", "fr-CA", "en-CA", "si-LK", "ta-LK"]
@@ -34,6 +36,7 @@ IntroductionState = Literal["pending", "asking_physician", "asking_patient", "do
 NameRole = Literal["physician", "patient"]
 LinePurpose = Literal["introduction", "ask_physician_name", "ask_patient_name", "welcome"]
 NAME_MAX = 60
+SPEECH_ID_MAX = 64
 
 TONE_LABELS: tuple[ToneLabel, ...] = ("respectful", "reassuring", "empathetic", "neutral")
 
@@ -192,6 +195,38 @@ class ErrorPayload(Wire):
     command: str | None = None
 
 
+# ---------- CDR-004 ----------
+
+
+class VoicePlayback(Wire):
+    """Payload of voice.started and voice.ended, controller only: what the interpreter's voice began or stopped playing."""
+
+    speech_id: str = Field(min_length=1, max_length=SPEECH_ID_MAX)
+    language: Language
+
+
+class VoiceSpeaking(Wire):
+    """voice.speaking, and visit.state.speaking: whether the interpreter's voice is playing, for every role.
+
+    Carries no text, tone, emotion, or certainty; the id and language are set exactly when speaking.
+    """
+
+    speaking: bool
+    speech_id: str | None = None
+    language: Language | None = None
+
+    @model_validator(mode="after")
+    def _set_when_speaking(self) -> "VoiceSpeaking":
+        if self.speaking != (self.speech_id is not None and self.language is not None):
+            raise ValueError("speechId and language are set exactly when speaking")
+        if not self.speaking and (self.speech_id is not None or self.language is not None):
+            raise ValueError("speechId and language are null when not speaking")
+        return self
+
+
+SILENT = VoiceSpeaking(speaking=False)
+
+
 class CurrentTurnPublic(Wire):
     turn_id: str
     speaker: Speaker
@@ -213,6 +248,8 @@ class VisitStateController(Wire):
     physician_name: str | None = None
     patient_name: str | None = None
     introduction: IntroductionState = "pending"
+    # CDR-004: optional, so a client built before voice playback ignores it.
+    speaking: VoiceSpeaking | None = None
 
 
 class VisitStatePublic(Wire):
@@ -227,6 +264,8 @@ class VisitStatePublic(Wire):
     physician_name: str | None = None
     patient_name: str | None = None
     introduction: IntroductionState = "pending"
+    # CDR-004: optional, so a client built before voice playback ignores it.
+    speaking: VoiceSpeaking | None = None
 
 
 # ---------- CDR-001 commands ----------
@@ -347,6 +386,8 @@ CONTROLLER_COMMANDS = frozenset(
         "turn.submit",
         "turn.readback_confirm",
         "turn.readback_reject",
+        "voice.started",
+        "voice.ended",
         "visit.mark_high_risk",
         "demo.inject_mismatch",
         "demo.cancel_injection",

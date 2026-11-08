@@ -4,12 +4,14 @@
  * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-002: Turn result schema
  * @implements CDR-003: Participant names and interpreter lines on the visit channel
+ * @implements CDR-004: Interpreter voice playback on the visit channel
  * @contract ws:/ws/visit
  * @contract TurnResult
  * @contract TurnCaption
  * @see openspec/tdr/cdr/cdr-001-visit-websocket-events.md
  * @see openspec/tdr/cdr/cdr-002-turn-result-schema.md
  * @see openspec/tdr/cdr/cdr-003-names-and-interpreter-lines.md
+ * @see openspec/tdr/cdr/cdr-004-interpreter-voice-playback-events.md
  */
 
 export type Language = "pa-IN" | "fr-CA" | "en-CA" | "si-LK" | "ta-LK";
@@ -102,6 +104,8 @@ export interface VisitStateController {
   physicianName?: string | null;
   patientName?: string | null;
   introduction?: IntroductionState;
+  // CDR-004: optional, so a server built before voice playback still satisfies this type.
+  speaking?: VoiceSpeaking | null;
 }
 
 export interface VisitStatePublic {
@@ -116,6 +120,8 @@ export interface VisitStatePublic {
   physicianName?: string | null;
   patientName?: string | null;
   introduction?: IntroductionState;
+  // CDR-004: optional, so a server built before voice playback still satisfies this type.
+  speaking?: VoiceSpeaking | null;
 }
 
 export interface TurnStarted {
@@ -196,3 +202,14 @@ export interface TurnSubmit {
   text: string;
   recognitionConfidence: number;
 }
+
+/** voice.started and voice.ended, controller only: what the interpreter's voice began or stopped playing. */
+export interface VoicePlayback {
+  speechId: string;
+  language: Language;
+}
+
+/** voice.speaking, and visit.state.speaking: whether the interpreter's voice is playing; every role. */
+export type VoiceSpeaking =
+  | { speaking: true; speechId: string; language: Language }
+  | { speaking: false; speechId: null; language: null };

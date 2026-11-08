@@ -6,6 +6,7 @@ Run with the app factory so nothing loads on import: uvicorn main:create_app --f
 @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
 @implements CDR-001: Visit WebSocket event contract
 @implements CDR-003: Participant names and interpreter lines on the visit channel
+@implements CDR-004: Interpreter voice playback on the visit channel
 @implements IDR-001: Push-to-talk per speaker instead of diarisation
 @implements TDM-003: Sinhala and Tamil as test-only languages before demo night
 @implements TDM-004: Tamil is the chosen live language, alongside Punjabi and French, spoken by ElevenLabs
@@ -42,6 +43,7 @@ from contracts import (
     TurnStarted,
     TurnStatus,
     TurnSubmit,
+    VoicePlayback,
     to_caption,
 )
 from empathy import EmpathyAdvisor
@@ -51,7 +53,7 @@ from kb.embeddings import make_embedder
 from kb.store import KnowledgeBase
 from llm import ClaudeModel, Model
 from speech_token import SpeechNotConfigured, issue_token
-from visit_store import Connection, Hub, TurnRecord, Visit
+from visit_store import Connection, Hub, Speech, TurnRecord, Visit
 from voice import (
     DEFAULT_MODEL,
     DEFAULT_VOICE,
@@ -66,6 +68,8 @@ from voice import (
 # uvicorn prints this logger, so timing lines and errors show in the dev.sh output.
 log = logging.getLogger("uvicorn.error")
 ROLES = ("controller", "screen", "review")
+# CDR-004: a speech whose end never arrives stops showing as speaking after this long.
+VOICE_CEILING_S = 60.0
 
 
 def make_model(settings: Settings) -> Model:
@@ -105,6 +109,7 @@ def create_app(
     settings: Settings | None = None,
     kb: KnowledgeBase | None = None,
     voice: Voice | None = None,
+    voice_ceiling_s: float = VOICE_CEILING_S,
 ) -> FastAPI:
     settings = settings or load_settings()
     log.info(describe(settings))
@@ -370,6 +375,41 @@ def create_app(
         record.stage = "spoken"
         await hub.publish("turn.result", to_caption(record.result, readback_confirmed=True).wire())  # type: ignore[arg-type]
 
+    # ---------- CDR-004: interpreter voice playback ----------
+
+    async def set_speech(speech: Speech | None) -> None:
+        hub.visit.speech = speech
+        await hub.publish("voice.speaking", hub.visit.speaking().wire())
+
+    async def clear_after_ceiling(speech: Speech) -> None:
+        await asyncio.sleep(voice_ceiling_s)
+        if hub.visit.speech is speech:
+            log.warning("no voice.ended for %s within %.0f s; showing silent", speech.speech_id, voice_ceiling_s)
+            await set_speech(None)
+
+    async def voice_started(conn: Connection, payload: dict) -> None:
+        cmd = VoicePlayback.model_validate(payload)
+        # The same gate as GET /api/speech/{id}, so nothing that may not be spoken can show as speaking.
+        found = speakable(cmd.speech_id, cmd.language)
+        if found is None or found[1] != cmd.language:
+            await error(conn, "Nothing may be spoken for that id in that language", "voice.started")
+            return
+        current = hub.visit.speech
+        if current and current.is_(cmd.speech_id, cmd.language):
+            return
+        speech = Speech(speech_id=cmd.speech_id, language=cmd.language, conn=conn)
+        await set_speech(speech)
+        task = asyncio.create_task(clear_after_ceiling(speech))
+        background.add(task)
+        task.add_done_callback(background.discard)
+
+    async def voice_ended(conn: Connection, payload: dict) -> None:
+        cmd = VoicePlayback.model_validate(payload)
+        current = hub.visit.speech
+        # The controller's queue can end a speech after a newer one started; only the current one counts.
+        if current and current.is_(cmd.speech_id, cmd.language):
+            await set_speech(None)
+
     handlers = {
         "visit.set_languages": set_languages,
         "visit.set_names": set_names,
@@ -380,6 +420,8 @@ def create_app(
         "turn.submit": submit_turn,
         "turn.readback_confirm": lambda conn, payload: readback(conn, payload, True),
         "turn.readback_reject": lambda conn, payload: readback(conn, payload, False),
+        "voice.started": voice_started,
+        "voice.ended": voice_ended,
     }
 
     @app.websocket("/ws/visit")
@@ -409,5 +451,8 @@ def create_app(
             pass
         finally:
             hub.remove(conn)
+            # A controller that drops off mid-speech can never report the end, so the speech ends with it.
+            if hub.visit.speech is not None and hub.visit.speech.conn is conn:
+                await set_speech(None)
 
     return app

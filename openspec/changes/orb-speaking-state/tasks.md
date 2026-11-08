@@ -11,10 +11,14 @@ TDRs: CDR-004
 
 TDRs: CDR-004, CDR-001, CDR-003, ADR-007, EDR-002
 
-- [ ] 1.1 Add `voice.started`, `voice.ended`, `voice.speaking`, and `visit.state.speaking` to `server/contracts.py` and `web/lib/contracts.ts`, add both commands to `CONTROLLER_COMMANDS`, and regenerate `web/lib/generated/`; verify contract tests and `npm run check:contracts` pass
-- [ ] 1.2 Handle both commands in `server/main.py` against the existing speak gate, with one speaking state on the in-memory visit; verify pytest covers refused ids (blocked, escalated, rejected, unsettled, unknown, wrong language), a repeated start, and a stale end
-- [ ] 1.3 Clear the state when the starting controller disconnects and after 60 seconds without an end, with an injectable clock; verify pytest covers both, and that a screen connecting mid-speech receives `speaking` in `visit.state`
-- [ ] 1.4 Verify pytest shows a screen's `voice.started` and `voice.ended` have no effect and produce no event
+- [x] 1.1 Add `voice.started`, `voice.ended`, `voice.speaking`, and `visit.state.speaking` to `server/contracts.py` and `web/lib/contracts.ts`, add both commands to `CONTROLLER_COMMANDS`, and regenerate `web/lib/generated/`; verify contract tests and `npm run check:contracts` pass
+  - 2026-11-06: contract tests for both fixtures, the speaking validator, id limits, and a state without `speaking`; `npm run check:contracts` passes.
+- [x] 1.2 Handle both commands in `server/main.py` against the existing speak gate, with one speaking state on the in-memory visit; verify pytest covers refused ids (blocked, escalated, rejected, unsettled, unknown, wrong language), a repeated start, and a stale end
+  - 2026-11-06: `tests/test_visit_channel.py` covers every refused id, a repeated start, a stale end, and back-to-back interpreter lines.
+- [x] 1.3 Clear the state when the starting controller disconnects and after 60 seconds without an end, with an injectable clock; verify pytest covers both, and that a screen connecting mid-speech receives `speaking` in `visit.state`
+  - 2026-11-06: the ceiling is injectable (`create_app(voice_ceiling_s=...)`, 0.05 s in the test) rather than a clock; disconnect and mid-speech snapshot tests pass.
+- [x] 1.4 Verify pytest shows a screen's `voice.started` and `voice.ended` have no effect and produce no event
+  - 2026-11-06: `test_screen_cannot_report_voice_playback` passes; full server suite 173 passed.
 
 ## 2. Controller reports playback
 
