@@ -1,9 +1,11 @@
 "use client";
 
 /**
- * Physician controller: languages, names, push-to-talk, typed fallback, read-back, nudges, turns, and latency.
+ * Physician controller: languages, names, push-to-talk, hands-free listening, typed fallback, read-back, nudges,
+ * turns, and latency.
  *
  * @implements IDR-001: Push-to-talk per speaker instead of diarisation
+ * @implements IDR-004: Hands-free continuous listening, with the speaker found by spoken language
  * @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
  * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-002: Turn result schema
@@ -13,7 +15,7 @@
  * @contract ws:/ws/visit
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type {
   EmpathyNudge,
   Envelope,
@@ -37,11 +39,22 @@ import type {
   VisitStateController,
 } from "@/lib/contracts";
 import { NAME_MAX } from "@/lib/contracts";
-import { LANGUAGE_LABELS, ROADMAP } from "@/lib/languages";
+import { LANGUAGE_LABELS, RECOGNITION, ROADMAP } from "@/lib/languages";
+import { type ListeningState, type Side, VOICE_TAIL_MS, isShortReply, listeningState, sideFor } from "@/lib/listening";
 import { type LatencyRow, median, segments, toCsv } from "@/lib/latency";
 import { serverHttpUrl, useVisitSocket } from "@/lib/socket";
 import { playbackMessages } from "@/lib/speaking";
-import { type Capture, current, onSpeaking, speak, startCapture, warmUp } from "@/lib/speech";
+import {
+  type Capture,
+  type Heard,
+  type Listening,
+  current,
+  onSpeaking,
+  speak,
+  startCapture,
+  startListening,
+  warmUp,
+} from "@/lib/speech";
 import styles from "./controller.module.css";
 import Highlighted from "./Highlighted";
 
@@ -68,6 +81,13 @@ function writeDefaultName(name: string) {
 }
 
 const ASKING: Partial<Record<IntroductionState, NameRole>> = { asking_physician: "physician", asking_patient: "patient" };
+
+const LISTENING_TEXT: Record<ListeningState, string> = {
+  listening: "Listening",
+  voice: "Paused while the interpreter speaks",
+  readback: "Paused for the dose read-back",
+  pushToTalk: "Paused while you hold a speaker",
+};
 
 const REASON_TEXT: Record<EscalationReason, string> = {
   low_confidence: "the translation stayed uncertain after a retry",
@@ -155,6 +175,15 @@ export default function Controller() {
   // TDM-003: chosen when the server starts and fixed until it restarts, so it is read once.
   const [testMode, setTestMode] = useState(false);
   const capture = useRef<Capture | null>(null);
+  // IDR-004: hands-free listening, the side heard last, short replies waiting for the physician, and
+  // whether the interpreter's voice (or its echo) is still in the room.
+  const [handsFree, setHandsFree] = useState(false);
+  const [lastHeard, setLastHeard] = useState<Side | null>(null);
+  const [held, setHeld] = useState<(Heard & { id: number })[]>([]);
+  const [voiceAudible, setVoiceAudible] = useState(false);
+  const listening = useRef<Listening | null>(null);
+  const muted = useRef(false);
+  const heldIds = useRef(0);
   // Submits are sequential from this one controller, so turn.started events match them in order.
   const pendingTimes = useRef<{ endOfSpeechAt: number; submittedAt: number }[]>([]);
 
@@ -365,13 +394,94 @@ export default function Controller() {
     void warmUp([patientLanguage, physicianLanguage]);
   }, [patientLanguage]);
 
-  // Hold 1 for the physician and 2 for the patient.
+  const sides: Side[] = [
+    { speaker: "physician", language: physicianLanguage, recognition: RECOGNITION[physicianLanguage] },
+    { speaker: "patient", language: patientLanguage, recognition: RECOGNITION[patientLanguage] },
+  ];
+
+  // Each utterance goes to the side whose language it was heard in; short ones wait for the physician.
+  const hear = useEffectEvent((heard: Heard) => {
+    const side = sideFor(heard.recognition, sides);
+    if (!side) return;
+    if (isShortReply(heard.text)) {
+      setHeld((queue) => [...queue, { ...heard, id: ++heldIds.current }]);
+      return;
+    }
+    setLastHeard(side);
+    submit(side.speaker, heard.text, heard.confidence, heard.endOfSpeechAt);
+  });
+
+  const listenFailed = useEffectEvent((message: string) => {
+    setHandsFree(false);
+    setNotice(`Hands-free stopped: ${message.replace(/[\s.]+$/, "")}. Use push-to-talk.`);
+  });
+
+  useEffect(() => {
+    if (!handsFree) return;
+    let stopped = false;
+    let active: Listening | null = null;
+    startListening(sides.map((side) => side.recognition), hear, listenFailed)
+      .then((started) => {
+        if (stopped) return void started.stop();
+        active = started;
+        listening.current = started;
+        started.mute(muted.current); // the voice may already be playing when listening starts
+      })
+      .catch((error: Error) => listenFailed(error.message));
+    return () => {
+      stopped = true;
+      listening.current = null;
+      void active?.stop();
+    };
+    // Restart only when the mode or the patient's language changes; the handlers are effect events.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handsFree, patientLanguage]);
+
+  // The interpreter's voice, and a short tail for its echo, keep the microphone muted.
+  useEffect(() => {
+    let tail: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = onSpeaking((item) => {
+      clearTimeout(tail);
+      if (item) setVoiceAudible(true);
+      else tail = setTimeout(() => setVoiceAudible(false), VOICE_TAIL_MS);
+    });
+    return () => {
+      clearTimeout(tail);
+      unsubscribe();
+    };
+  }, []);
+
+  const listenState = listeningState({
+    voice: voiceAudible,
+    readback: pendingReadback !== null,
+    pushToTalk: recording !== null,
+  });
+
+  useEffect(() => {
+    muted.current = listenState !== "listening";
+    listening.current?.mute(muted.current);
+  }, [listenState, handsFree]);
+
+  const resolveHeld = (speaker: Speaker | null) => {
+    const [first, ...rest] = held;
+    if (!first) return;
+    setHeld(rest);
+    if (!speaker) return;
+    setLastHeard(sides.find((side) => side.speaker === speaker) ?? null);
+    submit(speaker, first.text, first.confidence, first.endOfSpeechAt);
+  };
+
+  // Hold 1 for the physician and 2 for the patient; with a short reply waiting, 1 or 2 says whose it was.
   useEffect(() => {
     const keyToSpeaker: Record<string, Speaker> = { "1": "physician", "2": "patient" };
     const down = (e: KeyboardEvent) => {
       const speaker = keyToSpeaker[e.key];
-      const typing = ["TEXTAREA", "INPUT"].includes(document.activeElement?.tagName ?? "");
-      if (speaker && !e.repeat && !typing) void pressTalk(speaker);
+      const focused = document.activeElement;
+      const typing =
+        focused instanceof HTMLTextAreaElement || (focused instanceof HTMLInputElement && focused.type === "text");
+      if (!speaker || e.repeat || typing) return;
+      if (held.length) resolveHeld(speaker);
+      else void pressTalk(speaker);
     };
     const up = (e: KeyboardEvent) => {
       if (keyToSpeaker[e.key]) void releaseTalk();
@@ -557,7 +667,52 @@ export default function Controller() {
           </section>
 
           <section className={styles.section}>
-            <h2 className={styles.eyebrow}>Speak</h2>
+            <div className={styles.speakHead}>
+              <h2 className={styles.eyebrow}>Speak</h2>
+              <label className={styles.check}>
+                <input
+                  type="checkbox"
+                  data-testid="hands-free"
+                  checked={handsFree}
+                  onChange={(e) => {
+                    setHandsFree(e.target.checked);
+                    setLastHeard(null);
+                    setHeld([]);
+                  }}
+                />
+                Hands-free
+              </label>
+            </div>
+            {handsFree && (
+              <p className={styles.listening} data-testid="listening" data-state={listenState} aria-live="polite">
+                {LISTENING_TEXT[listenState]}
+                {lastHeard && (
+                  <span className={styles.lastHeard}>
+                    {" "}
+                    · last heard {lastHeard.speaker}, {LANGUAGE_LABELS[lastHeard.language].own}
+                  </span>
+                )}
+              </p>
+            )}
+            {held[0] && (
+              <div className={styles.held} data-testid="held-reply" aria-live="assertive">
+                <p className={styles.eyebrow}>Short reply · whose words were these?</p>
+                <p className={styles.heldText} data-testid="held-text">
+                  {held[0].text}
+                </p>
+                <div className={styles.actions}>
+                  <button className={styles.primary} data-testid="held-physician" onClick={() => resolveHeld("physician")}>
+                    Physician · 1
+                  </button>
+                  <button className={styles.primary} data-testid="held-patient" onClick={() => resolveHeld("patient")}>
+                    Patient · 2
+                  </button>
+                  <button className={styles.secondary} data-testid="held-discard" onClick={() => resolveHeld(null)}>
+                    Discard
+                  </button>
+                </div>
+              </div>
+            )}
             <div className={styles.talk}>
               {(["physician", "patient"] as Speaker[]).map((speaker, i) => (
                 <button
@@ -567,7 +722,9 @@ export default function Controller() {
                   onPointerUp={() => void releaseTalk()}
                   onPointerLeave={() => recording === speaker && void releaseTalk()}
                 >
-                  <span className={styles.eyebrow}>{recording === speaker ? "Listening" : `Hold or press ${i + 1}`}</span>
+                  <span className={styles.eyebrow}>
+                    {recording === speaker ? "Listening" : handsFree ? `Hold ${i + 1} to override` : `Hold or press ${i + 1}`}
+                  </span>
                   <span className={styles.talkRole}>{speaker === "physician" ? "Physician" : "Patient"}</span>
                   <span className={styles.talkLang}>{LANGUAGE_LABELS[languageOf(speaker)].own}</span>
                 </button>

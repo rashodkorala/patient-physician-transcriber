@@ -28,6 +28,9 @@ The physician speaks English and the patient speaks the visit's patient language
 - **No correction**: the interpreter routes each utterance by its detected language into the other party's language, so a misdetection gives a redundant translation, not a lost one; push-to-talk covers anything said again, per IDR-004 (amended 2026-11-07).
   No visit channel change is needed (CDR-001 unchanged).
 - **Latency**: end of speech becomes the recognised time minus the silence timeout, so the recognition figure stays comparable with push-to-talk.
+- **Testing**: `web/e2e/hands-free.mjs` replaces the recogniser with a fake through a hook that exists only when the web app is built with `NEXT_PUBLIC_SPEECH_TEST_HOOKS=on`, per EDR-002; a production build has no hook.
+  The same script's `azure` mode feeds a recording through Chrome's fake microphone to the real recogniser, as a manual smoke test.
+- **Speaking over the interpreter**: anything said while the interpreter's voice plays is not taken, because the microphone is muted then; the speaker says it again once the voice stops, and the controller's listening line shows when that is.
 
 ### Shared speaking signal
 

@@ -25,15 +25,15 @@ TDRs: ADR-005, IDR-004
 
 TDRs: ADR-005, IDR-001, IDR-004, CDR-001
 
-- [ ] 3.1 Add the continuous capture with two-language identification over the visit's recognition locales (`RECOGNITION` in `web/lib/languages.ts`), silence segmentation, muting, and token refresh to `web/lib/speech.ts`; verify the web typecheck and lint pass
-- [ ] 3.2 Pause listening on the shared speaking signal and resume after a short tail; verify with a unit test of the pause rule
-- [ ] 3.3 Add the hands-free toggle, language-to-speaker mapping, last-speaker indicator, read-back pause, and push-to-talk override to `web/components/Controller.tsx`; verify with a unit test of the mapping
-- [ ] 3.4 Route each hands-free turn into the other party's language by its detected language, with no speaker correction; verify with a unit test that an English turn while the patient language is set goes to the patient's language
-- [ ] 3.5 Hold one- and two-word hands-free turns on the controller for a Physician or Patient tap before sending; verify with a unit test of the rule and the end-to-end run in 4.1
+- [x] 3.1 Add the continuous capture with two-language identification over the visit's recognition locales (`RECOGNITION` in `web/lib/languages.ts`), silence segmentation, muting, and token refresh to `web/lib/speech.ts`; verify the web typecheck and lint pass (2026-11-08: `startListening` in `web/lib/speech.ts`; typecheck and lint pass)
+- [x] 3.2 Pause listening on the shared speaking signal and resume after a short tail; verify with a unit test of the pause rule (2026-11-08: the microphone track is muted while the voice plays and for 300 ms after; `listening.test.mjs` covers the state rule, and `e2e/hands-free.mjs fake` checks an echo is not taken)
+- [x] 3.3 Add the hands-free toggle, language-to-speaker mapping, last-speaker indicator, read-back pause, and push-to-talk override to `web/components/Controller.tsx`; verify with a unit test of the mapping (2026-11-08: the toggle, last-heard line, read-back pause, and push-to-talk override; `listening.test.mjs` covers the mapping)
+- [x] 3.4 Route each hands-free turn into the other party's language by its detected language, with no speaker correction; verify with a unit test that an English turn while the patient language is set goes to the patient's language (2026-11-08: `sideFor` in `web/lib/listening.ts`, unit-tested, including English while French is set)
+- [x] 3.5 Hold one- and two-word hands-free turns on the controller for a Physician or Patient tap before sending; verify with a unit test of the rule and the end-to-end run in 4.1 (2026-11-08: `isShortReply`, unit-tested in several scripts; `e2e/hands-free.mjs fake` checks the hold by button and by key)
 
 ## 4. Verification
 
 TDRs: EDR-002, IDR-004
 
-- [ ] 4.1 Add a hands-free run to `web/e2e/` with a fake recogniser feeding alternating languages; verify speakers and languages are correct, short replies are held, Tamil is routed as `ta-LK`, and no spoken translation is resubmitted
+- [x] 4.1 Add a hands-free run to `web/e2e/` with a fake recogniser feeding alternating languages; verify speakers and languages are correct, short replies are held, Tamil is routed as `ta-LK`, and no spoken translation is resubmitted (2026-11-08: `web/e2e/hands-free.mjs` fake (17 checks) and tamil (4 checks); `azure` mode also routed an English and a Punjabi recording through the real recogniser)
 - [ ] 4.2 Run a ten-turn hands-free visit on the laptop with the Punjabi and Tamil speakers; verify mislabels and echo turns are counted in `docs/speech-test.md` and latency is comparable with push-to-talk

@@ -84,6 +84,18 @@
 }
 .quiet:hover { color: var(--text); }
 
+/* IDR-004: the hands-free switch sits on the Speak heading; a held short reply is an outlined block above the buttons. */
+.speakHead { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.speakHead .check { min-height: 0; }
+.listening { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; }
+.listening::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.listening:not([data-state="listening"]) { color: var(--muted); }
+.listening:not([data-state="listening"])::before { background: none; border: 1px solid currentColor; }
+.lastHeard { color: var(--muted); }
+.held { display: grid; gap: 10px; padding: 20px 24px 24px; border: 1px solid var(--text); border-radius: 6px; }
+.heldText { margin: 0; font-family: var(--serif); font-style: italic; font-size: 24px; line-height: 1.35; }
+.held .actions { margin-top: 4px; }
+
 .talk { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .talkButton {
   display: grid; gap: 10px; justify-items: start; text-align: left; padding: 24px 24px 28px;

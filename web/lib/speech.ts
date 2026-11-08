@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Push-to-talk recognition with Azure Speech, and the interpreter's voice.
+ * Push-to-talk and hands-free recognition with Azure Speech, and the interpreter's voice.
  * The voice is the server's (ElevenLabs), asked for by turn or line id so the server decides what
  * may be spoken; Azure speaks only when the server has no voice for that language or its vendor fails.
  * Keys stay on the server; the browser uses short-lived Azure tokens.
@@ -90,6 +90,131 @@ export async function startCapture(language: Language): Promise<Capture> {
       if (failure && !parts.length) throw new SpeechUnavailable(failure);
       // Push-to-talk: speech ends at release, so the recognition flush after it counts as latency.
       return { text: parts.join(" ").trim(), confidence, endOfSpeechAt: releasedAt };
+    },
+  };
+}
+
+/** One utterance heard hands-free: its text and the recognition locale it was identified as. */
+export interface Heard {
+  text: string;
+  recognition: string;
+  confidence: number;
+  endOfSpeechAt: number;
+}
+
+export interface Listening {
+  /** Muted, the microphone sends silence, and anything still heard is dropped. */
+  mute(muted: boolean): void;
+  stop(): Promise<void>;
+}
+
+/** What listens hands-free: Azure, or a fake standing in for it in end-to-end tests. */
+interface ListeningSource {
+  setMuted(muted: boolean): void;
+  stop(): Promise<void>;
+}
+
+type FakeListening = (recognition: string[], deliver: (heard: Heard) => void) => ListeningSource;
+
+// Silence that ends an utterance: long enough for a pause mid-sentence, short enough to keep turns quick.
+const SILENCE_MS = 800;
+
+/**
+ * Listens continuously and reports each utterance with the language it was identified as, among the
+ * visit's two recognition locales.
+ * @implements IDR-004: Hands-free continuous listening, with the speaker found by spoken language
+ */
+export async function startListening(
+  recognition: string[],
+  onHeard: (heard: Heard) => void,
+  onError: (message: string) => void,
+): Promise<Listening> {
+  let muted = false;
+  const deliver = (heard: Heard) => {
+    if (!muted && heard.text.trim()) onHeard(heard);
+  };
+  const fake = fakeListening();
+  const source = fake ? fake(recognition, deliver) : await listenWithAzure(recognition, deliver, onError);
+  return {
+    mute(next) {
+      muted = next;
+      source.setMuted(next);
+    },
+    stop: () => source.stop(),
+  };
+}
+
+/** End-to-end tests replace the recogniser; the hook exists only in builds made with the test flag. */
+function fakeListening(): FakeListening | null {
+  if (process.env.NEXT_PUBLIC_SPEECH_TEST_HOOKS !== "on") return null;
+  return (window as unknown as { __fakeListening?: FakeListening }).__fakeListening ?? null;
+}
+
+async function listenWithAzure(
+  recognition: string[],
+  deliver: (heard: Heard) => void,
+  onError: (message: string) => void,
+): Promise<ListeningSource> {
+  const sdk = await loadSdk();
+  const { token: authToken, region } = await token();
+  // Echo cancellation keeps the room's speakers out; muting the track covers the interpreter's own voice.
+  const microphone = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  const config = sdk.SpeechConfig.fromAuthorizationToken(authToken, region);
+  config.outputFormat = sdk.OutputFormat.Detailed;
+  config.setProperty(sdk.PropertyId.SpeechServiceConnection_LanguageIdMode, "Continuous");
+  config.setProperty(sdk.PropertyId.Speech_SegmentationSilenceTimeoutMs, String(SILENCE_MS));
+  const recognizer = sdk.SpeechRecognizer.FromConfig(
+    config,
+    sdk.AutoDetectSourceLanguageConfig.fromLanguages(recognition),
+    sdk.AudioConfig.fromStreamInput(microphone),
+  );
+
+  recognizer.recognized = (_sender, event) => {
+    if (event.result.reason !== sdk.ResultReason.RecognizedSpeech || !event.result.text) return;
+    let confidence = 0;
+    try {
+      const detail = JSON.parse(event.result.json) as { NBest?: { Confidence?: number }[] };
+      confidence = detail.NBest?.[0]?.Confidence ?? 0;
+    } catch {
+      // Detailed output missing: confidence stays unknown for this utterance.
+    }
+    deliver({
+      text: event.result.text,
+      recognition: sdk.AutoDetectSourceLanguageResult.fromResult(event.result).language,
+      confidence,
+      // The utterance ended when the silence that closed it began.
+      endOfSpeechAt: Date.now() - SILENCE_MS,
+    });
+  };
+  recognizer.canceled = (_sender, event) => {
+    if (event.reason === sdk.CancellationReason.Error) onError(event.errorDetails || "listening stopped");
+  };
+
+  // Tokens last ten minutes and a hands-free visit runs longer, so the live recogniser gets fresh ones.
+  const refresh = setInterval(() => {
+    token()
+      .then(({ token: fresh }) => (recognizer.authorizationToken = fresh))
+      .catch(() => undefined);
+  }, 5 * 60 * 1000);
+
+  try {
+    await new Promise<void>((resolve, reject) => recognizer.startContinuousRecognitionAsync(resolve, reject));
+  } catch (error) {
+    clearInterval(refresh);
+    recognizer.close();
+    microphone.getTracks().forEach((track) => track.stop());
+    throw new SpeechUnavailable(String(error));
+  }
+
+  return {
+    setMuted: (muted) => microphone.getAudioTracks().forEach((track) => (track.enabled = !muted)),
+    stop: async () => {
+      clearInterval(refresh);
+      await new Promise<void>((resolve, reject) => recognizer.stopContinuousRecognitionAsync(resolve, reject)).catch(
+        () => undefined,
+      );
+      recognizer.close();
+      microphone.getTracks().forEach((track) => track.stop());
     },
   };
 }
