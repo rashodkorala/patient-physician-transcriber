@@ -86,9 +86,9 @@ Code never rewrites model text to make a check pass.
   The item is `matched` if the same normalised value is found, `contradicted` if a different value of the same kind is found where it is the only value of that kind or is tied to the same medication, and `missed` otherwise.
 - **Model items.** The model reads the frozen plan and the explanation and returns the non-numeric instructions (`instruction`, `warning`, `follow_up`), each with an outcome and evidence turn ids.
   It also sees the code items so it does not duplicate them, but its view of their outcome is discarded.
-- **Model.** Explain-back runs on Sonnet 5.5, the live-turn model, because the patient and physician wait for it; ADR-006 does not cover explain-back, and this record fills that gap.
+- **Model.** Explain-back runs on Sonnet 5.5, the live-turn model, because the patient and physician wait for it.
+  ADR-006 does not cover explain-back; this record decides it, and ADR-006 is not amended.
   The id comes from `server/config.py`.
-  If the project lead prefers, ADR-006 can be amended to name it instead.
 
 ### 4. Summary value check
 
@@ -99,7 +99,8 @@ After the model writes the summary in the patient's language (Opus 5.5, ADR-006)
 3. marks a value `changed` if no expected value of the same kind and unit equals it, and `unsupported` if it is a number with no source at all;
 4. marks a read-back-confirmed dose or its frequency `missing` if the summary does not contain it.
 
-Any mismatch triggers one retry with the expected values pinned; if any mismatch remains, the summary is refused (CDR-007) and never published or spoken.
+Any mismatch, including a `missing` confirmed dose or frequency, triggers one retry with the expected values pinned; if any mismatch remains, the summary is refused (CDR-007) and never published, spoken, or chained.
+A summary that passes is chained (CDR-006).
 A summary in a language whose units `critical_values.py` does not know is refused, as live doses already are (task 6.3).
 
 ### 5. Note
@@ -134,4 +135,5 @@ Tests with the fake model cover each row of the check table, the explain-back co
 
 ## Review Notes
 
-- 2026-11-08, Claude (agent): Drafted as a proposal for the supervising session, for demo-night-mvp tasks 3.4, 3.6, and 3.7. Awaiting human review; do not implement until accepted. Decision owner to confirm the explain-back model (Sonnet 5.5 here, or by amending ADR-006).
+- 2026-11-08, Claude (agent): Drafted as a proposal for the supervising session, for demo-night-mvp tasks 3.4, 3.6, and 3.7. Awaiting human review; do not implement until accepted.
+- 2026-11-09, Claude (agent): Revised to state rashodkorala's answers, relayed by the supervising session: explain-back runs on Sonnet 5.5, decided here with no ADR-006 edit, and a summary that leaves out a confirmed dose is refused. Still proposed; awaiting human review.

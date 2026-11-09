@@ -26,7 +26,7 @@ Only a human decides a status; an agent may record an explicit human verdict (ED
 | [CDR-003](cdr/cdr-003-names-and-interpreter-lines.md) | Participant names and interpreter lines on the visit channel | CDR | accepted | rashodkorala | mediator-voice |
 | [CDR-004](cdr/cdr-004-interpreter-voice-playback-events.md) | Interpreter voice playback on the visit channel | CDR | accepted | rashodkorala | orb-speaking-state |
 | [CDR-005](cdr/cdr-005-consent-and-explain-back-events.md) | Consent and explain-back on the visit channel | CDR | proposed | rashodkorala | demo-night-mvp |
-| [CDR-006](cdr/cdr-006-record-entries-review-corrections-and-tamper.md) | Record chain entries, transcript review corrections, and the tamper control | CDR | proposed | rashodkorala | demo-night-mvp |
+| [CDR-006](cdr/cdr-006-record-entries-review-corrections-and-tamper.md) | Record chain entries, review corrections, interpreter dismissal, and presenter controls | CDR | proposed | rashodkorala | demo-night-mvp |
 | [CDR-007](cdr/cdr-007-clinical-note-and-patient-summary.md) | Clinical note with provenance and patient summary on the visit channel | CDR | proposed | rashodkorala | demo-night-mvp |
 | [EDR-001](edr/edr-001-agent-working-rules.md) | Agent working rules: TDR gates, annotations, commits, and reviews | EDR | accepted | rashodkorala | add-multilingual-medical-consultation, demo-night-mvp |
 | [EDR-002](edr/edr-002-testing-strategy.md) | Testing: pytest with mocked LLM, speaker-rated tone set, latency check | EDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |
@@ -38,6 +38,7 @@ Only a human decides a status; an agent may record an explicit human verdict (ED
 | [TDM-002](tdm/tdm-002-presenter-mismatch-control.md) | Presenter mismatch control for the blocked-dose beat | TDM | accepted | rashodkorala | demo-night-mvp |
 | [TDM-003](tdm/tdm-003-sinhala-tamil-test-languages.md) | Sinhala and Tamil as test-only languages before demo night | TDM | accepted | rashodkorala | demo-night-mvp |
 | [TDM-004](tdm/tdm-004-tamil-live-language.md) | Tamil is the chosen live language, alongside Punjabi and French, spoken by ElevenLabs | TDM | accepted | rashodkorala | demo-night-mvp, mediator-voice |
+| [TDM-005](tdm/tdm-005-hidden-record-tamper-control.md) | Hidden record-tamper control for the demo | TDM | proposed | rashodkorala | demo-night-mvp |
 
 ## Hierarchy
 

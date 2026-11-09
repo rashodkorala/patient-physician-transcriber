@@ -16,6 +16,8 @@ ai_context:
     - "Additive to CDR-001: new commands and events and new optional visit.state fields; no existing message changes shape"
     - "The server is the only gate: it refuses every speech-capturing command until consent is given"
     - "Explain-back results are controller only; the shared screen sees only a content-free state"
+    - "The interpreter's introduction (CDR-003) starts only after consent"
+    - "The consent notice is read aloud in the patient's language through the CDR-003 speak gate and CDR-004 playback"
   framework_hints:
     - "Pydantic models in server/contracts.py; TypeScript in web/lib/contracts.ts; regenerate web/lib/generated/"
     - "Add controller-only commands to CONTROLLER_COMMANDS and the new controller-only event to CONTROLLER_ONLY_EVENTS"
@@ -24,12 +26,14 @@ ai_context:
   validation_rules:
     - "turn.submit, visit.start_introduction, and visit.name_reply are refused while visit.state.consent is null"
     - "consent.give is accepted only for the current notice version in the visit's patient language"
+    - "consent.give from the controller is recorded as physician_on_behalf; from review as patient"
+    - "GET /api/speech/consent-{noticeId} serves the current notice only, in the visit's patient language only"
     - "visit.set_languages is refused while consent is given"
     - "explainback.result never reaches screen or review connections, live or via visit.state"
     - "explainback.state carries no text, items, or outcomes"
     - "Code-checked explain-back items keep the code's outcome; the model cannot override it (ADR-011)"
     - "Every consent change and every explain-back result is appended to the record chain, never edited (CDR-006, IDR-003)"
-affects: [server/contracts.py, server/main.py, server/visit_store.py, web/lib/contracts.ts, web/lib/generated/, web/components/Controller.tsx, web/components/SharedScreen.tsx]
+affects: [server/contracts.py, server/main.py, server/visit_store.py, server/introduction.py, web/lib/contracts.ts, web/lib/generated/, web/components/Controller.tsx, web/components/SharedScreen.tsx]
 implementation_refs: []
 test_refs: []
 ---
@@ -60,13 +64,19 @@ Additive to CDR-001, in the same way as CDR-003 and CDR-004.
    The server holds a reviewed consent notice per patient language and publishes it in `visit.state`.
    Consent is given by `consent.give` and withdrawn by `consent.withdraw`, from the review screen or the controller.
    While consent is not given, the server refuses every command that captures speech.
-2. **Explain-back is a bracketed mode.**
+   The physician may give consent on the patient's behalf from the controller, and the record says so (`physician_on_behalf`).
+2. **The notice is read aloud.**
+   The controller plays the notice in the patient's language through the existing speak gate (CDR-003) and playback reports (CDR-004), with speech id `consent-{noticeId}`.
+3. **The interpreter's introduction comes after consent.**
+   `visit.start_introduction` is refused until consent is given.
+   This changes how the `mediator-voice` flow opens: language, then consent, then the interpreter introduces itself and asks for names.
+4. **Explain-back is a bracketed mode.**
    The physician opens it with `explainback.start`, the patient speaks one or more ordinary patient turns (interpreted and spoken as usual), and the physician closes it with `explainback.check`, which runs the comparison over those turns.
    `explainback.cancel` closes it without a check.
-3. **Explain-back results are private to the physician.**
-   The full result goes only to controller connections.
+5. **Explain-back results are private to the physician.**
+   The full result goes only to controller connections; the patient does not see the outcome on any screen.
    Every role sees a content-free `explainback.state`, so the shared screen can prompt the patient without showing a score.
-4. **Both beats append to the record.**
+6. **Both beats append to the record.**
    Consent changes and explain-back results are new chain entries (CDR-006); nothing is edited in place.
 
 ## Alternatives Considered
@@ -75,7 +85,9 @@ Additive to CDR-001, in the same way as CDR-003 and CDR-004.
 |---|---|---|---|
 | Consent only in the browser (hide the conversation screen until tapped) | No contract change | The server would still accept turns, so a second tab or replay could capture speech without consent; no recorded time | The gate must sit where turns are accepted |
 | Consent notice text in `web/i18n` with a version string | Reuses the existing i18n files | Two screens could render different words for the same version; the record could not hold what was shown | One server-held text is simpler to review and hash |
-| Consent only from the review screen | The patient's own tap, always | The demo may run without a phone; the beat would fail | Kept as the preferred path, with the controller allowed and recorded as `on_behalf` |
+| Consent only from the review screen | The patient's own tap, always | The demo may run without a phone; the beat would fail | The review screen is the preferred path; the physician may give consent on the patient's behalf, recorded as `physician_on_behalf` |
+| Consent notice shown only, not read aloud | No speech needed before consent | A patient who cannot read the script well cannot consent with understanding | Read aloud in the patient's language through the existing speak gate |
+| Introduction before consent | The interpreter introduces itself and then asks for consent | The introduction captures speech (names) before consent | Introduction after consent |
 | Explain-back on the next single patient turn | Smallest | Continuous listening (IDR-004) splits an explanation on pauses; half an explanation would be scored | Bracketing with start and check fits both push-to-talk and hands-free |
 | Explain-back result on every screen | Patient sees it too | A "missed" list on a TV can embarrass the patient; MDD-001 treats feedback about communication as private by default | Physician sees it and re-explains; the project lead may widen this |
 | A separate explain-back recording path (not a turn) | Keeps the explanation out of the conversation | The physician would not hear the explanation interpreted; two capture paths to keep safe | The explanation is part of the conversation and the record |
@@ -88,6 +100,7 @@ Additive to CDR-001, in the same way as CDR-003 and CDR-004.
 |---|---|---|
 | `consent.give` (`noticeVersion`, `language`) | Review or controller; a screen's copy is dropped | Accepted only if consent is not already given, `language` is the visit's patient language, and `noticeVersion` is the current version for that language. Records `by: "patient"` from a review connection and `by: "physician_on_behalf"` from a controller connection |
 | `consent.withdraw` (optional `reason`) | Review or controller; a screen's copy is dropped | Accepted only while consent is given. Takes effect at once (see withdrawal rules) |
+| `consent.read_aloud` | Review or controller; a screen's copy is dropped | Accepted while a notice is set for the visit. Publishes `consent.speak` to controllers |
 | `explainback.start` | Controller | Refused unless consent is given, the visit is not paused, no read-back is pending, no explain-back is open, and at least one physician turn has been spoken (settled `final` or read-back confirmed) |
 | `explainback.check` (`explainBackId`) | Controller | Refused unless that explain-back is open in `listening` and at least one patient turn has settled as `final` since it opened |
 | `explainback.cancel` (`explainBackId`) | Controller | Refused unless that explain-back is open in `listening` |
@@ -97,6 +110,7 @@ Additive to CDR-001, in the same way as CDR-003 and CDR-004.
 | Event | Who receives it | When |
 |---|---|---|
 | `consent.changed` (`ConsentState`) | Every role | Consent was given or withdrawn |
+| `consent.speak` (`ConsentSpeak`) | *Controller only* | The notice should be played: once automatically when a notice is first set and consent is not given, and again on each `consent.read_aloud` |
 | `explainback.state` (`ExplainBackState`) | Every role | An explain-back opened, moved to checking, finished, failed, or was cancelled |
 | `explainback.result` (`ExplainBackResult`) | *Controller only* | The check finished |
 | `command.refused` (`CommandRefused`) | Only the review connection that sent the refused command | A review connection's command was refused; controller connections keep receiving CDR-001 `error` |
@@ -110,6 +124,7 @@ Additive to CDR-001, in the same way as CDR-003 and CDR-004.
 ### Consent rules
 
 1. **Blocked until consent.** While `consent` is `null`, the server refuses `turn.submit`, `visit.start_introduction`, and `visit.name_reply` (CDR-003) with `error` "Consent is needed before the conversation starts".
+   The interpreter's introduction therefore always follows consent.
    `visit.set_languages`, `visit.set_names` (typed names), and all read-only messages stay allowed, so the physician can set up the visit.
 2. **Languages lock with consent.** `visit.set_languages` is refused while consent is given, because consent was given to a notice in one language.
    Withdrawing consent unlocks it.
@@ -124,6 +139,11 @@ Additive to CDR-001, in the same way as CDR-003 and CDR-004.
    Each live patient language (Punjabi, French, and Tamil per TDM-004, and Sinhala in test mode per TDM-003) has one reviewed notice file with a version.
    `ConsentNotice` carries the patient-language text and the English text, so the shared screen shows both.
    The text's SHA-256 is stored in the chain entry, so the record shows exactly what was agreed to.
+6. **The notice is read aloud.**
+   - Speech id: `consent-{noticeId}`, for example `consent-pa-IN-v1` (at most 64 characters, CDR-004).
+   - `GET /api/speech/consent-{noticeId}?language={patientLanguage}` (CDR-003) serves the patient-language text of the visit's current notice, with the interpreter-line delivery; any other notice id or language returns 404.
+   - CDR-004 rule 2 accepts `voice.started` for that id and language, because the gate allows it, so the shared screen shows the interpreter speaking.
+   - The gate serves the notice whether or not consent is given; it is not captured speech.
 
 ### Explain-back rules
 
@@ -146,7 +166,10 @@ Additive to CDR-001, in the same way as CDR-003 and CDR-004.
 
 ## Data Schemas
 
-- `ConsentNotice`: `{ noticeId: string, version: string, language: PatientLanguage, lines: { language: Language, text: string }[] }`; `lines` holds the patient language first and English second.
+- `ConsentNotice`: `{ noticeId: string, speechId: string, version: string, language: PatientLanguage, lines: { language: Language, text: string }[] }`; `lines` holds the patient language first and English second.
+  `noticeId` is `{language}-v{version}`, for example `pa-IN-v1`, so it changes whenever the text changes.
+  `speechId` is `consent-{noticeId}`, so screens and the controller use one id.
+- `ConsentSpeak`: `{ speechId: string, language: PatientLanguage }`, where `speechId` is `consent-{noticeId}`.
 - `ConsentGive` (command): `{ noticeVersion: string, language: PatientLanguage }`.
 - `ConsentWithdraw` (command): `{ reason?: string }`, at most 200 characters, stored in the record only.
 - `ConsentState`: `{ state: "given" | "withdrawn", at: ISO-8601 string, by: "patient" | "physician_on_behalf", noticeId: string, noticeVersion: string, language: PatientLanguage, entryId: string }`.
@@ -175,6 +198,8 @@ Channel tests (named for this record, for example `test_consent_blocks_turns_cdr
 - `consent.give` refused for a wrong language, a stale notice version, a second give, and from a screen connection (dropped, no effect);
 - `consent.give` from review recorded as `by: "patient"` and from the controller as `by: "physician_on_behalf"`, each with a chain entry;
 - `visit.set_languages` refused while consent is given and accepted after withdrawal;
+- `GET /api/speech/consent-{noticeId}` serves the current notice in the patient's language, returns 404 for English, an old version, or an unknown id, and `voice.started` is accepted for it;
+- `consent.speak` is sent to controllers once when the notice is first set and again on `consent.read_aloud`, and never to screen or review connections;
 - withdrawal during a pending read-back discards it unspoken; withdrawal during a turn in the graph discards that turn with no `turn.result`, no speech id allowed by the speak gate, and no chain entry;
 - a review connection receives `command.refused` and never `error`;
 - `explainback.start` refused without consent, while paused, during read-back, with nothing spoken by the physician, and when one is open;
@@ -190,19 +215,16 @@ A front-end test checks the shared screen shows the consent notice in both langu
 - **Positive**: consent is enforced where turns enter, recorded with the exact notice, and withdrawable; explain-back works with both push-to-talk and hands-free capture, and a missed dose or frequency cannot be hidden by a lenient model.
 - **Negative**: more commands and a small explain-back state machine; a review-screen refusal event in addition to `error`; reviewed consent text is needed in every live language.
 - **Risks and mitigations**: the physician could tap consent for the patient; mitigated by recording `physician_on_behalf` in the record and preferring the review screen.
-  The introduction (CDR-003) now waits for consent, which changes the opening of the `mediator-voice` flow; see the open question below.
+  The introduction (CDR-003) now waits for consent, which changes the opening of the `mediator-voice` flow: its controller must show consent before offering the introduction, and its tests must give consent first.
 
 ## Implementation
 
 Code governed by this record carries `@contract ws:/ws/visit` and `@implements CDR-005: Consent and explain-back on the visit channel`.
 Demo-night-mvp tasks 3.2 and 3.4 build it, after this record and ADR-011 and CDR-006 are accepted.
 
-Open questions for the decision owner:
-1. Should the interpreter's introduction (CDR-003, `mediator-voice`) come before consent, so the interpreter introduces itself and then asks for consent, or after it, as drafted?
-2. Should the controller be allowed to give consent on the patient's behalf at all, or only the review screen?
-3. Should the patient also see the explain-back outcome (for example on the review screen), or only the physician, as drafted?
-4. Should the consent notice also be read aloud, as an interpreter line (a new CDR-003 line purpose), or shown only, as drafted?
+Decisions settled by the decision owner (relayed by the supervising session, 2026-11-09): the introduction comes after consent; the physician may consent on the patient's behalf, recorded as `physician_on_behalf`; only the controller sees the explain-back outcome; the notice is read aloud in the patient's language.
 
 ## Review Notes
 
 - 2026-11-08, Claude (agent): Drafted as a proposal for the supervising session, for demo-night-mvp tasks 3.2 and 3.4. Awaiting human review; do not implement until accepted.
+- 2026-11-09, Claude (agent): Revised to state rashodkorala's answers to the open questions, relayed by the supervising session. Still proposed; awaiting human review.

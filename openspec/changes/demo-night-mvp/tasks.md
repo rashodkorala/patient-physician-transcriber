@@ -2,13 +2,14 @@
 
 ## 0. Human decision review gate
 
-TDRs: ADR-004, ADR-005, ADR-006, ADR-007, CDR-001, CDR-002, EDR-002, IDR-001, IDR-002, IDR-003, TDM-001
+TDRs: ADR-004, ADR-005, ADR-006, ADR-007, ADR-011, CDR-001, CDR-002, CDR-005, CDR-006, CDR-007, EDR-002, IDR-001, IDR-002, IDR-003, TDM-001, TDM-005
 
 - [x] 0.1 Project lead reviews ADR-004, ADR-005, ADR-006, and ADR-007 and sets each to accepted or rejected; verify `python3 scripts/check_tdr.py` shows no pending ADRs
 - [x] 0.2 Project lead and front-end and back-end owners review CDR-001 and CDR-002; verify both are accepted or replaced (2026-10-22: the project lead reviewed and accepted both as sole reviewer)
 - [x] 0.3 A second team member reviews EDR-002, IDR-001, IDR-002, and IDR-003; TDM-001 is acknowledged; verify the review queue in `scripts/check_tdr.py` is empty (2026-10-22: no second reviewer available, so the project lead reviewed and accepted all records)
 - [ ] 0.4 Write the demo script (lines for both speakers, featured condition, dose) and verify both native speakers and a clinician sign it off in docs/demo-script.md (draft written 2026-10-22; sign-offs pending). Test scripts docs/test-script-tamil.md and docs/test-script-sinhala.md (drafted 2026-10-23) need the same sign-offs from the Tamil and Sinhala speakers and the clinician
 - [x] 0.5 Decide TDM-002 (presenter mismatch control); if accepted, add the presenter-only `demo.inject_mismatch` command to CDR-001 as an additive amendment; verify `python3 scripts/check_tdr.py` passes (2026-10-22: accepted with clarifications by the project lead; CDR-001 amended)
+- [ ] 0.6 Project lead reviews ADR-011, CDR-005, CDR-006, CDR-007, and TDM-005 (consent and explain-back, record entries and review corrections, note and summary, generation checks, and the tamper control) and sets each to accepted or rejected; verify `python3 scripts/check_tdr.py` shows none of them awaiting review
 
 ## 1. Week 1 (22 to 29 Oct): live loop
 
@@ -39,13 +40,19 @@ TDRs: ADR-002, ADR-003, ADR-004, ADR-006, IDR-002, CDR-002, EDR-002
 TDRs: ADR-003, ADR-006, IDR-003, CDR-001, CDR-002
 
 - [x] 3.1 Language picker with thirteen languages in their own scripts; verify only Punjabi and French are selectable (2026-11-03: thirteen languages in their own scripts, others coming soon; `node e2e/test-languages.mjs off` passes)
-- [ ] 3.2 Consent screen in Punjabi and French; verify conversation is blocked until consent
+- [ ] 3.2 Consent screen in Punjabi and French; verify conversation is blocked until consent: `turn.submit`, `visit.start_introduction`, and `visit.name_reply` are refused before `consent.give` and accepted after, the consent entry is chained with `patient` or `physician_on_behalf`, the notice is read aloud in the patient's language as `consent-{noticeId}`, and `/screen` shows it in both languages
+  TDRs: CDR-005
 - [x] 3.3 Off-the-record pause, human interpreter button with connecting state, and "mark high risk" on the controller; verify all notices appear in both languages and a high-risk mark offers an interpreter (2026-11-08: `tests/test_demo_beats.py` covers pause, request, mark, refusals, and role rules; `node e2e/demo-beats.mjs` checks the paused, offered, connecting, and simulated notices in Punjabi and English on `/screen`. Notice translations are `_reviewer: pending`. The buttons are on the controller only; the server also accepts pause and request from `/screen`, which has no buttons)
 - [ ] 3.4 Explain-back chain and view; verify a missed frequency is flagged
+  TDRs: CDR-005, ADR-011
 - [ ] 3.5 Transcript review with re-speak corrections keeping originals; verify history shows both
+  TDRs: CDR-006, IDR-003
 - [ ] 3.6 Note with provenance tags and click-to-source; verify every sentence has a tag and a link
+  TDRs: CDR-007, ADR-011, ADR-006
 - [ ] 3.7 Patient summary in the patient's language, read aloud, with deterministic dose check; verify a mismatched dose is refused
-- [ ] 3.8 Hash chain, record verified badge, and hidden tamper control; verify tests detect alteration and the badge turns red live
+  TDRs: CDR-007, ADR-011, ADR-006, CDR-003, CDR-004
+- [ ] 3.8 Hash chain, record verified badge, and hidden tamper control; verify tests detect alteration, `demo.tamper_record` is accepted only from the controller and only once per visit, `record.integrity.brokenAt` names the altered turn's `segmentId`, the badge turns red live, and `/screen` shows no tamper label
+  TDRs: CDR-006, IDR-003, TDM-002, TDM-005
 
 ## 4. Week 4 (13 to 19 Nov): safety net and rehearsal
 
