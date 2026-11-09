@@ -9,6 +9,7 @@
 // Usage: CHROMIUM_PATH=... node e2e/hands-free.mjs fake|tamil [baseUrl]
 //        CHROMIUM_PATH=... node e2e/hands-free.mjs azure <wav> [baseUrl]
 import { chromium } from "playwright-core";
+import { chooseLanguage, giveConsent } from "./consent-steps.mjs";
 
 const mode = process.argv[2];
 const wav = mode === "azure" ? process.argv[3] : null;
@@ -71,10 +72,8 @@ const last = () => submits.at(-1);
 await control.goto(`${base}/control`);
 await control.waitForSelector('[data-testid="connection"]:text("open")', { timeout: 30000 });
 
-if (mode === "tamil") {
-  await control.selectOption('[data-testid="patient-language"]', "ta-LK");
-  await control.waitForTimeout(500);
-}
+if (mode === "tamil") await chooseLanguage(control, "ta-LK");
+await giveConsent(control);
 await control.check('[data-testid="hands-free"]');
 await control.waitForSelector('[data-testid="listening"][data-state="listening"]', { timeout: 15000 });
 await check(true, "hands-free is listening");

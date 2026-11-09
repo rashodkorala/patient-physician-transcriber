@@ -6,6 +6,7 @@
 // browser's Azure voice speaks the turn instead.
 // Usage: CHROMIUM_PATH=... node e2e/server-voice.mjs punjabi|sinhala [baseUrl]
 import { chromium } from "playwright-core";
+import { chooseLanguage, giveConsent } from "./consent-steps.mjs";
 
 const mode = process.argv[2];
 const base = process.argv[3] ?? "http://localhost:3000";
@@ -75,6 +76,7 @@ if (mode === "punjabi") {
   if (!(await control.locator('[data-testid="intro-start"]').count())) {
     await fail("no Start introduction button: run against a freshly started server");
   }
+  await giveConsent(control);
   await control.click('[data-testid="intro-start"]');
   // The introduction in English and Punjabi, then the physician's question, in English only.
   await waitFor(() => speech.length >= 3, "the introduction and first question are fetched as server audio");
@@ -113,8 +115,8 @@ if (mode === "punjabi") {
   await check(!(await control.locator("body").innerText()).includes("voice failed"), "the turn is not marked as voice failed");
   await check(azureSpoke.length === 0, "Azure never spoke");
 } else {
-  await control.selectOption('[data-testid="patient-language"]', "si-LK");
-  await control.waitForTimeout(500);
+  await chooseLanguage(control, "si-LK");
+  await giveConsent(control);
   await say("physician", "How have you been feeling since your last visit?");
   await waitFor(() => speech.length >= 1, "the turn's audio is asked for");
   await check(speech[0].status === 503, "the server has no Sinhala voice (503)");

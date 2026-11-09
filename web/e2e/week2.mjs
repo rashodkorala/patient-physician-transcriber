@@ -4,6 +4,7 @@
 // reject, a blocked dose, and an escalated turn, with no private data ever reaching /screen.
 // Usage: node e2e/week2.mjs [baseUrl] [screenshotDir]
 import { chromium } from "playwright-core";
+import { giveConsent } from "./consent-steps.mjs";
 
 // Only the visit channel; in dev mode pages also hold the Next.js hot-reload socket.
 const visitChannel = (ws) => new URL(ws.url()).pathname === "/ws/visit";
@@ -30,6 +31,7 @@ await tv.waitForSelector('[data-testid="connection"][data-state="open"]', { time
 const control = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
 await control.goto(`${base}/control`);
 await control.waitForSelector('[data-testid="connection"]:text("open")', { timeout: 15000 });
+await giveConsent(control);
 
 const say = async (speaker, text) => {
   await control.selectOption('[data-testid="typed-speaker"]', speaker);

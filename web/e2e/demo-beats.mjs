@@ -5,6 +5,7 @@
 // state, private fields, or the wrong dose. Beat 8 (transcript review) needs the review screen (task 3.5).
 // Usage: node e2e/demo-beats.mjs [baseUrl] [screenshotDir]
 import { chromium } from "playwright-core";
+import { giveConsent } from "./consent-steps.mjs";
 
 const visitChannel = (ws) => new URL(ws.url()).pathname === "/ws/visit";
 
@@ -31,6 +32,7 @@ await tv.waitForSelector('[data-testid="connection"][data-state="open"]', { time
 const control = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
 await control.goto(`${base}/control`);
 await control.waitForSelector('[data-testid="connection"]:text("open")', { timeout: 15000 });
+await giveConsent(control);
 
 /** Screenshots of both pages at the widths and colour schemes the TV and laptop use, and a phone. */
 // A timed phase (the simulated call) passes before every combination is captured, so it gets one of each page.
@@ -80,6 +82,8 @@ await say("patient", "ਮੇਰੀਆਂ ਗੱਲਾਂ ਕੌਣ ਦੇਖੇ�
 await waitForCaption(n);
 
 // ---------- Beat 4: off-the-record pause (task 3.3) ----------
+// The TV shows at most the newest six captions; on a visit that ran before, that is more than this script's one.
+const shownBefore = await tv.locator('[data-testid="caption"]').count();
 await control.click('[data-testid="pause"]');
 await tv.waitForSelector('[data-testid="paused"]', { timeout: 10000 });
 const pausedText = await tv.locator('[data-testid="paused"]').innerText();
@@ -92,9 +96,11 @@ await control.click('[data-testid="resume"]');
 await tv.waitForSelector('[data-testid="paused"]', { state: "detached", timeout: 10000 });
 // The paused notice and the captions swap in separate renders, so wait for the caption rather than counting at once.
 await tv.waitForSelector('[data-testid="caption"]', { timeout: 10000 }).catch(() => null);
-await check((await tv.locator('[data-testid="caption"]').count()) === 1, "captions return when the visit resumes");
+await check((await tv.locator('[data-testid="caption"]').count()) === shownBefore, "captions return when the visit resumes");
 
 // ---------- Beat 5: presenter mismatch, blocked, then repeated (tasks 5.1 and 5.2) ----------
+// A reloaded controller keeps earlier injected turns marked (CDR-006), so count from here.
+const injectedBefore = await control.locator('[data-testid="turn"][data-injected="true"]').count();
 await control.click('[data-testid="presenter"] summary');
 await control.click('[data-testid="injection-arm"]');
 await control.waitForSelector('[data-testid="injection-state"]:text("mismatch armed")', { timeout: 5000 });
@@ -108,7 +114,7 @@ await check((await blocked.getAttribute("data-status")) === "blocked", "the inje
 const blockedText = await blocked.innerText();
 await check(both(blockedText, "Please repeat", "ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਬੋਲੋ"), "TV asks to repeat in both languages");
 await check(!blockedText.includes("ਮਿਲੀਗ੍ਰਾਮ"), "TV never shows the wrong translation");
-const injectedTurn = control.locator('[data-testid="turn"][data-injected="true"]');
+const injectedTurn = control.locator('[data-testid="turn"][data-injected="true"]').nth(injectedBefore);
 await injectedTurn.waitFor({ timeout: 5000 });
 await check((await injectedTurn.getAttribute("data-status")) === "blocked", "controller marks the blocked turn as the presenter mismatch");
 await check(WRONG_DOSE.test(await injectedTurn.innerText()), "controller shows the mismatched value");
@@ -122,7 +128,10 @@ await control.click('[data-testid="readback-confirm"]');
 const repeated = await waitForCaption(n);
 await check((await repeated.getAttribute("data-status")) === "final", "the repeated dose is confirmed and spoken");
 await check((await repeated.innerText()).includes("0.4"), "the repeated dose keeps 0.4");
-await check((await control.locator('[data-testid="turn"][data-injected="true"]').count()) === 1, "only the injected turn is marked");
+await check(
+  (await control.locator('[data-testid="turn"][data-injected="true"]').count()) === injectedBefore + 1,
+  "only the injected turn is marked",
+);
 const statuses = await tv.$$eval('[data-testid="caption"]', (els) => els.map((e) => e.dataset.status));
 await check(statuses.slice(-2).join(",") === "blocked,final", "TV shows the turn as blocked, then repeated");
 
@@ -161,6 +170,9 @@ await check(
 await control.waitForSelector('[data-testid="interpreter"][data-phase="simulated"]', { timeout: 2000 });
 await capture("beat6-simulated", true);
 await tv.waitForSelector('[data-testid="interpreter-notice"]', { state: "detached", timeout: 10000 });
+// CDR-006: the controller closes the simulated call on the server, so the record and every screen agree.
+await control.waitForSelector('[data-testid="escalations"] li[data-action="dismiss"]', { timeout: 5000 });
+await check(true, "the simulated call's end is recorded as a dismissal");
 n = await lastTurnId();
 await say("physician", "Thank you. Let us continue.");
 await waitForCaption(n);
@@ -181,6 +193,11 @@ await late.goto(`${base}/screen`);
 await late.waitForSelector('[data-testid="caption"]', { timeout: 15000 });
 const lateWire = lateFrames.join("\n");
 await check(!/injection|demo\./i.test(lateWire) && !WRONG_DOSE.test(lateWire), "a late TV snapshot carries no injection and no wrong dose");
+await check((await late.locator('[data-testid="interpreter-notice"]').count()) === 0, "a late TV shows no interpreter offer once it is closed");
+await check(
+  (await late.locator('[data-testid="record-badge"]').getAttribute("data-status")) === "verified",
+  "a late TV shows the record verified",
+);
 
 await browser.close();
 console.log("PASS: demo beats 4, 5, and 6");

@@ -4,6 +4,7 @@
 // name field never starts push-to-talk, and that /screen shows the names on captions.
 // Usage: node e2e/names.mjs [baseUrl] [screenshotDir]
 import { chromium } from "playwright-core";
+import { giveConsent } from "./consent-steps.mjs";
 
 const base = process.argv[2] ?? "http://localhost:3000";
 const shots = process.argv[3];
@@ -35,6 +36,7 @@ await tv.goto(`${base}/screen`);
 await tv.waitForSelector('[data-testid="connection"][data-state="open"]', { timeout: 15000 });
 
 let control = await openControl();
+await giveConsent(control);
 // Start from a visit with no names, so the check also passes against a server that has run it before.
 await setName(control, "physician", "");
 await setName(control, "patient", "");

@@ -6,6 +6,7 @@
 // with Sinhala glossary terms on /screen, which never shows the banner.
 // Usage: node e2e/test-languages.mjs off|on [baseUrl] [screenshotDir]
 import { chromium } from "playwright-core";
+import { chooseLanguage, giveConsent } from "./consent-steps.mjs";
 
 const mode = process.argv[2];
 const base = process.argv[3] ?? "http://localhost:3000";
@@ -50,7 +51,8 @@ if (mode === "off") {
   await control.waitForTimeout(1000);
   await check((await control.locator('[data-testid="test-mode-banner"]').count()) === 0, "no test-mode banner on /control");
   await shot(control, "control-languages-off");
-  await control.selectOption('[data-testid="patient-language"]', "ta-LK");
+  await chooseLanguage(control, "ta-LK");
+  await giveConsent(control);
   await tv.waitForFunction(() => document.body.innerText.includes("தமிழ் / English"), null, { timeout: 15000 });
   await check(true, "/screen shows the Tamil visit");
   await control.selectOption('[data-testid="typed-speaker"]', "physician");
@@ -67,7 +69,8 @@ if (mode === "off") {
     els.filter((o) => !o.disabled).map((o) => o.value),
   );
   await check(live.includes("si-LK") && live.includes("ta-LK"), "Sinhala and Tamil can be chosen in test mode");
-  await control.selectOption('[data-testid="patient-language"]', "si-LK");
+  await chooseLanguage(control, "si-LK");
+  await giveConsent(control);
   await tv.waitForFunction(() => document.body.innerText.includes("සිංහල / English"), null, { timeout: 15000 });
   await check(true, "/screen shows the Sinhala visit");
   await control.selectOption('[data-testid="typed-speaker"]', "physician");

@@ -4,6 +4,7 @@
 // and never show it for an id that may not be spoken.
 // Usage: node e2e/orb-speaking.mjs [baseUrl] [serverPort]
 import { chromium } from "playwright-core";
+import { giveConsentOnSocket } from "./consent-steps.mjs";
 
 const base = process.argv[2] ?? "http://localhost:3000";
 const serverPort = process.argv[3] ?? "8000";
@@ -32,7 +33,8 @@ async function controller() {
     return new Promise((resolve) => waiters.push({ type, resolve }));
   };
   const send = (type, payload) => ws.send(JSON.stringify({ type, payload }));
-  await next("visit.state");
+  const state = (await next("visit.state")).payload;
+  await giveConsentOnSocket({ next, send }, state);
   return { ws, next, send };
 }
 

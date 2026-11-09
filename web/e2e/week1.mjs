@@ -3,6 +3,7 @@
 // original and translation, and /screen must never receive controller-only data.
 // Usage: node e2e/week1.mjs [baseUrl]
 import { chromium } from "playwright-core";
+import { giveConsent } from "./consent-steps.mjs";
 
 // Only the visit channel; in dev mode pages also hold the Next.js hot-reload socket.
 const visitChannel = (ws) => new URL(ws.url()).pathname === "/ws/visit";
@@ -25,6 +26,7 @@ console.log("ok: /screen connected to the WebSocket");
 const control = await browser.newPage();
 await control.goto(`${base}/control`);
 await control.waitForSelector('[data-testid="connection"]:text("open")', { timeout: 15000 });
+await giveConsent(control);
 console.log("ok: /control connected");
 
 const line = "ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਡਾਕਟਰ ਜੀ।";

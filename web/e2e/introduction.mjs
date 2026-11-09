@@ -4,6 +4,7 @@
 // confirms both names, and checks what /screen shows: the interpreter's lines, never a proposed name.
 // Usage: node e2e/introduction.mjs [baseUrl] [screenshotDir]
 import { chromium } from "playwright-core";
+import { giveConsent } from "./consent-steps.mjs";
 
 // Only the visit channel; in dev mode pages also hold the Next.js hot-reload socket.
 const visitChannel = (ws) => new URL(ws.url()).pathname === "/ws/visit";
@@ -46,6 +47,9 @@ const waitForLines = (purpose, count) =>
     { timeout: 15000 },
   );
 
+// CDR-005: the introduction waits for consent, so Start introduction is off until the patient agrees.
+await check(await control.isDisabled('[data-testid="intro-start"]'), "Start introduction waits for consent");
+await giveConsent(control);
 await control.click('[data-testid="intro-start"]');
 await waitForLines("introduction", 1);
 const intro = await linesOn("introduction").innerText();
