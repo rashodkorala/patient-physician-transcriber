@@ -20,14 +20,14 @@ Only a human decides a status; an agent may record an explicit human verdict (ED
 | [ADR-008](adr/adr-008-automatic-high-risk-detection.md) | Automatic high-risk moment detection: suggest only | ADR | proposed | rashodkorala | add-multilingual-medical-consultation |
 | [ADR-009](archived/adr-009-openai-voice-output.md) | Voice output: OpenAI text-to-speech with tone instructions; Azure keeps recognition | ADR | superseded | rashodkorala | mediator-voice |
 | [ADR-010](adr/adr-010-elevenlabs-voice-output.md) | Voice output: ElevenLabs Eleven v4 replaces OpenAI text-to-speech; Azure stays fallback | ADR | accepted | rashodkorala | mediator-voice |
-| [ADR-011](adr/adr-011-grounded-generation-checked-by-code.md) | Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values | ADR | proposed | rashodkorala | demo-night-mvp |
+| [ADR-011](adr/adr-011-grounded-generation-checked-by-code.md) | Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values | ADR | accepted | rashodkorala | demo-night-mvp |
 | [CDR-001](cdr/cdr-001-visit-websocket-events.md) | Visit WebSocket event contract | CDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |
 | [CDR-002](cdr/cdr-002-turn-result-schema.md) | Turn result schema | CDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |
 | [CDR-003](cdr/cdr-003-names-and-interpreter-lines.md) | Participant names and interpreter lines on the visit channel | CDR | accepted | rashodkorala | mediator-voice |
 | [CDR-004](cdr/cdr-004-interpreter-voice-playback-events.md) | Interpreter voice playback on the visit channel | CDR | accepted | rashodkorala | orb-speaking-state |
-| [CDR-005](cdr/cdr-005-consent-and-explain-back-events.md) | Consent and explain-back on the visit channel | CDR | proposed | rashodkorala | demo-night-mvp |
-| [CDR-006](cdr/cdr-006-record-entries-review-corrections-and-tamper.md) | Record chain entries, review corrections, interpreter dismissal, and presenter controls | CDR | proposed | rashodkorala | demo-night-mvp |
-| [CDR-007](cdr/cdr-007-clinical-note-and-patient-summary.md) | Clinical note with provenance and patient summary on the visit channel | CDR | proposed | rashodkorala | demo-night-mvp |
+| [CDR-005](cdr/cdr-005-consent-and-explain-back-events.md) | Consent and explain-back on the visit channel | CDR | accepted | rashodkorala | demo-night-mvp |
+| [CDR-006](cdr/cdr-006-record-entries-review-corrections-and-tamper.md) | Record chain entries, review corrections, interpreter dismissal, and presenter controls | CDR | accepted | rashodkorala | demo-night-mvp |
+| [CDR-007](cdr/cdr-007-clinical-note-and-patient-summary.md) | Clinical note with provenance and patient summary on the visit channel | CDR | accepted | rashodkorala | demo-night-mvp |
 | [EDR-001](edr/edr-001-agent-working-rules.md) | Agent working rules: TDR gates, annotations, commits, and reviews | EDR | accepted | rashodkorala | add-multilingual-medical-consultation, demo-night-mvp |
 | [EDR-002](edr/edr-002-testing-strategy.md) | Testing: pytest with mocked LLM, speaker-rated tone set, latency check | EDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |
 | [IDR-001](idr/idr-001-push-to-talk-turns.md) | Push-to-talk per speaker instead of diarisation | IDR | accepted | rashodkorala | demo-night-mvp, mediator-voice |

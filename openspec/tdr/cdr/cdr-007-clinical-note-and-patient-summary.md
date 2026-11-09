@@ -1,7 +1,7 @@
 ---
 id: cdr-007
 title: "Clinical note with provenance and patient summary on the visit channel"
-status: proposed
+status: accepted
 date: 2026-11-08
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -183,3 +183,4 @@ Decisions settled by the decision owner (relayed by the supervising session, 202
 
 - 2026-11-08, Claude (agent): Drafted as a proposal for the supervising session, for demo-night-mvp tasks 3.6 and 3.7. Awaiting human review; do not implement until accepted.
 - 2026-11-09, Claude (agent): Revised to state rashodkorala's answers to the open questions, relayed by the supervising session: `/record` uses the controller role, a passed summary is chained, and a summary missing a confirmed dose is refused. Still proposed; awaiting human review.
+- 2026-11-09, rashodkorala: Accepted, with the supervising session's recommended answers to the open questions ("yes to all, merge and push, accept with your recommendations"). Recorded by Claude (agent) at rashodkorala's explicit request.

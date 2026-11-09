@@ -1,7 +1,7 @@
 ---
 id: cdr-006
 title: "Record chain entries, review corrections, interpreter dismissal, and presenter controls"
-status: proposed
+status: accepted
 date: 2026-11-08
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -248,3 +248,4 @@ Settled by the decision owner (relayed by the supervising session, 2026-11-09), 
 
 - 2026-11-08, Claude (agent): Drafted as a proposal for the supervising session, for demo-night-mvp tasks 3.5 and 3.8, including the hash chain agent's two gaps (no tamper command; index to `brokenAt` mapping). Awaiting human review; do not implement until accepted.
 - 2026-11-09, Claude (agent): Revised to state rashodkorala's answers to the open questions and the rules settled by the safety controls work, relayed by the supervising session; added `interpreter.dismiss`, the controller-only `injection` and `escalations` state, the `interpreterOpen` field, and the `summary` entry; the tamper control now cites TDM-005. Still proposed; awaiting human review.
+- 2026-11-09, rashodkorala: Accepted, with the supervising session's recommended answers to the open questions ("yes to all, merge and push, accept with your recommendations"). Recorded by Claude (agent) at rashodkorala's explicit request.

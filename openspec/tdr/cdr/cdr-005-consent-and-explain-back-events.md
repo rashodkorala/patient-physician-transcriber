@@ -1,7 +1,7 @@
 ---
 id: cdr-005
 title: "Consent and explain-back on the visit channel"
-status: proposed
+status: accepted
 date: 2026-11-08
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -228,3 +228,4 @@ Decisions settled by the decision owner (relayed by the supervising session, 202
 
 - 2026-11-08, Claude (agent): Drafted as a proposal for the supervising session, for demo-night-mvp tasks 3.2 and 3.4. Awaiting human review; do not implement until accepted.
 - 2026-11-09, Claude (agent): Revised to state rashodkorala's answers to the open questions, relayed by the supervising session. Still proposed; awaiting human review.
+- 2026-11-09, rashodkorala: Accepted, with the supervising session's recommended answers to the open questions ("yes to all, merge and push, accept with your recommendations"). Recorded by Claude (agent) at rashodkorala's explicit request.

@@ -1,7 +1,7 @@
 ---
 id: adr-011
 title: "Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values"
-status: proposed
+status: accepted
 date: 2026-11-08
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -137,3 +137,4 @@ Tests with the fake model cover each row of the check table, the explain-back co
 
 - 2026-11-08, Claude (agent): Drafted as a proposal for the supervising session, for demo-night-mvp tasks 3.4, 3.6, and 3.7. Awaiting human review; do not implement until accepted.
 - 2026-11-09, Claude (agent): Revised to state rashodkorala's answers, relayed by the supervising session: explain-back runs on Sonnet 5.5, decided here with no ADR-006 edit, and a summary that leaves out a confirmed dose is refused. Still proposed; awaiting human review.
+- 2026-11-09, rashodkorala: Accepted, with the supervising session's recommended answers to the open questions ("yes to all, merge and push, accept with your recommendations"). Recorded by Claude (agent) at rashodkorala's explicit request.
