@@ -13,16 +13,25 @@
  * @implements CDR-004: Interpreter voice playback on the visit channel
  * @implements TDM-003: Sinhala and Tamil as test-only languages before demo night
  * @implements TDM-002: Presenter mismatch control for the blocked-dose beat
+ * @implements CDR-005: Consent and explain-back on the visit channel
+ * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
+ * @implements IDR-003: SHA-256 hash chain for the record-verified badge
  * @contract ws:/ws/visit
  */
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type {
+  ConsentNotice,
+  ConsentSpeak,
+  ConsentState,
   DemoInjectionState,
+  DismissReason,
   EmpathyNudge,
   Envelope,
   ErrorPayload,
+  EscalationEntry,
   EscalationReason,
+  InterpreterDismissed,
   InterpreterEscalation,
   InterpreterLine,
   IntroductionState,
@@ -31,6 +40,7 @@ import type {
   NameRole,
   Names,
   PatientLanguage,
+  RecordIntegrity,
   Speaker,
   ToneLabel,
   TurnCaption,
@@ -60,6 +70,7 @@ import {
 } from "@/lib/speech";
 import styles from "./controller.module.css";
 import Highlighted from "./Highlighted";
+import RecordBadge from "./RecordBadge";
 
 const TONE_LABELS: ToneLabel[] = ["respectful", "reassuring", "empathetic", "neutral"];
 
@@ -110,6 +121,32 @@ const INJECTION_TEXT: Record<DemoInjectionState["state"], string> = {
   fired: "Fired on the turn marked in the log. Ask the physician to repeat the dose.",
   cancelled: "Cancelled before it fired. Doses are translated normally.",
 };
+
+/** Each recorded interpreter event (CDR-006), as the controller lists it. */
+const ESCALATION_TEXT: Record<EscalationEntry["action"], string> = {
+  offer: "Interpreter offered",
+  request: "Interpreter requested",
+  mark: "Marked high risk",
+  dismiss: "Offer closed",
+};
+
+const DISMISS_TEXT: Record<DismissReason, string> = {
+  declined: "declined",
+  resolved: "resolved",
+  simulated_call_ended: "simulated call ended",
+};
+
+const ACTION_FOR: Record<EscalationReason, EscalationEntry["action"]> = {
+  low_confidence: "offer",
+  tone_failure: "offer",
+  high_risk: "mark",
+  requested: "request",
+};
+
+/** A time of day for the record lists: hours and minutes, in the laptop's locale. */
+function clock(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
 
 /** An interpreter request or high-risk mark in the turn log, after the turn it followed (null: before any). */
 interface Marker {
@@ -220,6 +257,14 @@ export default function Controller() {
   const [injected, setInjected] = useState<Set<string>>(new Set());
   const lastStarted = useRef<string | null>(null);
   const lastTurn = useRef<string | null>(null);
+  // CDR-005: the notice in the patient's language and English, and the latest consent change.
+  const [consentNotice, setConsentNotice] = useState<ConsentNotice | null>(null);
+  const [consentState, setConsentState] = useState<ConsentState | null>(null);
+  const noticeRef = useRef<ConsentNotice | null>(null);
+  // CDR-006: the record's integrity, every interpreter event as recorded, and whether an offer is open.
+  const [integrity, setIntegrity] = useState<RecordIntegrity | null>(null);
+  const [escalations, setEscalations] = useState<EscalationEntry[]>([]);
+  const interpreterOpen = useRef(false);
 
   const physicianLanguage: Language = "en-CA";
   const languageOf = (speaker: Speaker): Language => (speaker === "physician" ? physicianLanguage : patientLanguage);
@@ -229,14 +274,29 @@ export default function Controller() {
   const updateOutcome = (turnId: string, patch: Outcome) =>
     setOutcomes((all) => ({ ...all, [turnId]: { ...all[turnId], ...patch } }));
 
-  const startCall = () => {
+  // The simulated call ends by closing the request on the server, so the TV and the record agree (CDR-006).
+  // The channel's send, for timers set up before the socket hook in this component.
+  const sendRef = useRef<(type: string, payload: unknown) => void>(() => {});
+  // Refs and state setters only, so each is stable and the event handler below can use them.
+  const startCall = useCallback(() => {
     callTimers.current.forEach(clearTimeout);
     setInterpreter({ phase: "connecting", reason: "requested" });
+    const endCall = () => {
+      callTimers.current = [];
+      setInterpreter(null);
+      if (interpreterOpen.current) sendRef.current("interpreter.dismiss", { reason: "simulated_call_ended" });
+    };
     callTimers.current = [
       setTimeout(() => setInterpreter({ phase: "simulated", reason: "requested" }), INTERPRETER_CONNECTING_MS),
-      setTimeout(() => setInterpreter(null), INTERPRETER_CONNECTING_MS + INTERPRETER_SIMULATED_MS),
+      setTimeout(endCall, INTERPRETER_CONNECTING_MS + INTERPRETER_SIMULATED_MS),
     ];
-  };
+  }, []);
+
+  const closeInterpreter = useCallback(() => {
+    callTimers.current.forEach(clearTimeout);
+    callTimers.current = [];
+    setInterpreter(null);
+  }, []);
 
   useEffect(() => () => callTimers.current.forEach(clearTimeout), []);
 
@@ -263,6 +323,58 @@ export default function Controller() {
         setIntroduction(state.introduction ?? "pending");
         setPaused(state.paused);
         lastTurn.current = state.turns.at(-1)?.turnId ?? null;
+        noticeRef.current = state.consentNotice ?? null;
+        setConsentNotice(state.consentNotice ?? null);
+        setConsentState(state.consentState ?? null);
+        setIntegrity(state.integrity);
+        // CDR-006: a reload keeps the recorded interpreter events, the open offer, and the injection marks.
+        const recorded = state.escalations ?? [];
+        setEscalations(recorded);
+        interpreterOpen.current = Boolean(state.interpreterOpen);
+        if (!state.interpreterOpen) closeInterpreter();
+        else {
+          const last = recorded.findLast((e) => e.action !== "dismiss");
+          // A call already running here keeps its timers; only a reload starts the simulated call again.
+          if (last?.action === "request") {
+            if (!callTimers.current.length) startCall();
+          } else if (last) {
+            const reason = (last.action === "mark" ? "high_risk" : last.reason) as EscalationReason;
+            setInterpreter((current) => current ?? { phase: "offered", reason });
+          }
+        }
+        if (state.injection) {
+          setInjected(new Set(state.injection.injectedTurnIds));
+          setInjection((current) => (state.injection?.state === "armed" ? "armed" : current === "armed" ? null : current));
+        }
+        break;
+      }
+      case "consent.changed": {
+        const consent = event.payload as ConsentState;
+        setConsentState(consent);
+        if (consent.state === "withdrawn") {
+          setHandsFree(false);
+          setNotice("Consent withdrawn. Nothing is captured until it is given again.");
+        } else setNotice(null);
+        break;
+      }
+      case "consent.speak": {
+        // CDR-005: the notice is read in the patient's language through the speak gate, by its speech id.
+        const { speechId, language } = event.payload as ConsentSpeak;
+        const text = noticeRef.current?.lines.find((line) => line.language === language)?.text;
+        if (text) speak(text, language, speechId).catch((error: Error) => setNotice(`Not spoken: ${error.message}`));
+        break;
+      }
+      case "record.integrity":
+        setIntegrity(event.payload as RecordIntegrity);
+        break;
+      case "interpreter.dismissed": {
+        const dismissed = event.payload as InterpreterDismissed;
+        interpreterOpen.current = false;
+        closeInterpreter();
+        setEscalations((all) => [
+          ...all,
+          { entryId: dismissed.entryId, action: "dismiss", reason: dismissed.reason, at: dismissed.at },
+        ]);
         break;
       }
       case "visit.paused":
@@ -343,6 +455,12 @@ export default function Controller() {
       }
       case "interpreter.escalation": {
         const { reason, turnId } = event.payload as InterpreterEscalation;
+        // The server chained it; the live event carries no entry id, so this copy is keyed locally until a reload.
+        interpreterOpen.current = true;
+        setEscalations((all) => [
+          ...all,
+          { entryId: `live-${all.length}`, action: ACTION_FOR[reason], reason, at: new Date().toISOString(), turnId },
+        ]);
         if (reason === "requested" || reason === "high_risk") {
           // Recorded in the visit by the server; shown in the log where it happened.
           const after = turnId ?? lastTurn.current;
@@ -364,13 +482,27 @@ export default function Controller() {
         const error = event.payload as ErrorPayload;
         // CDR-004: a refused start only means the screen will not show it; the voice itself is unaffected.
         if (error.command === "voice.started") console.warn(`voice.started refused: ${error.message}`);
+        // Another controller may have closed the simulated call first; the offer is closed either way.
+        else if (error.command === "interpreter.dismiss") console.warn(`interpreter.dismiss refused: ${error.message}`);
         else setNotice(error.message);
         break;
       }
     }
-  }, []);
+  }, [startCall, closeInterpreter]);
 
   const { state, send } = useVisitSocket("controller", onEvent);
+
+  useEffect(() => {
+    sendRef.current = send;
+  }, [send]);
+
+  const dismissInterpreter = (reason: DismissReason) => send("interpreter.dismiss", { reason });
+
+  // CDR-005: consent is given to the current notice in the patient's language; the server is the gate.
+  const consented = consentState?.state === "given";
+  const giveConsent = () =>
+    consentNotice &&
+    send("consent.give", { noticeVersion: consentNotice.version, language: consentNotice.language });
 
   useEffect(() => {
     fetch(`${serverHttpUrl()}/api/health`)
@@ -406,6 +538,11 @@ export default function Controller() {
   const askingRole: NameRole | null = introSkipped ? null : (ASKING[introduction] ?? null);
 
   const submit = (speaker: Speaker, text: string, confidence: number, endOfSpeechAt: number) => {
+    if (!consented) {
+      // Heard before consent, or just as it was withdrawn: dropped here, and the server would refuse it anyway.
+      setNotice("Consent is needed before the conversation starts.");
+      return;
+    }
     if (paused) {
       // Heard just as the pause began: dropped here, and the server would refuse it anyway.
       setNotice("Paused: nothing is recorded. Resume to continue.");
@@ -427,6 +564,10 @@ export default function Controller() {
 
   const pressTalk = async (speaker: Speaker) => {
     if (recording) return;
+    if (!consented) {
+      setNotice("Consent is needed before the conversation starts.");
+      return;
+    }
     if (paused) {
       setNotice("Paused: nothing is recorded. Resume to speak.");
       return;
@@ -612,6 +753,15 @@ export default function Controller() {
         </li>
       ));
 
+  /** The entry record.integrity names as broken, in words: a turn by its number in the log, or what else it is. */
+  const brokenAt = integrity?.status === "broken" ? (integrity.brokenAt ?? null) : null;
+  const brokenTurn = brokenAt ? turns.findIndex((t) => t.turnId === brokenAt) : -1;
+  let brokenWhere: string | null = null;
+  if (brokenTurn >= 0) brokenWhere = `turn ${brokenTurn + 1}`;
+  else if (brokenAt && brokenAt === consentState?.entryId) brokenWhere = "consent";
+  else if (brokenAt && escalations.some((e) => e.entryId === brokenAt)) brokenWhere = "interpreter entry";
+  else if (brokenAt) brokenWhere = "an earlier entry";
+
   const readbackTurn = turns.find((t) => t.turnId === pendingReadback);
   const nudge = [...nudges].reverse().find((n) => !dismissed.has(n.turnId));
 
@@ -622,9 +772,12 @@ export default function Controller() {
           <p className={styles.eyebrow}>Demo night interpreter</p>
           <h1>Physician controller</h1>
         </div>
-        <span className={`${styles.status} ${styles[state]}`} data-testid="connection">
-          {state}
-        </span>
+        <div className={styles.headerStatus}>
+          <RecordBadge integrity={integrity} where={brokenWhere} className={styles.badge} />
+          <span className={`${styles.status} ${styles[state]}`} data-testid="connection">
+            {state}
+          </span>
+        </div>
       </header>
 
       {testMode && (
@@ -645,7 +798,7 @@ export default function Controller() {
                 <select
                   data-testid="patient-language"
                   value={patientLanguage}
-                  disabled={turns.length > 0}
+                  disabled={turns.length > 0 || consented}
                   onChange={(e) =>
                     send("visit.set_languages", { patientLanguage: e.target.value, physicianLanguage: "en-CA" })
                   }
@@ -664,7 +817,9 @@ export default function Controller() {
                   })}
                 </select>
               </label>
-              <p className={styles.aside}>With English. Fixed once the first turn starts.</p>
+              <p className={styles.aside}>
+                {consented ? "With English. Fixed while consent is given." : "With English. Fixed once the first turn starts."}
+              </p>
             </div>
             <div className={styles.visit}>
               {(["physician", "patient"] as const).map((role) => {
@@ -704,18 +859,93 @@ export default function Controller() {
                 </p>
               )}
             </div>
+            {/* CDR-005: consent comes before anyone speaks, the introduction included. */}
+            <div
+              className={styles.consent}
+              data-testid="consent"
+              data-state={consentState?.state ?? "none"}
+              data-by={consented ? consentState?.by : undefined}
+            >
+              {consented && consentState ? (
+                <div className={styles.consentGiven}>
+                  <p className={styles.consentStatus} data-testid="consent-status">
+                    Consent given {clock(consentState.at)}
+                    <span className={styles.consentBy}>
+                      {consentState.by === "patient" ? " · by the patient" : " · on the patient’s behalf"}
+                    </span>
+                  </p>
+                  <div className={styles.consentLinks}>
+                    <button
+                      className={styles.quiet}
+                      data-testid="consent-read"
+                      onClick={() => send("consent.read_aloud", {})}
+                    >
+                      Read notice again
+                    </button>
+                    <button className={styles.quiet} data-testid="consent-withdraw" onClick={() => send("consent.withdraw", {})}>
+                      Withdraw consent
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className={styles.eyebrow}>
+                    Consent
+                    {consentState?.state === "withdrawn"
+                      ? ` · withdrawn ${clock(consentState.at)}, nothing is captured`
+                      : " · needed before anyone speaks"}
+                  </p>
+                  {consentNotice ? (
+                    <div className={styles.consentNotice} data-testid="consent-notice">
+                      {consentNotice.lines.map(({ language, text }) => (
+                        <p key={language} lang={language}>
+                          {text}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className={styles.aside}>No consent notice for this language.</p>
+                  )}
+                  <div className={styles.actions}>
+                    <button
+                      className={styles.primary}
+                      data-testid="consent-give"
+                      disabled={state !== "open" || !consentNotice}
+                      onClick={giveConsent}
+                    >
+                      Patient agrees
+                    </button>
+                    <button
+                      className={styles.secondary}
+                      data-testid="consent-read"
+                      disabled={state !== "open" || !consentNotice}
+                      onClick={() => send("consent.read_aloud", {})}
+                    >
+                      Read notice aloud
+                    </button>
+                  </div>
+                  <p className={styles.aside}>
+                    Read it aloud, then press when the patient agrees. It is recorded as given on their behalf.
+                  </p>
+                </>
+              )}
+            </div>
             <div className={styles.intro} data-testid="introduction" data-state={introSkipped ? "skipped" : introduction}>
               {introduction === "pending" && turns.length === 0 && (
                 <>
                   <button
                     className={styles.secondary}
                     data-testid="intro-start"
-                    disabled={state !== "open"}
+                    disabled={state !== "open" || !consented}
                     onClick={() => send("visit.start_introduction", {})}
                   >
                     Start introduction
                   </button>
-                  <p className={styles.aside}>The interpreter greets you both and asks for any name it does not know.</p>
+                  <p className={styles.aside}>
+                    {consented
+                      ? "The interpreter greets you both and asks for any name it does not know."
+                      : "The interpreter introduces itself once the patient agrees."}
+                  </p>
                 </>
               )}
               {introduction === "done" && turns.length === 0 && (
@@ -769,6 +999,7 @@ export default function Controller() {
                   type="checkbox"
                   data-testid="hands-free"
                   checked={handsFree}
+                  disabled={!consented}
                   onChange={(e) => {
                     setHandsFree(e.target.checked);
                     setLastHeard(null);
@@ -887,12 +1118,30 @@ export default function Controller() {
                     >
                       Connect interpreter
                     </button>
-                    <button className={styles.quiet} onClick={() => setInterpreter(null)}>
+                    <button
+                      className={styles.quiet}
+                      data-testid="interpreter-dismiss"
+                      onClick={() => dismissInterpreter("declined")}
+                    >
                       Dismiss
                     </button>
                   </div>
                 )}
               </div>
+            )}
+            {/* CDR-006: every interpreter event is in the record; this list survives a reload. */}
+            {escalations.length > 0 && (
+              <ol className={styles.recorded} data-testid="escalations" aria-label="Recorded interpreter events">
+                {escalations.map((e) => (
+                  <li key={e.entryId} data-action={e.action}>
+                    <span className={styles.recordedTime}>{clock(e.at)}</span>
+                    {ESCALATION_TEXT[e.action]}
+                    {e.action === "dismiss" && ` · ${DISMISS_TEXT[e.reason as DismissReason] ?? e.reason}`}
+                    {e.action === "offer" && ` · ${REASON_TEXT[e.reason as EscalationReason] ?? e.reason}`}
+                    {e.note && ` · ${e.note}`}
+                  </li>
+                ))}
+              </ol>
             )}
           </section>
 
@@ -968,7 +1217,7 @@ export default function Controller() {
                 className={styles.primary}
                 data-testid="typed-send"
                 onClick={sendTyped}
-                disabled={state !== "open" || paused}
+                disabled={state !== "open" || paused || !consented}
               >
                 Send
               </button>
@@ -1056,8 +1305,15 @@ export default function Controller() {
                 const unspoken =
                   t.status === "blocked" || t.status === "escalated" || outcome.discarded || outcome.voiceFailed;
                 const wasInjected = injected.has(t.turnId);
+                const altered = t.turnId === brokenAt;
                 return [
-                  <li key={t.turnId} data-testid="turn" data-status={t.status} data-injected={wasInjected || undefined}>
+                  <li
+                    key={t.turnId}
+                    data-testid="turn"
+                    data-status={t.status}
+                    data-injected={wasInjected || undefined}
+                    data-broken={altered || undefined}
+                  >
                     <div className={styles.turnHead}>
                       <span className={`${styles.speaker} ${styles[t.speaker]}`}>{t.speaker}</span>
                       <span className={`${styles.tag} ${unspoken ? styles.stop : ""}`}>
@@ -1067,6 +1323,11 @@ export default function Controller() {
                       {wasInjected && (
                         <span className={`${styles.tag} ${styles.stop}`} data-testid="injected">
                           presenter mismatch
+                        </span>
+                      )}
+                      {altered && (
+                        <span className={`${styles.tag} ${styles.stop}`} data-testid="record-broken-here">
+                          record broken here
                         </span>
                       )}
                     </div>

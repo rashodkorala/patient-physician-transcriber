@@ -8,16 +8,22 @@
  * @implements CDR-003: Participant names and interpreter lines on the visit channel
  * @implements CDR-004: Interpreter voice playback on the visit channel
  * @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
+ * @implements CDR-005: Consent and explain-back on the visit channel
+ * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
+ * @implements IDR-003: SHA-256 hash chain for the record-verified badge
  * @contract TurnCaption
  */
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type {
+  ConsentNotice,
+  ConsentState,
   Envelope,
   InterpreterEscalation,
   InterpreterLine,
   Language,
   Names,
+  RecordIntegrity,
   Speaker,
   TurnCaption,
   TurnStarted,
@@ -36,6 +42,7 @@ import { LANGUAGE_LABELS } from "@/lib/languages";
 import { type ConnectionState, useVisitSocket } from "@/lib/socket";
 import Highlighted from "./Highlighted";
 import Orb, { type OrbMode } from "./Orb";
+import RecordBadge from "./RecordBadge";
 import styles from "./screen.module.css";
 
 interface Pending {
@@ -67,11 +74,13 @@ function Original({
   speaker,
   name,
   language,
+  tag,
   children,
 }: {
   speaker: Speaker;
   name?: string | null;
   language?: Language;
+  tag?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -84,6 +93,7 @@ function Original({
           </span>
         )}
         {language && <span className={styles.lang}>{LANGUAGE_LABELS[language].own}</span>}
+        {tag}
       </div>
       {children}
     </div>
@@ -175,17 +185,61 @@ function InterpreterNotice({
   );
 }
 
+/**
+ * CDR-005: the consent notice, as the interpreter's own words in the patient's language and in English, shown
+ * until consent is given and again once it is withdrawn. The text comes from the server, so every screen shows
+ * exactly the notice that was agreed to.
+ */
+function ConsentNoticeRow({ notice }: { notice: ConsentNotice }) {
+  return (
+    <article
+      className={`${styles.turn} ${styles.interpreter} ${styles.consent}`}
+      data-testid="consent-notice"
+      data-notice-id={notice.noticeId}
+      aria-live="polite"
+    >
+      {notice.lines.map(({ language, text }) => (
+        <div key={language} className={styles.side} lang={language}>
+          <div className={styles.meta}>
+            <span className={styles.speaker}>Consent</span>
+            <span className={styles.lang}>{LANGUAGE_LABELS[language].own}</span>
+          </div>
+          <p className={styles.text}>{text}</p>
+        </div>
+      ))}
+    </article>
+  );
+}
+
 function nameOf(speaker: Speaker, names: Names): string | null {
   if (speaker === "physician") return names.physicianName ?? null;
   if (speaker === "patient") return names.patientName ?? null;
   return null;
 }
 
-function Caption({ c, names }: { c: TurnCaption; names: Names }) {
+function Caption({ c, names, broken }: { c: TurnCaption; names: Names; broken: boolean }) {
   const spoken = c.status === "final" && c.translation !== null;
   return (
-    <article className={styles.turn} data-testid="caption" data-turn-id={c.turnId} data-status={c.status}>
-      <Original speaker={c.speaker} name={nameOf(c.speaker, names)} language={c.sourceLanguage}>
+    <article
+      className={`${styles.turn} ${broken ? styles.broken : ""}`}
+      data-testid="caption"
+      data-turn-id={c.turnId}
+      data-status={c.status}
+      data-broken={broken || undefined}
+    >
+      <Original
+        speaker={c.speaker}
+        name={nameOf(c.speaker, names)}
+        language={c.sourceLanguage}
+        tag={
+          // CDR-006: the turn record.integrity names, and never a word about how it was altered.
+          broken && (
+            <span className={`${styles.tag} ${styles.stop}`} data-testid="record-broken-here">
+              Record broken here
+            </span>
+          )
+        }
+      >
         <p className={styles.text}>
           <Highlighted text={c.sourceText} values={c.criticalValues.map((v) => v.source)} className={styles.value} />
         </p>
@@ -309,6 +363,10 @@ export default function SharedScreen() {
   const [interpreter, setInterpreter] = useState<InterpreterPhase | null>(null);
   const callTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const bottom = useRef<HTMLDivElement | null>(null);
+  // CDR-005: the notice and the latest consent change; CDR-006: the record's integrity.
+  const [notice, setNotice] = useState<ConsentNotice | null>(null);
+  const [consent, setConsent] = useState<ConsentState | null>(null);
+  const [integrity, setIntegrity] = useState<RecordIntegrity | null>(null);
 
   const startCall = useCallback(() => {
     callTimers.current.forEach(clearTimeout);
@@ -317,6 +375,12 @@ export default function SharedScreen() {
       setTimeout(() => setInterpreter("simulated"), INTERPRETER_CONNECTING_MS),
       setTimeout(() => setInterpreter(null), INTERPRETER_CONNECTING_MS + INTERPRETER_SIMULATED_MS),
     ];
+  }, []);
+
+  const closeInterpreter = useCallback(() => {
+    callTimers.current.forEach(clearTimeout);
+    callTimers.current = [];
+    setInterpreter(null);
   }, []);
 
   useEffect(() => () => callTimers.current.forEach(clearTimeout), []);
@@ -330,6 +394,12 @@ export default function SharedScreen() {
         setCaptions(state.turns);
         setNames({ physicianName: state.physicianName ?? null, patientName: state.patientName ?? null });
         setSpeaking(state.speaking ?? null);
+        setNotice(state.consentNotice ?? null);
+        setConsent(state.consentState ?? null);
+        setIntegrity(state.integrity);
+        // CDR-006: a TV joining mid-offer shows it, unless the newest caption already says it; after a dismissal, nothing.
+        if (!state.interpreterOpen) closeInterpreter();
+        else if (state.turns.at(-1)?.status !== "escalated") setInterpreter((phase) => phase ?? "offered");
         const current = state.currentTurn;
         setPending(
           current
@@ -383,8 +453,21 @@ export default function SharedScreen() {
         else if (reason === "high_risk") setInterpreter((phase) => phase ?? "offered");
         break;
       }
+      case "interpreter.dismissed":
+        closeInterpreter();
+        break;
+      case "consent.changed": {
+        const changed = event.payload as ConsentState;
+        setConsent(changed);
+        // Withdrawn: a turn still being interpreted is discarded, so its row goes at once.
+        if (changed.state === "withdrawn") setPending(null);
+        break;
+      }
+      case "record.integrity":
+        setIntegrity(event.payload as RecordIntegrity);
+        break;
     }
-  }, [startCall]);
+  }, [startCall, closeInterpreter]);
 
   const { state } = useVisitSocket("screen", onEvent);
   const other = (lang: Language) => (lang === languages.physician ? languages.patient : languages.physician);
@@ -392,7 +475,12 @@ export default function SharedScreen() {
   // A block body: newer browsers return a Promise from scrollIntoView, which React would call as a cleanup.
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
-  }, [captions, pending, lines, speaking, interpreter, paused]);
+  }, [captions, pending, lines, speaking, interpreter, paused, consent]);
+
+  // CDR-005: until consent is given, and again once it is withdrawn, the notice stands in for "ready".
+  const consented = consent?.state === "given";
+  const brokenAt = integrity?.status === "broken" ? (integrity.brokenAt ?? null) : null;
+  const brokenTurn = brokenAt ? captions.findIndex((c) => c.turnId === brokenAt) : -1;
 
   return (
     <main className={styles.screen}>
@@ -401,9 +489,16 @@ export default function SharedScreen() {
         <span className={styles.visitPair}>
           {LANGUAGE_LABELS[languages.patient].own} / {LANGUAGE_LABELS[languages.physician].own}
         </span>
-        <span className={styles.status} data-testid="connection" data-state={state}>
-          {STATE_LABEL[state]}
-        </span>
+        <div className={styles.barEnd}>
+          <RecordBadge
+            integrity={integrity}
+            where={brokenTurn >= 0 ? `turn ${brokenTurn + 1}` : null}
+            className={styles.badge}
+          />
+          <span className={styles.status} data-testid="connection" data-state={state}>
+            {STATE_LABEL[state]}
+          </span>
+        </div>
       </header>
       <div>
         {/* Off the record: no captions at all, only the notice in both languages, until the visit resumes. */}
@@ -413,16 +508,20 @@ export default function SharedScreen() {
           <>
             {captions.length === 0 && lines.slice(-3).map((line) => <Line key={line.lineId} line={line} />)}
             {captions.slice(-6).map((c) => (
-              <Caption key={c.turnId} c={c} names={names} />
+              <Caption key={c.turnId} c={c} names={names} broken={c.turnId === brokenAt} />
             ))}
             {interpreter && (
               <InterpreterNotice phase={interpreter} patient={languages.patient} physician={languages.physician} />
             )}
+            {!consented && notice && <ConsentNoticeRow notice={notice} />}
             {speaking?.speaking && <Speaking language={speaking.language} />}
-            {pending && <PendingTurn p={pending} names={names} other={other} />}
-            {!interpreter && !pending && !speaking?.speaking && captions.length === 0 && lines.length === 0 && (
-              <Resting notice="ready" testId="ready" languages={languages} />
-            )}
+            {consented && pending && <PendingTurn p={pending} names={names} other={other} />}
+            {consented &&
+              !interpreter &&
+              !pending &&
+              !speaking?.speaking &&
+              captions.length === 0 &&
+              lines.length === 0 && <Resting notice="ready" testId="ready" languages={languages} />}
           </>
         )}
         <div ref={bottom} />

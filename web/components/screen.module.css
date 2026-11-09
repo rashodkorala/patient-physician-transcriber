@@ -26,7 +26,10 @@
 }
 .eyebrow { color: var(--muted); }
 .visitPair { font-family: var(--serif); font-style: italic; font-size: clamp(16px, 1.2vw, 24px); }
-.status { margin-left: auto; display: inline-flex; align-items: center; gap: 0.8em; color: var(--muted); }
+.barEnd { margin-left: auto; display: flex; align-items: center; gap: 1.6vw; }
+/* IDR-003: the record badge at the bar's label size; the TV is always dark, so it uses the screen's own colours. */
+.badge { font-size: clamp(11px, 0.7vw, 14px); }
+.status { display: inline-flex; align-items: center; gap: 0.8em; color: var(--muted); }
 .status::before {
   content: ""; width: 0.6em; height: 0.6em; border-radius: 50%; border: 1px solid currentColor;
 }
@@ -63,6 +66,11 @@
 .interpreter .side:only-child .text { max-width: 32em; }
 /* ADR-003: an interpreter offered or (simulated) joining reads as the interpreter speaking, at the caption size. */
 .escalation .text { font-size: clamp(24px, 2.4vw, 44px); }
+/* CDR-005: the consent notice is long, so it reads a size below a caption, still at 3 metres. */
+.consent .text { font-size: clamp(22px, 1.9vw, 38px); line-height: 1.35; }
+.consent .side + .side .text { color: var(--muted); }
+/* CDR-006: the turn the record names as broken keeps its words and gains a signal rule down its side. */
+.broken { box-shadow: inset 3px 0 0 var(--signal); padding-left: 2vw; }
 .lang { font-family: var(--serif); font-style: italic; color: var(--muted); font-size: clamp(16px, 1.2vw, 24px); }
 .tag {
   padding: 0.45em 0.6em; border: 1px solid var(--line); border-radius: 4px; color: var(--muted);
@@ -109,6 +117,8 @@
   /* Each label stays on one line; the connection state moves to its own line rather than breaking words. */
   .bar { flex-wrap: wrap; gap: 10px 16px; }
   .eyebrow, .visitPair, .status { white-space: nowrap; }
+  .barEnd { gap: 12px 16px; flex-wrap: wrap; }
+  .broken { padding-left: 12px; }
   .turn { grid-template-columns: 1fr; gap: 20px; }
   .side:first-child { padding-right: 0; }
   .side + .side { padding-left: 0; padding-top: 16px; border-left: none; border-top: 1px solid var(--line); }
