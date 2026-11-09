@@ -23,7 +23,47 @@ def kb():
     return KnowledgeBase(HashingEmbedder())
 
 
-def make_client(kb, translate=None, tone_check=None, **app_options):
+def give_consent(ws, language="pa-IN"):
+    """consent.give for the visit's current notice, from whichever role `ws` is (CDR-005)."""
+    ws.send_json({"type": "consent.give", "payload": {"noticeVersion": "1", "language": language}})
+
+
+def withdraw_consent(ws, reason=None):
+    ws.send_json({"type": "consent.withdraw", "payload": {} if reason is None else {"reason": reason}})
+
+
+class ConsentedClient(TestClient):
+    """A test client whose visit starts with consent given by a controller, through the real command path.
+
+    Consent gates every speech-capturing command (CDR-005), so tests about anything else start here; the
+    consent tests themselves pass `consent=False`.
+    """
+
+    def __init__(self, app, consent: bool = True, language: str = "pa-IN") -> None:
+        super().__init__(app)
+        self._consent = consent
+        self._language = language
+
+    def __enter__(self):
+        client = super().__enter__()
+        if self._consent:
+            with client.websocket_connect("/ws/visit?role=controller") as ctl:
+                ctl.receive_json()
+                if self._language != "pa-IN":
+                    set_languages(ctl, self._language)
+                    drain_until(ctl, "visit.state")
+                give_consent(ctl, self._language)
+                drain_until(ctl, "consent.changed")
+        return client
+
+
+def set_languages(ws, patient_language):
+    ws.send_json(
+        {"type": "visit.set_languages", "payload": {"patientLanguage": patient_language, "physicianLanguage": "en-CA"}}
+    )
+
+
+def make_client(kb, translate=None, tone_check=None, consent=True, language="pa-IN", settings=None, **app_options):
     model = ScriptedModel(
         {
             "translate": translate or fake_model.translate,
@@ -32,7 +72,8 @@ def make_client(kb, translate=None, tone_check=None, **app_options):
             "name_extract": fake_model.name_extract,
         }
     )
-    return TestClient(create_app(model=model, settings=SETTINGS, kb=kb, **app_options))
+    app = create_app(model=model, settings=settings or SETTINGS, kb=kb, **app_options)
+    return ConsentedClient(app, consent=consent, language=language)
 
 
 @pytest.fixture
@@ -126,20 +167,21 @@ def test_screen_connecting_later_gets_settled_turns_only(client):
         assert not contains_private(state)
 
 
-def test_set_languages_before_first_turn_then_rejected(client):
-    with client.websocket_connect("/ws/visit?role=controller") as ctl:
+def test_set_languages_before_first_turn_then_rejected(kb):
+    with make_client(kb, consent=False) as client, client.websocket_connect("/ws/visit?role=controller") as ctl:
         ctl.receive_json()
-        ctl.send_json(
-            {"type": "visit.set_languages", "payload": {"patientLanguage": "fr-CA", "physicianLanguage": "en-CA"}}
-        )
+        set_languages(ctl, "fr-CA")
         assert ctl.receive_json()["payload"]["patientLanguage"] == "fr-CA"
+        give_consent(ctl, "fr-CA")
+        drain_until(ctl, "consent.changed")
         submit(ctl, "patient", "fr-CA", "Bonjour")
         drain_until(ctl, "turn.result")
-        ctl.send_json(
-            {"type": "visit.set_languages", "payload": {"patientLanguage": "pa-IN", "physicianLanguage": "en-CA"}}
-        )
+        # Withdrawn consent unlocks the languages (CDR-005), but the visit has a turn, so they stay fixed.
+        withdraw_consent(ctl)
+        drain_until(ctl, "consent.changed")
+        set_languages(ctl, "pa-IN")
         err = drain_until(ctl, "error")[-1]
-        assert err["payload"]["command"] == "visit.set_languages"
+        assert err["payload"]["command"] == "visit.set_languages" and "turn" in err["payload"]["message"]
 
 
 def test_screen_cannot_send_controller_commands(client):
@@ -149,10 +191,9 @@ def test_screen_cannot_send_controller_commands(client):
     ):
         tv.receive_json(), ctl.receive_json()
         submit(tv, "patient", "pa-IN", "x")
-        ctl.send_json(
-            {"type": "visit.set_languages", "payload": {"patientLanguage": "fr-CA", "physicianLanguage": "en-CA"}}
-        )
-        assert ctl.receive_json()["type"] == "visit.state"  # no turn exists, so the screen's submit was ignored
+        set_names(ctl, patientName="Marker")
+        assert ctl.receive_json()["type"] == "visit.names"  # no turn started, so the screen's submit was ignored
+    assert client.app.state.hub.visit.turns == {}
 
 
 def test_speech_token_unconfigured_returns_503(client):
@@ -335,7 +376,7 @@ def test_visit_names_reach_the_translate_prompt_mdd_004(kb):
         {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "empathy": fake_model.empathy}
     )
     with (
-        TestClient(create_app(model=model, settings=SETTINGS, kb=kb)) as c,
+        ConsentedClient(create_app(model=model, settings=SETTINGS, kb=kb)) as c,
         c.websocket_connect("/ws/visit?role=controller") as ctl,
     ):
         ctl.receive_json()
@@ -471,7 +512,12 @@ def set_patient_language(ws, language):
     command(ws, "visit.set_languages", patientLanguage=language, physicianLanguage="en-CA")
 
 
-def test_test_languages_are_refused_without_test_mode(client):
+def test_test_languages_are_refused_without_test_mode(kb):
+    with make_client(kb, consent=False) as client:
+        refuse_test_language(client)
+
+
+def refuse_test_language(client):
     assert client.get("/api/health").json()["testLanguages"] is False
     with client.websocket_connect("/ws/visit?role=controller") as ctl:
         ctl.receive_json()
@@ -481,11 +527,9 @@ def test_test_languages_are_refused_without_test_mode(client):
     assert client.app.state.hub.visit.patient_language == "pa-IN"
 
 
-def test_tamil_is_live_without_test_mode_tdm_004(client):
-    assert client.get("/api/health").json()["testLanguages"] is False
-    with client.websocket_connect("/ws/visit?role=controller") as ctl:
-        ctl.receive_json()
-        set_patient_language(ctl, "ta-LK")
+def test_tamil_is_live_without_test_mode_tdm_004(kb):
+    with make_client(kb, language="ta-LK") as client, client.websocket_connect("/ws/visit?role=controller") as ctl:
+        assert client.get("/api/health").json()["testLanguages"] is False
         assert ctl.receive_json()["payload"]["patientLanguage"] == "ta-LK"
         submit(ctl, "physician", "en-CA", "Your blood sugar is too high.")
         caption = drain_until(ctl, "turn.result")[-1]["payload"]
@@ -500,11 +544,9 @@ def test_test_mode_allows_sinhala_and_relays_it(kb):
     model = ScriptedModel(
         {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "empathy": fake_model.empathy}
     )
-    with TestClient(create_app(model=model, settings=settings, kb=kb)) as c:
+    with ConsentedClient(create_app(model=model, settings=settings, kb=kb), language="si-LK") as c:
         assert c.get("/api/health").json()["testLanguages"] is True
         with c.websocket_connect("/ws/visit?role=controller") as ctl:
-            ctl.receive_json()
-            set_patient_language(ctl, "si-LK")
             assert ctl.receive_json()["payload"]["patientLanguage"] == "si-LK"
             submit(ctl, "physician", "en-CA", "Your high blood pressure can be treated.")
             caption = drain_until(ctl, "turn.result")[-1]["payload"]
@@ -527,7 +569,8 @@ def spoken_turn(ctl, tv):
     """A settled final physician turn, spoken in Punjabi; a physician turn sends no empathy nudge to interleave."""
     submit(ctl, "physician", "en-CA", "Hello.")
     turn_id = drain_until(ctl, "turn.result")[-1]["payload"]["turnId"]
-    drain_until(tv, "turn.result")
+    # The settled turn is chained, so record.integrity follows it on every role (CDR-006).
+    drain_until(ctl, "record.integrity"), drain_until(tv, "record.integrity")
     return turn_id
 
 
@@ -626,7 +669,7 @@ def test_voice_started_is_refused_for_a_blocked_turn(kb):
         ctl.receive_json(), tv.receive_json()
         submit(ctl, "physician", "en-CA", DOSE)
         turn_id = drain_until(ctl, "turn.result")[-1]["payload"]["turnId"]
-        drain_until(tv, "turn.result")
+        drain_until(tv, "record.integrity")
         play(ctl, "voice.started", turn_id, "pa-IN")
         assert drain_until(ctl, "error")[-1]["payload"]["command"] == "voice.started"
         nothing_published(ctl, tv)
@@ -645,6 +688,7 @@ def test_voice_started_is_refused_for_an_escalated_turn(kb):
         submit(ctl, "physician", "en-CA", "This is very unlikely to be serious.")
         turn_id = drain_until(ctl, "turn.result")[-1]["payload"]["turnId"]
         drain_until(tv, "interpreter.escalation")
+        drain_until(tv, "record.integrity")
         drain_until(ctl, "interpreter.escalation")
         play(ctl, "voice.started", turn_id, "pa-IN")
         assert drain_until(ctl, "error")[-1]["payload"]["command"] == "voice.started"

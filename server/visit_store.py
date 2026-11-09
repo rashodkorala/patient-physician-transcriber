@@ -6,8 +6,12 @@
 @implements CDR-004: Interpreter voice playback on the visit channel
 @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
 @implements TDM-002: Presenter mismatch control for the blocked-dose beat
+@implements CDR-005: Consent and explain-back on the visit channel
+@implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
+@implements IDR-003: SHA-256 hash chain for the record-verified badge
 @contract ws:/ws/visit
 @see openspec/tdr/adr/adr-007-in-memory-state-websocket.md
+@see openspec/tdr/cdr/cdr-006-record-entries-review-corrections-and-tamper.md
 """
 
 import asyncio
@@ -19,21 +23,29 @@ from typing import Any, Protocol
 from contracts import (
     CONTROLLER_ONLY_EVENTS,
     SILENT,
+    ConsentNotice,
+    ConsentState,
     CurrentTurnPublic,
     EmpathyNudge,
+    EntryKind,
     Envelope,
-    EscalationReason,
+    EscalationEntry,
+    InjectionStatus,
     InterpreterLine,
     IntroductionState,
     Names,
+    RecordEntry,
     RecordIntegrity,
     Role,
+    TurnEntryBody,
     TurnResult,
     VisitStateController,
     VisitStatePublic,
     VoiceSpeaking,
     to_caption,
 )
+from hash_chain import HashChain
+from introduction import CONSENT_NOTICES
 
 
 class Sender(Protocol):
@@ -51,18 +63,13 @@ class TurnRecord:
     readback_confirmed: bool = False
 
 
-@dataclass(frozen=True)
-class EscalationRecord:
-    """An interpreter offer or request, or a physician's high-risk mark, as recorded in the visit (ADR-003)."""
-
-    reason: EscalationReason
-    at: str
-    turn_id: str | None = None
-    note: str | None = None
-
-
 def now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def new_entry_id() -> str:
+    """An id for a chain entry that is not a turn (a turn's entry id is its turnId, CDR-006)."""
+    return uuid.uuid4().hex[:12]
 
 
 @dataclass
@@ -109,13 +116,24 @@ class Visit:
     interpreter_lines: dict[str, InterpreterLine] = field(default_factory=dict)
     # CDR-004: one voice at a time; None is silent, so a new visit starts silent.
     speech: Speech | None = None
-    # ADR-003: every interpreter offer and request, and every high-risk mark, in order. Kept with the
-    # visit as its transcript record; no visit.state field carries it (CDR-001 defines none).
-    escalations: list[EscalationRecord] = field(default_factory=list)
-    # TDM-002: the presenter's one-shot mismatch, and the turns it fired on. Never in a public snapshot,
-    # and not in the controller's either, which CDR-001 gives no field for.
+    # ADR-003 and CDR-006: every interpreter offer, request, high-risk mark, and dismissal, in order, each also
+    # a chain entry. In the controller's visit.state only, so a reloaded controller still shows them.
+    escalations: list[EscalationEntry] = field(default_factory=list)
+    # CDR-006: an offer or request is open until the controller dismisses it; every role sees this flag.
+    interpreter_open: bool = False
+    # TDM-002: the presenter's one-shot mismatch, and the turns it fired on, in order. In the controller's
+    # visit.state only (CDR-006), never in a public snapshot.
     injection_armed: bool = False
-    injected_turns: set[str] = field(default_factory=set)
+    injected_turns: list[str] = field(default_factory=list)
+    # CDR-005: the latest consent change (None before the first), and the notices already read aloud on their own.
+    consent_state: ConsentState | None = None
+    consent_spoken: set[str] = field(default_factory=set)
+    # Raised by every withdrawal, so a turn that was in the graph when consent was withdrawn is discarded.
+    consent_epoch: int = 0
+    # IDR-003 and CDR-006: the append-only record, and each entry's entryId by chain index, so a failed
+    # verification is named by the id the server recorded, whatever the stored payload now says.
+    chain: HashChain = field(default_factory=HashChain)
+    entry_ids: list[str] = field(default_factory=list)
 
     def names(self) -> Names:
         return Names(physician_name=self.physician_name, patient_name=self.patient_name)
@@ -125,12 +143,43 @@ class Visit:
             return SILENT
         return VoiceSpeaking(speaking=True, speech_id=self.speech.speech_id, language=self.speech.language)  # type: ignore[arg-type]
 
+    def consent_notice(self) -> ConsentNotice | None:
+        """The reviewed notice for the visit's patient language, or None if that language has none."""
+        return CONSENT_NOTICES.get(self.patient_language)
+
+    def append(self, kind: EntryKind, entry_id: str, body: dict, at: str | None = None) -> RecordEntry:
+        """Append one typed entry to the record chain (CDR-006); nothing in the chain is ever edited."""
+        entry = RecordEntry(entry_id=entry_id, kind=kind, at=at or now(), body=body)
+        self.chain.append(entry.wire())
+        self.entry_ids.append(entry_id)
+        return entry
+
+    def append_turn(self, turn_id: str) -> RecordEntry:
+        """A settled turn's entry: its public caption and the names it was relayed with, nothing private."""
+        record = self.turns[turn_id]
+        assert record.result is not None and record.settled
+        caption = to_caption(record.result, record.readback_confirmed)
+        body = TurnEntryBody(
+            **caption.model_dump(),
+            settled_as=caption.status,
+            physician_name=self.physician_name,
+            patient_name=self.patient_name,
+        )
+        return self.append("turn", turn_id, body.wire())
+
     def integrity(self) -> RecordIntegrity:
-        # Hash chain arrives with IDR-003 (task 3.8); an empty chain is verified.
-        return RecordIntegrity(status="verified", head_hash="")
+        """record.integrity: brokenAt is the entryId of the first entry that fails, a turn's segmentId (CDR-006)."""
+        verification = self.chain.verify()
+        if verification.ok:
+            return RecordIntegrity(status="verified", head_hash=verification.head_hash)
+        index = verification.broken_at
+        assert index is not None
+        broken_at = self.entry_ids[index] if index < len(self.entry_ids) else None
+        return RecordIntegrity(status="broken", head_hash=verification.head_hash, broken_at=broken_at)
 
     def snapshot(self, role: Role) -> dict:
         """visit.state filtered by role exactly like live events (CDR-001)."""
+        notice = self.consent_notice()
         if role == "controller":
             current = self.turns.get(self.current_turn_id) if self.current_turn_id else None
             return VisitStateController(
@@ -147,6 +196,13 @@ class Visit:
                 patient_name=self.patient_name,
                 introduction=self.introduction,
                 speaking=self.speaking(),
+                consent_notice=notice,
+                consent_state=self.consent_state,
+                interpreter_open=self.interpreter_open,
+                injection=InjectionStatus(
+                    state="armed" if self.injection_armed else "idle", injected_turn_ids=self.injected_turns
+                ),
+                escalations=self.escalations,
             ).wire()
 
         current_public = None
@@ -175,6 +231,9 @@ class Visit:
             patient_name=self.patient_name,
             introduction=self.introduction,
             speaking=self.speaking(),
+            consent_notice=notice,
+            consent_state=self.consent_state,
+            interpreter_open=self.interpreter_open,
         ).wire()
 
 

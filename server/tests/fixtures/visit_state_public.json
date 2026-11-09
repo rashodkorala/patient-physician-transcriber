@@ -1,13 +1,52 @@
 {
   "patientLanguage": "pa-IN",
   "physicianLanguage": "en-CA",
-  "consent": null,
+  "consent": "2026-11-19T19:02:11.204000+00:00",
   "paused": false,
   "turns": [],
-  "currentTurn": {"turnId": "t4", "speaker": "physician", "sourceText": "Hello", "stage": "translating"},
-  "integrity": {"status": "verified", "headHash": "", "brokenAt": null},
+  "currentTurn": {
+    "turnId": "t4",
+    "speaker": "physician",
+    "sourceText": "Hello",
+    "stage": "translating"
+  },
+  "integrity": {
+    "status": "verified",
+    "headHash": "",
+    "brokenAt": null
+  },
   "physicianName": "Dr. Thomas",
   "patientName": null,
   "introduction": "asking_patient",
-  "speaking": {"speaking": false, "speechId": null, "language": null}
+  "speaking": {
+    "speaking": false,
+    "speechId": null,
+    "language": null
+  },
+  "consentNotice": {
+    "noticeId": "pa-IN-v1",
+    "speechId": "consent-pa-IN-v1",
+    "version": "1",
+    "language": "pa-IN",
+    "lines": [
+      {
+        "language": "pa-IN",
+        "text": "ਇਸ ਮੁਲਾਕਾਤ ਵਿੱਚ ਏਆਈ ਦੁਭਾਸ਼ੀਆ ਵਰਤਿਆ ਜਾਂਦਾ ਹੈ। ਇਹ ਤੁਹਾਡੀ ਅਤੇ ਤੁਹਾਡੇ ਡਾਕਟਰ ਦੀ ਗੱਲ ਸੁਣਦਾ ਹੈ, ਹਰ ਗੱਲ ਦੂਜੇ ਦੀ ਬੋਲੀ ਵਿੱਚ ਦੱਸਦਾ ਹੈ, ਅਤੇ ਇਸ ਸਕਰੀਨ ਉੱਤੇ ਦਿਖਾਉਂਦਾ ਹੈ। ਤੁਹਾਡੇ ਇਲਾਜ ਲਈ ਗੱਲਬਾਤ ਦਾ ਰਿਕਾਰਡ ਰੱਖਿਆ ਜਾਂਦਾ ਹੈ। ਤੁਸੀਂ ਕਿਸੇ ਵੀ ਸਮੇਂ ਮਨੁੱਖੀ ਦੁਭਾਸ਼ੀਆ ਮੰਗ ਸਕਦੇ ਹੋ, ਜਾਂ ਗੱਲਬਾਤ ਰੋਕ ਜਾਂ ਬੰਦ ਕਰ ਸਕਦੇ ਹੋ। ਕੀ ਤੁਸੀਂ ਅੱਗੇ ਵਧਣ ਲਈ ਸਹਿਮਤ ਹੋ?"
+      },
+      {
+        "language": "en-CA",
+        "text": "This visit uses an AI interpreter. It listens to you and your doctor, says what each of you says in the other's language, and shows it on this screen. A record of the conversation is kept for your care. You can ask for a human interpreter, or pause or stop, at any time. Do you agree to continue?"
+      }
+    ]
+  },
+  "consentState": {
+    "state": "given",
+    "at": "2026-11-19T19:02:11.204000+00:00",
+    "by": "physician_on_behalf",
+    "noticeId": "pa-IN-v1",
+    "noticeVersion": "1",
+    "language": "pa-IN",
+    "entryId": "c0n5e0700001"
+  },
+  "interpreterOpen": true
 }

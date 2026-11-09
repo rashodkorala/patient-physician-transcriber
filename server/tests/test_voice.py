@@ -5,8 +5,7 @@ import asyncio
 from typing import get_args
 
 import pytest
-from fastapi.testclient import TestClient
-from test_visit_channel import DOSE, SETTINGS, drain_until, drain_until_stage, submit
+from test_visit_channel import DOSE, SETTINGS, ConsentedClient, drain_until, drain_until_stage, submit
 
 import fake_model
 from contracts import Certainty, Emotion
@@ -55,7 +54,7 @@ def kb():
     return KnowledgeBase(HashingEmbedder())
 
 
-def make_client(kb, voice=None, translate=None, tone_check=None, settings=SETTINGS):
+def make_client(kb, voice=None, translate=None, tone_check=None, settings=SETTINGS, language="pa-IN"):
     model = ScriptedModel(
         {
             "translate": translate or fake_model.translate,
@@ -64,7 +63,7 @@ def make_client(kb, voice=None, translate=None, tone_check=None, settings=SETTIN
             "name_extract": fake_model.name_extract,
         }
     )
-    return TestClient(create_app(model=model, settings=settings, kb=kb, voice=voice))
+    return ConsentedClient(create_app(model=model, settings=settings, kb=kb, voice=voice), language=language)
 
 
 def final_turn(client, text="Hello, how are you feeling today?"):
@@ -172,14 +171,10 @@ def test_sinhala_has_no_server_voice(kb):
     settings = SETTINGS.__class__(**{**SETTINGS.__dict__, "test_languages": True})
     voice = FakeVoice()
     with (
-        make_client(kb, voice, settings=settings) as client,
+        make_client(kb, voice, settings=settings, language="si-LK") as client,
         client.websocket_connect("/ws/visit?role=controller") as ctl,
     ):
         ctl.receive_json()
-        ctl.send_json(
-            {"type": "visit.set_languages", "payload": {"patientLanguage": "si-LK", "physicianLanguage": "en-CA"}}
-        )
-        drain_until(ctl, "visit.state")
         submit(ctl, "physician", "en-CA", "Hello, how are you feeling today?")
         caption = drain_until(ctl, "turn.result")[-1]["payload"]
         assert caption["targetLanguage"] == "si-LK"

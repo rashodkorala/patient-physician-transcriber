@@ -226,7 +226,7 @@ def test_armed_injection_waits_then_blocks_the_next_dose_on_both_attempts_tdm_00
         assert analysis["status"] == "blocked" and analysis["attempts"] == 2
         assert "4 ਮਿਲੀਗ੍ਰਾਮ" in analysis["translation"] and "0.4" not in analysis["translation"]
         blocked_id = analysis["turnId"]
-        assert client.app.state.hub.visit.injected_turns == {blocked_id}
+        assert client.app.state.hub.visit.injected_turns == [blocked_id]
 
         # The repeat is unaffected and goes to read-back.
         submit(ctl, "physician", "en-CA", DOSE)

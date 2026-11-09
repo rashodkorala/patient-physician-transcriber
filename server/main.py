@@ -12,9 +12,14 @@ Run with the app factory so nothing loads on import: uvicorn main:create_app --f
 @implements TDM-004: Tamil is the chosen live language, alongside Punjabi and French, spoken by ElevenLabs
 @implements ADR-010: Voice output: ElevenLabs Eleven v4 replaces OpenAI text-to-speech; Azure stays fallback
 @implements TDM-002: Presenter mismatch control for the blocked-dose beat
+@implements CDR-005: Consent and explain-back on the visit channel
+@implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
+@implements IDR-003: SHA-256 hash chain for the record-verified badge
 @contract ws:/ws/visit
 @contract http:GET /api/speech/{speech_id}
 @see openspec/tdr/adr/adr-001-system-architecture.md
+@see openspec/tdr/cdr/cdr-005-consent-and-explain-back-events.md
+@see openspec/tdr/cdr/cdr-006-record-entries-review-corrections-and-tamper.md
 """
 
 import asyncio
@@ -30,10 +35,22 @@ from pydantic import ValidationError
 from config import LIVE_MODEL, TONE_MODEL, Settings, load_settings
 from contracts import (
     CONTROLLER_COMMANDS,
+    REVIEW_OR_CONTROLLER_COMMANDS,
     TEST_LANGUAGES,
+    CommandRefused,
+    ConsentBy,
+    ConsentEntryBody,
+    ConsentGive,
+    ConsentNotice,
+    ConsentSpeak,
+    ConsentState,
+    ConsentWithdraw,
     DemoInjectionState,
     ErrorPayload,
+    EscalationEntry,
     EscalationReason,
+    InterpreterDismiss,
+    InterpreterDismissed,
     InterpreterEscalation,
     InterpreterLine,
     Language,
@@ -42,6 +59,7 @@ from contracts import (
     NameRef,
     NameReply,
     Names,
+    RefusedReason,
     SetLanguages,
     TurnRef,
     TurnStarted,
@@ -52,12 +70,12 @@ from contracts import (
 )
 from empathy import EmpathyAdvisor
 from graph.turn_graph import TurnPipeline
-from introduction import ask_line, introduction_line, read_name, welcome_line
+from introduction import ask_line, introduction_line, notice_sha256, read_name, welcome_line
 from kb.embeddings import make_embedder
 from kb.store import KnowledgeBase
 from llm import ClaudeModel, Model
 from speech_token import SpeechNotConfigured, issue_token
-from visit_store import Connection, EscalationRecord, Hub, Speech, TurnRecord, Visit, now
+from visit_store import Connection, Hub, Speech, TurnRecord, Visit, new_entry_id, now
 from voice import (
     DEFAULT_MODEL,
     DEFAULT_VOICE,
@@ -72,6 +90,8 @@ from voice import (
 # uvicorn prints this logger, so timing lines and errors show in the dev.sh output.
 log = logging.getLogger("uvicorn.error")
 ROLES = ("controller", "screen", "review")
+# CDR-005 consent rule 1: the error every speech-capturing command gets before consent.
+CONSENT_NEEDED = "Consent is needed before the conversation starts"
 # CDR-004: a speech whose end never arrives stops showing as speaking after this long.
 VOICE_CEILING_S = 60.0
 
@@ -151,11 +171,17 @@ def create_app(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     def speakable(speech_id: str, language: Language | None) -> tuple[str, Language, Delivery] | None:
-        """What an id may say aloud: a settled final turn, a confirmed read-back, or an interpreter line.
+        """What an id may say aloud: a settled final turn, a confirmed read-back, an interpreter line, or the
+        visit's current consent notice in the patient's language (CDR-005), whether or not consent is given.
 
-        Blocked, escalated, rejected, and unsettled turns, and unknown ids, are never spoken.
+        Blocked, escalated, rejected, and unsettled turns, other notices, and unknown ids are never spoken.
         """
         visit = hub.visit
+        notice = visit.consent_notice()
+        if notice and speech_id == notice.speech_id:
+            if language != notice.language:
+                return None
+            return notice.lines[0].text, notice.language, LINE_DELIVERY
         record = visit.turns.get(speech_id)
         if record and record.result:
             result = record.result
@@ -185,8 +211,13 @@ def create_app(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return StreamingResponse(audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
 
-    async def error(conn: Connection, message: str, command: str | None = None) -> None:
-        await hub.send_to(conn, "error", ErrorPayload(message=message, command=command).wire())
+    async def error(conn: Connection, message: str, command: str, reason: RefusedReason = "invalid") -> None:
+        """Refuse a command: the controller gets CDR-001 `error`, a review connection the content-free
+        `command.refused` (CDR-005), and a screen nothing."""
+        if conn.role == "controller":
+            await hub.send_to(conn, "error", ErrorPayload(message=message, command=command).wire())
+        elif conn.role == "review":
+            await hub.send_to(conn, "command.refused", CommandRefused(command=command, reason=reason).wire())
 
     async def status(turn_id: str, stage: str) -> None:
         record = hub.visit.turns.get(turn_id)
@@ -194,17 +225,113 @@ def create_app(
             record.stage = stage
         await hub.publish("turn.status", TurnStatus(turn_id=turn_id, stage=stage).wire())
 
+    async def publish_integrity() -> None:
+        """CDR-006: every role hears the chain's state after every append."""
+        await hub.publish("record.integrity", hub.visit.integrity().wire())
+
+    async def refuse_without_consent(conn: Connection, command: str) -> bool:
+        """CDR-005 consent rule 1: nothing that captures speech runs until consent is given."""
+        if hub.visit.consent is None:
+            await error(conn, CONSENT_NEEDED, command, "consent_required")
+            return True
+        return False
+
     async def set_languages(conn: Connection, payload: dict) -> None:
         cmd = SetLanguages.model_validate(payload)
-        if hub.visit.turns:
+        visit = hub.visit
+        if visit.consent is not None:
+            # CDR-005 consent rule 2: consent was given to a notice in one language.
+            message = "Languages are fixed while consent is given. Withdraw consent to change them."
+            await error(conn, message, "visit.set_languages", "consent_already_given")
+            return
+        if visit.turns:
             await error(conn, "Languages cannot change once the visit has a turn", "visit.set_languages")
             return
         if cmd.patient_language in TEST_LANGUAGES and not settings.test_languages:
             await error(conn, "This language is coming soon", "visit.set_languages")
             return
-        hub.visit.patient_language = cmd.patient_language
-        hub.visit.physician_language = cmd.physician_language
+        visit.patient_language = cmd.patient_language
+        visit.physician_language = cmd.physician_language
         await hub.publish_state()
+        # CDR-005: a notice is read aloud on its own once, when it is first set and consent is not given.
+        notice = visit.consent_notice()
+        if notice and notice.notice_id not in visit.consent_spoken:
+            visit.consent_spoken.add(notice.notice_id)
+            await hub.publish(
+                "consent.speak", ConsentSpeak(speech_id=notice.speech_id, language=notice.language).wire()
+            )
+
+    # ---------- CDR-005: consent ----------
+
+    async def change_consent(state: str, by: ConsentBy, notice: ConsentNotice, reason: str | None = None) -> None:
+        """Record a consent change as a new chain entry, then tell every role (CDR-005, CDR-006)."""
+        visit = hub.visit
+        at, entry_id = now(), new_entry_id()
+        body = ConsentEntryBody(
+            state=state,  # type: ignore[arg-type]
+            at=at,
+            by=by,
+            notice_id=notice.notice_id,
+            notice_version=notice.version,
+            language=notice.language,
+            notice_sha256=notice_sha256(notice),
+            reason=reason,
+        )
+        visit.append("consent", entry_id, body.wire(), at)
+        visit.consent_state = ConsentState(
+            state=state,  # type: ignore[arg-type]
+            at=at,
+            by=by,
+            notice_id=notice.notice_id,
+            notice_version=notice.version,
+            language=notice.language,
+            entry_id=entry_id,
+        )
+        visit.consent = at if state == "given" else None
+        await hub.publish("consent.changed", visit.consent_state.wire())
+        await publish_integrity()
+
+    def consent_by(conn: Connection) -> ConsentBy:
+        # The patient's own tap comes from the review screen; the controller acts on the patient's behalf.
+        return "patient" if conn.role == "review" else "physician_on_behalf"
+
+    async def give_consent(conn: Connection, payload: dict) -> None:
+        cmd = ConsentGive.model_validate(payload)
+        visit = hub.visit
+        command = "consent.give"
+        notice = visit.consent_notice()
+        if visit.consent is not None:
+            await error(conn, "Consent is already given", command, "consent_already_given")
+        elif cmd.language != visit.patient_language:
+            await error(conn, "Consent must be given in the patient's language", command, "wrong_language")
+        elif notice is None or cmd.notice_version != notice.version:
+            await error(conn, "That is not the current consent notice", command, "wrong_notice")
+        else:
+            await change_consent("given", consent_by(conn), notice)
+
+    async def withdraw_consent(conn: Connection, payload: dict) -> None:
+        cmd = ConsentWithdraw.model_validate(payload)
+        visit = hub.visit
+        notice = visit.consent_notice()
+        if visit.consent is None or notice is None:
+            await error(conn, "Consent is not given", "consent.withdraw", "consent_not_given")
+            return
+        # CDR-005 consent rule 3: capture stops at once. A turn still in the graph sees the new epoch and is
+        # discarded when it finishes; settled turns stay in the record, since withdrawal is not erasure.
+        visit.consent_epoch += 1
+        reason = " ".join((cmd.reason or "").split()) or None
+        await change_consent("withdrawn", consent_by(conn), notice, reason)
+        if visit.pending_readback:
+            # Discarded unspoken, exactly as turn.readback_reject.
+            turn_id, visit.pending_readback = visit.pending_readback, None
+            await status(turn_id, "discarded")
+
+    async def read_consent_aloud(conn: Connection, payload: dict) -> None:
+        notice = hub.visit.consent_notice()
+        if notice is None:
+            await error(conn, "No consent notice for this language", "consent.read_aloud", "not_found")
+            return
+        await hub.publish("consent.speak", ConsentSpeak(speech_id=notice.speech_id, language=notice.language).wire())
 
     async def refuse_while_paused(conn: Connection, command: str) -> bool:
         """Off the record: nothing said is captured or relayed until the visit resumes (demo spec, CDR-001)."""
@@ -234,6 +361,9 @@ def create_app(
 
     async def start_introduction(conn: Connection, payload: dict) -> None:
         visit = hub.visit
+        # CDR-005: the interpreter introduces itself only after consent, since the introduction captures names.
+        if await refuse_without_consent(conn, "visit.start_introduction"):
+            return
         if await refuse_while_paused(conn, "visit.start_introduction"):
             return
         if visit.turns:
@@ -248,6 +378,8 @@ def create_app(
     async def name_reply(conn: Connection, payload: dict) -> None:
         cmd = NameReply.model_validate(payload)
         visit = hub.visit
+        if await refuse_without_consent(conn, "visit.name_reply"):
+            return
         if await refuse_while_paused(conn, "visit.name_reply"):
             return
         if visit.introduction != f"asking_{cmd.role}":
@@ -308,6 +440,8 @@ def create_app(
     async def submit_turn(conn: Connection, payload: dict) -> None:
         cmd = TurnSubmit.model_validate(payload)
         visit = hub.visit
+        if await refuse_without_consent(conn, "turn.submit"):
+            return
         if await refuse_while_paused(conn, "turn.submit"):
             return
         if visit.pending_readback:
@@ -325,6 +459,7 @@ def create_app(
             await hub.publish_state()
 
         turn_id = uuid.uuid4().hex[:10]
+        epoch = visit.consent_epoch
         record = TurnRecord(result=None, speaker=cmd.speaker, source_text=cmd.text, stage="listening")
         visit.turns[turn_id] = record
         visit.current_turn_id = turn_id
@@ -337,7 +472,7 @@ def create_app(
             if not visit.injection_armed:
                 return False
             visit.injection_armed = False
-            visit.injected_turns.add(turn_id)
+            visit.injected_turns.append(turn_id)
             await hub.publish("demo.injection_state", DemoInjectionState(state="fired").wire())
             return True
 
@@ -364,6 +499,14 @@ def create_app(
             "turn %s %s, attempts %d, in %.2fs", turn_id, result.status, result.attempts, time.perf_counter() - started
         )
 
+        if visit.consent_epoch != epoch:
+            # CDR-005 consent rule 3: consent was withdrawn while this turn was in the graph. Never spoken,
+            # never published, never chained; the controller sees it discarded.
+            if visit.current_turn_id == turn_id:
+                visit.current_turn_id = None
+            await status(turn_id, "discarded")
+            return
+
         record.result = result
         await hub.publish("turn.analysis", result.wire())
 
@@ -376,7 +519,9 @@ def create_app(
         # final, blocked, or escalated: the turn is settled and shared screens may show it.
         record.settled = True
         record.stage = {"final": "spoken"}.get(result.status, result.status)
+        visit.append_turn(turn_id)
         await hub.publish("turn.result", to_caption(result).wire())
+        await publish_integrity()
         if result.status == "escalated" and reason:
             await escalate(reason, turn_id)  # type: ignore[arg-type]
         if result.status == "final" and result.speaker == "patient":
@@ -400,14 +545,50 @@ def create_app(
         record.settled = True
         record.readback_confirmed = True
         record.stage = "spoken"
+        visit.append_turn(ref.turn_id)
         await hub.publish("turn.result", to_caption(record.result, readback_confirmed=True).wire())  # type: ignore[arg-type]
+        await publish_integrity()
 
     # ---------- ADR-003 and CDR-001: off-the-record pause, interpreter, and high-risk marks ----------
 
+    def record_escalation(entry: EscalationEntry) -> None:
+        """Keep an interpreter event for the controller and chain it (ADR-003, CDR-006)."""
+        visit = hub.visit
+        visit.escalations.append(entry)
+        visit.append("interpreter", entry.entry_id, entry.model_dump(by_alias=True, exclude={"entry_id"}), entry.at)
+
     async def escalate(reason: EscalationReason, turn_id: str | None = None, note: str | None = None) -> None:
-        """Record an interpreter offer, request, or high-risk mark in the visit, and tell every screen."""
-        hub.visit.escalations.append(EscalationRecord(reason=reason, at=now(), turn_id=turn_id, note=note))
+        """Record an interpreter offer, request, or high-risk mark in the visit, and tell every screen.
+
+        A high-risk mark is one `mark` entry; the offer it causes is not a second entry (CDR-006).
+        """
+        action = {"requested": "request", "high_risk": "mark"}.get(reason, "offer")
+        entry = EscalationEntry(
+            entry_id=new_entry_id(),
+            action=action,  # type: ignore[arg-type]
+            reason=reason,
+            at=now(),
+            turn_id=turn_id,
+            note=note,
+        )
+        record_escalation(entry)
+        hub.visit.interpreter_open = True
         await hub.publish("interpreter.escalation", InterpreterEscalation(reason=reason, turn_id=turn_id).wire())
+        await publish_integrity()
+
+    async def dismiss_interpreter(conn: Connection, payload: dict) -> None:
+        # CDR-006: controller only, allowed while paused; clears the offer on every screen, the TV included.
+        cmd = InterpreterDismiss.model_validate(payload)
+        visit = hub.visit
+        if not visit.interpreter_open:
+            await error(conn, "No interpreter offer or request is open", "interpreter.dismiss", "not_found")
+            return
+        entry = EscalationEntry(entry_id=new_entry_id(), action="dismiss", reason=cmd.reason, at=now())
+        record_escalation(entry)
+        visit.interpreter_open = False
+        dismissed = InterpreterDismissed(reason=cmd.reason, at=entry.at, entry_id=entry.entry_id)
+        await hub.publish("interpreter.dismissed", dismissed.wire())
+        await publish_integrity()
 
     async def set_paused(conn: Connection, paused: bool) -> None:
         command = "visit.pause" if paused else "visit.resume"
@@ -496,6 +677,10 @@ def create_app(
         "visit.mark_high_risk": mark_high_risk,
         "demo.inject_mismatch": inject_mismatch,
         "demo.cancel_injection": cancel_injection,
+        "interpreter.dismiss": dismiss_interpreter,
+        "consent.give": give_consent,
+        "consent.withdraw": withdraw_consent,
+        "consent.read_aloud": read_consent_aloud,
     }
 
     @app.websocket("/ws/visit")
@@ -510,20 +695,40 @@ def create_app(
         if hub.visit.injection_armed:
             # TDM-002: a controller that reloads still sees the control armed; send_to keeps it from screens.
             await hub.send_to(conn, "demo.injection_state", DemoInjectionState(state="armed").wire())
+        # Turns from one connection run one at a time, in the order sent, but off the receive loop, so a
+        # withdrawal, pause, or interpreter request sent while a turn is in the graph acts at once (CDR-005
+        # consent rule 3) instead of waiting for that turn to be spoken.
+        turn_lock = asyncio.Lock()
+
+        async def dispatch(command: str, payload: dict) -> None:
+            handler = handlers[command]
+            try:
+                await handler(conn, payload)
+            except ValidationError as exc:
+                await error(conn, f"Invalid payload: {exc.errors()[0]['msg']}", command)
+
+        async def dispatch_turn(payload: dict) -> None:
+            async with turn_lock:
+                await dispatch("turn.submit", payload)
+
         try:
             while True:
                 message = await ws.receive_json()
                 command = message.get("type", "")
                 if command in CONTROLLER_COMMANDS and conn.role != "controller":
                     continue  # screens may not send controller commands
-                handler = handlers.get(command)
-                if handler is None:
+                if command in REVIEW_OR_CONTROLLER_COMMANDS and conn.role == "screen":
+                    continue  # CDR-005: the TV has no input; a screen's copy of a consent command is dropped
+                if command not in handlers:
                     await error(conn, f"Unsupported command: {command}", command)
                     continue
-                try:
-                    await handler(conn, message.get("payload", {}))
-                except ValidationError as exc:
-                    await error(conn, f"Invalid payload: {exc.errors()[0]['msg']}", command)
+                payload = message.get("payload", {})
+                if command == "turn.submit":
+                    task = asyncio.create_task(dispatch_turn(payload))
+                    background.add(task)
+                    task.add_done_callback(background.discard)
+                else:
+                    await dispatch(command, payload)
         except WebSocketDisconnect:
             pass
         finally:

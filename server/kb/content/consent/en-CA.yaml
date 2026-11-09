@@ -1,0 +1,10 @@
+# The consent notice in English, shown on the shared screen under every patient-language notice (CDR-005).
+# Draft by Claude: clinician to review. Changing this text means raising `version` here, and `english_version`
+# and `version` in every patient-language file, so every notice id changes with it.
+reviewer: pending
+language: en-CA
+version: "1"
+text: >-
+  This visit uses an AI interpreter. It listens to you and your doctor, says what each of you says in the
+  other's language, and shows it on this screen. A record of the conversation is kept for your care. You can
+  ask for a human interpreter, or pause or stop, at any time. Do you agree to continue?

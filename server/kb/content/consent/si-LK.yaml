@@ -1,0 +1,10 @@
+# The consent notice in Sinhala, for test mode only (CDR-005, TDM-003): never used on stage.
+# Draft by Claude: Sinhala speaker and clinician to review. Raise `version` whenever the text changes.
+reviewer: pending
+language: si-LK
+version: "1"
+english_version: "1"
+text: >-
+  මෙම හමුවේදී කෘත්‍රිම බුද්ධි පරිවර්තකයෙකු භාවිතා කෙරේ. ඔබත් ඔබේ වෛද්‍යවරයාත් කියන දේ එය අසා, අනෙකාගේ
+  භාෂාවෙන් කියා, මෙම තිරයේ පෙන්වයි. ඔබේ ප්‍රතිකාර සඳහා සංවාදයේ වාර්තාවක් තබා ගනී. ඕනෑම වේලාවක ඔබට මිනිස්
+  පරිවර්තකයෙකු ඉල්ලිය හැකිය, නැතහොත් නවතා තැබීමට හෝ නතර කිරීමට හැකිය. ඉදිරියට යාමට ඔබ එකඟද?

@@ -1,0 +1,12 @@
+# The consent notice in Punjabi (Gurmukhi), read aloud and shown before the conversation (CDR-005).
+# Draft by Claude: Punjabi speaker and clinician to review. Uses forms that avoid the interpreter's gender, as
+# the interpreter lines do. Raise `version` whenever the text changes.
+reviewer: pending
+language: pa-IN
+version: "1"
+english_version: "1"
+text: >-
+  ਇਸ ਮੁਲਾਕਾਤ ਵਿੱਚ ਏਆਈ ਦੁਭਾਸ਼ੀਆ ਵਰਤਿਆ ਜਾਂਦਾ ਹੈ। ਇਹ ਤੁਹਾਡੀ ਅਤੇ ਤੁਹਾਡੇ ਡਾਕਟਰ ਦੀ ਗੱਲ ਸੁਣਦਾ ਹੈ, ਹਰ ਗੱਲ ਦੂਜੇ ਦੀ
+  ਬੋਲੀ ਵਿੱਚ ਦੱਸਦਾ ਹੈ, ਅਤੇ ਇਸ ਸਕਰੀਨ ਉੱਤੇ ਦਿਖਾਉਂਦਾ ਹੈ। ਤੁਹਾਡੇ ਇਲਾਜ ਲਈ ਗੱਲਬਾਤ ਦਾ ਰਿਕਾਰਡ ਰੱਖਿਆ ਜਾਂਦਾ ਹੈ।
+  ਤੁਸੀਂ ਕਿਸੇ ਵੀ ਸਮੇਂ ਮਨੁੱਖੀ ਦੁਭਾਸ਼ੀਆ ਮੰਗ ਸਕਦੇ ਹੋ, ਜਾਂ ਗੱਲਬਾਤ ਰੋਕ ਜਾਂ ਬੰਦ ਕਰ ਸਕਦੇ ਹੋ। ਕੀ ਤੁਸੀਂ ਅੱਗੇ ਵਧਣ ਲਈ
+  ਸਹਿਮਤ ਹੋ?

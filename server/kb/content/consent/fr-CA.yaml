@@ -1,0 +1,11 @@
+# The consent notice in Canadian French, read aloud and shown before the conversation (CDR-005).
+# Draft by Claude: French speaker and clinician to review. Raise `version` whenever the text changes.
+reviewer: pending
+language: fr-CA
+version: "1"
+english_version: "1"
+text: >-
+  Cette consultation utilise un interprète IA. Il écoute ce que vous et votre médecin dites, le redit dans la
+  langue de l'autre et l'affiche à cet écran. Un dossier de la conversation est conservé pour vos soins. Vous
+  pouvez demander un interprète humain, ou faire une pause ou arrêter, en tout temps. Acceptez-vous de
+  continuer?

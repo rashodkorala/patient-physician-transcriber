@@ -1,0 +1,11 @@
+# The consent notice in Tamil, Sri Lankan usage, read aloud and shown before the conversation (CDR-005,
+# TDM-004). Draft by Claude: Tamil speaker and clinician to review. Raise `version` whenever the text changes.
+reviewer: pending
+language: ta-LK
+version: "1"
+english_version: "1"
+text: >-
+  இந்தச் சந்திப்பில் ஒரு செயற்கை நுண்ணறிவு மொழிபெயர்ப்பாளர் பயன்படுத்தப்படுகிறது. நீங்களும் உங்கள் வைத்தியரும்
+  சொல்வதை அது கேட்டு, மற்றவரின் மொழியில் சொல்லி, இந்தத் திரையில் காட்டும். உங்கள் சிகிச்சைக்காக உரையாடலின்
+  பதிவு வைக்கப்படும். எந்த நேரத்திலும் நீங்கள் ஒரு மனித மொழிபெயர்ப்பாளரைக் கேட்கலாம், அல்லது இடைநிறுத்தலாம்
+  அல்லது நிறுத்தலாம். தொடர நீங்கள் சம்மதிக்கிறீர்களா?

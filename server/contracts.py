@@ -6,6 +6,8 @@
 @implements CDR-004: Interpreter voice playback on the visit channel
 @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
 @implements TDM-002: Presenter mismatch control for the blocked-dose beat
+@implements CDR-005: Consent and explain-back on the visit channel
+@implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
 @contract ws:/ws/visit
 @contract TurnResult
 @contract TurnCaption
@@ -13,6 +15,8 @@
 @see openspec/tdr/cdr/cdr-002-turn-result-schema.md
 @see openspec/tdr/cdr/cdr-003-names-and-interpreter-lines.md
 @see openspec/tdr/cdr/cdr-004-interpreter-voice-playback-events.md
+@see openspec/tdr/cdr/cdr-005-consent-and-explain-back-events.md
+@see openspec/tdr/cdr/cdr-006-record-entries-review-corrections-and-tamper.md
 """
 
 from typing import Literal
@@ -236,6 +240,146 @@ class VoiceSpeaking(Wire):
 SILENT = VoiceSpeaking(speaking=False)
 
 
+class LineText(Wire):
+    language: Language
+    text: str
+
+
+# ---------- CDR-005: consent (the explain-back half is built separately) ----------
+
+ConsentBy = Literal["patient", "physician_on_behalf"]
+REASON_MAX = 200
+
+
+class ConsentNotice(Wire):
+    """The reviewed notice for the visit's patient language; lines hold the patient language first, English second."""
+
+    notice_id: str
+    speech_id: str
+    version: str
+    language: PatientLanguage
+    lines: list[LineText]
+
+
+class ConsentSpeak(Wire):
+    """consent.speak, controller only: play the notice now, by its speech id."""
+
+    speech_id: str
+    language: PatientLanguage
+
+
+class ConsentGive(Wire):
+    notice_version: str
+    language: PatientLanguage
+
+
+class ConsentWithdraw(Wire):
+    reason: str | None = Field(default=None, max_length=REASON_MAX)
+
+
+class ConsentState(Wire):
+    """consent.changed, and visit.state.consentState: the latest consent change, with its chain entry id."""
+
+    state: Literal["given", "withdrawn"]
+    at: str
+    by: ConsentBy
+    notice_id: str
+    notice_version: str
+    language: PatientLanguage
+    entry_id: str
+
+
+RefusedReason = Literal[
+    "consent_required",
+    "consent_already_given",
+    "consent_not_given",
+    "wrong_notice",
+    "wrong_language",
+    "not_allowed",
+    "not_found",
+    "not_current",
+    "busy",
+    "invalid",
+]
+
+
+class CommandRefused(Wire):
+    """command.refused, only to the review connection that sent the command; no free text, so nothing can leak."""
+
+    command: str
+    reason: RefusedReason
+
+
+# ---------- CDR-006: record chain entries and interpreter dismissal ----------
+
+EntryKind = Literal["turn", "consent", "amendment", "confirmation", "explain_back", "interpreter", "summary"]
+EscalationAction = Literal["offer", "request", "mark", "dismiss"]
+DismissReason = Literal["declined", "resolved", "simulated_call_ended"]
+EscalationEntryReason = Literal[
+    "low_confidence", "tone_failure", "high_risk", "requested", "declined", "resolved", "simulated_call_ended"
+]
+
+
+class RecordEntry(Wire):
+    """The payload of one hash chain entry (IDR-003): typed, and named by entryId (a turn's is its turnId)."""
+
+    entry_id: str
+    kind: EntryKind
+    at: str
+    body: dict
+
+
+class TurnEntryBody(TurnCaption):
+    """A settled turn as chained: the public caption only, never a private field or an unspoken translation."""
+
+    settled_as: CaptionStatus
+    physician_name: str | None = None
+    patient_name: str | None = None
+
+
+class ConsentEntryBody(Wire):
+    """A consent change as chained: ConsentState without entryId, plus the SHA-256 of the notice as shown."""
+
+    state: Literal["given", "withdrawn"]
+    at: str
+    by: ConsentBy
+    notice_id: str
+    notice_version: str
+    language: PatientLanguage
+    notice_sha256: str
+    reason: str | None = None
+
+
+class EscalationEntry(Wire):
+    """An interpreter offer, request, high-risk mark, or dismissal, as recorded in the transcript (ADR-003)."""
+
+    entry_id: str
+    action: EscalationAction
+    reason: EscalationEntryReason
+    at: str
+    turn_id: str | None = None
+    note: str | None = None
+
+
+class InterpreterDismiss(Wire):
+    reason: DismissReason
+
+
+class InterpreterDismissed(Wire):
+    """interpreter.dismissed, every role: the controller ended the offer or request, so every screen clears it."""
+
+    reason: DismissReason
+    at: str
+    entry_id: str
+
+
+class InjectionStatus(Wire):
+    """visit.state.injection, controller only (TDM-002): armed or idle, and the turns the mismatch fired on."""
+
+    state: Literal["idle", "armed"]
+    injected_turn_ids: list[str]
+
+
 class CurrentTurnPublic(Wire):
     turn_id: str
     speaker: Speaker
@@ -259,6 +403,13 @@ class VisitStateController(Wire):
     introduction: IntroductionState = "pending"
     # CDR-004: optional, so a client built before voice playback ignores it.
     speaking: VoiceSpeaking | None = None
+    # CDR-005: optional, so a client built before consent ignores them.
+    consent_notice: ConsentNotice | None = None
+    consent_state: ConsentState | None = None
+    # CDR-006: optional; injection and escalations are controller only.
+    interpreter_open: bool = False
+    injection: InjectionStatus | None = None
+    escalations: list[EscalationEntry] = Field(default_factory=list)
 
 
 class VisitStatePublic(Wire):
@@ -275,6 +426,11 @@ class VisitStatePublic(Wire):
     introduction: IntroductionState = "pending"
     # CDR-004: optional, so a client built before voice playback ignores it.
     speaking: VoiceSpeaking | None = None
+    # CDR-005: optional, so a client built before consent ignores them.
+    consent_notice: ConsentNotice | None = None
+    consent_state: ConsentState | None = None
+    # CDR-006: optional, for every role.
+    interpreter_open: bool = False
 
 
 # ---------- CDR-001 commands ----------
@@ -312,11 +468,6 @@ class Names(Wire):
     @classmethod
     def _clean(cls, value: str | None) -> str | None:
         return clean_name(value)
-
-
-class LineText(Wire):
-    language: Language
-    text: str
 
 
 class InterpreterLine(Wire):
@@ -379,6 +530,7 @@ CONTROLLER_ONLY_EVENTS = frozenset(
         "empathy.nudge",
         "demo.injection_state",
         "visit.name_proposed",
+        "consent.speak",
         "error",
     }
 )
@@ -400,5 +552,9 @@ CONTROLLER_COMMANDS = frozenset(
         "visit.mark_high_risk",
         "demo.inject_mismatch",
         "demo.cancel_injection",
+        "interpreter.dismiss",
     }
 )
+
+# CDR-005: commands the patient's review screen or the controller may send; a screen's copy is dropped.
+REVIEW_OR_CONTROLLER_COMMANDS = frozenset({"consent.give", "consent.withdraw", "consent.read_aloud"})

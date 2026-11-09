@@ -1,4 +1,4 @@
-"""Contract tests for CDR-001, CDR-002, CDR-003, and CDR-004."""
+"""Contract tests for CDR-001, CDR-002, CDR-003, CDR-004, CDR-005 (consent), and CDR-006."""
 
 import json
 from pathlib import Path
@@ -9,13 +9,25 @@ from pydantic import ValidationError
 from contracts import (
     CONTROLLER_COMMANDS,
     CONTROLLER_ONLY_EVENTS,
+    REVIEW_OR_CONTROLLER_COMMANDS,
+    CommandRefused,
+    ConsentGive,
+    ConsentNotice,
+    ConsentSpeak,
+    ConsentState,
+    ConsentWithdraw,
     DemoInjectionState,
     EmpathyNudge,
+    EscalationEntry,
+    InjectionStatus,
+    InterpreterDismiss,
+    InterpreterDismissed,
     InterpreterEscalation,
     InterpreterLine,
     MarkHighRisk,
     NameProposed,
     Names,
+    RecordIntegrity,
     TurnCaption,
     TurnRef,
     TurnResult,
@@ -68,6 +80,75 @@ def test_visit_state_public_fixture_validates_cdr_001():
 )
 def test_controller_payload_fixtures_validate_cdr_001(name, model):
     assert model.model_validate(load(name)).wire() == load(name)
+
+
+@pytest.mark.parametrize(
+    ("name", "model"),
+    [
+        ("consent_notice.json", ConsentNotice),
+        ("consent_state.json", ConsentState),
+        ("consent_speak.json", ConsentSpeak),
+        ("consent_give.json", ConsentGive),
+        ("consent_withdraw.json", ConsentWithdraw),
+        ("command_refused.json", CommandRefused),
+    ],
+)
+def test_consent_payload_fixtures_validate_cdr_005(name, model):
+    assert model.model_validate(load(name)).wire() == load(name)
+
+
+@pytest.mark.parametrize(
+    ("name", "model"),
+    [
+        ("interpreter_dismiss.json", InterpreterDismiss),
+        ("interpreter_dismissed.json", InterpreterDismissed),
+        ("escalation_entry.json", EscalationEntry),
+        ("injection_status.json", InjectionStatus),
+        ("record_integrity_broken.json", RecordIntegrity),
+    ],
+)
+def test_record_payload_fixtures_validate_cdr_006(name, model):
+    assert model.model_validate(load(name)).wire() == load(name)
+
+
+def test_consent_commands_are_review_or_controller_and_speak_is_private_cdr_005():
+    assert {"consent.give", "consent.withdraw", "consent.read_aloud"} == REVIEW_OR_CONTROLLER_COMMANDS
+    assert not REVIEW_OR_CONTROLLER_COMMANDS & CONTROLLER_COMMANDS
+    assert "consent.speak" in CONTROLLER_ONLY_EVENTS
+    assert not {"consent.changed", "command.refused"} & CONTROLLER_ONLY_EVENTS
+
+
+def test_interpreter_dismiss_is_controller_only_and_dismissed_is_public_cdr_006():
+    assert "interpreter.dismiss" in CONTROLLER_COMMANDS
+    assert not {"interpreter.dismissed", "record.integrity"} & CONTROLLER_ONLY_EVENTS
+
+
+def test_public_visit_state_has_no_controller_only_fields_cdr_006():
+    # injection and escalations are controller only (CDR-006), so the public model cannot carry them.
+    for key in ("injection", "escalations", "nudges"):
+        with pytest.raises(ValidationError):
+            VisitStatePublic.model_validate({**load("visit_state_public.json"), key: []})
+
+
+def test_command_refused_has_no_free_text_cdr_005():
+    with pytest.raises(ValidationError):
+        CommandRefused.model_validate({"command": "consent.give", "reason": "wrong_notice", "message": "x"})
+    with pytest.raises(ValidationError):
+        CommandRefused.model_validate({"command": "consent.give", "reason": "Consent is already given"})
+
+
+def test_withdrawal_reason_is_at_most_200_characters_cdr_005():
+    ConsentWithdraw.model_validate({"reason": "x" * 200})
+    with pytest.raises(ValidationError):
+        ConsentWithdraw.model_validate({"reason": "x" * 201})
+
+
+def test_visit_state_without_consent_or_record_fields_still_validates_cdr_005_cdr_006():
+    state = load("visit_state_public.json")
+    for key in ("consentNotice", "consentState", "interpreterOpen"):
+        state.pop(key)
+    parsed = VisitStatePublic.model_validate(state)
+    assert parsed.consent_notice is None and parsed.interpreter_open is False
 
 
 def test_caption_never_carries_private_fields_cdr_002():
