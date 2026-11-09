@@ -14,10 +14,24 @@ from typing import Any, Protocol, TypeVar
 import anthropic
 from pydantic import BaseModel
 
-from config import LIVE_MODEL, TONE_MODEL
+from config import LIVE_MODEL, RECORD_MODEL, TONE_MODEL
 
 T = TypeVar("T", bound=BaseModel)
 log = logging.getLogger("uvicorn.error")
+
+# ADR-006: the note and summary run on Opus 5.5 and favour quality over speed. ADR-011: explain-back runs on the
+# live model, Sonnet 5.5, because the patient and physician wait for it.
+RECORD_PURPOSES = frozenset({"clinical_note", "patient_summary"})
+DEFAULT_MODELS_BY_PURPOSE: dict[str, str] = {
+    "tone_check": TONE_MODEL,
+    "name_extract": TONE_MODEL,
+    "explain_back": LIVE_MODEL,
+    **{purpose: RECORD_MODEL for purpose in RECORD_PURPOSES},
+}
+# Record calls think harder and write longer than a live turn; live calls keep the low-latency settings.
+RECORD_EFFORT = "high"
+RECORD_MAX_TOKENS = 16000
+LIVE_MAX_TOKENS = 4096
 
 # Models with no server-side fallback: they take the plain request, without the fallback beta.
 WITHOUT_SERVER_FALLBACK = frozenset({TONE_MODEL})
@@ -43,18 +57,18 @@ class ClaudeModel:
         self.client = client or anthropic.AsyncAnthropic()
         # Live turns favour latency (under 3 seconds); tune with the tone set (EDR-002).
         self.effort = effort
-        # ADR-006 amended 2026-10-25: the tone check runs on Haiku; every other call on model_id.
-        self.models_by_purpose = (
-            {"tone_check": TONE_MODEL, "name_extract": TONE_MODEL} if models_by_purpose is None else models_by_purpose
-        )
+        # ADR-006 amended 2026-10-25: the tone check runs on Haiku; the note and summary on Opus (ADR-006);
+        # every other call on model_id.
+        self.models_by_purpose = dict(DEFAULT_MODELS_BY_PURPOSE) if models_by_purpose is None else models_by_purpose
 
     async def parse(self, *, purpose: str, system: str, user: str, schema: type[T]) -> T:
         model = self.models_by_purpose.get(purpose, self.model_id)
+        record = purpose in RECORD_PURPOSES
         request: dict[str, Any] = {
             "model": model,
-            "max_tokens": 4096,
+            "max_tokens": RECORD_MAX_TOKENS if record else LIVE_MAX_TOKENS,
             "system": system,
-            "output_config": {"effort": self.effort},
+            "output_config": {"effort": RECORD_EFFORT if record else self.effort},
             "messages": [{"role": "user", "content": user}],
             "output_format": schema,
         }

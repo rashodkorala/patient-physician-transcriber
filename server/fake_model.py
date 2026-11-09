@@ -5,13 +5,19 @@ swapped in, so numbers and units survive and the safety checks behave as they wo
 Never used on stage: the server only selects it with TRANSLATOR=fake or without credentials.
 
 @implements EDR-002: Testing: pytest with mocked LLM, speaker-rated tone set, latency check
+@implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
 """
 
+import json
 import re
 from decimal import Decimal
 
+from chains.checks import DraftSource
+from chains.explain_back import CodeItemView, ExplainBackDraft
+from chains.note import DraftSection, DraftSentence, NoteDraft
+from chains.summary import DraftSummarySentence, SummaryDraft
 from empathy import NudgeDraft
-from graph.turn_graph import Draft, ToneCheck
+from graph.turn_graph import LANGUAGE_NAMES, Draft, ToneCheck
 from introduction import NameGuess
 from llm import ScriptedModel
 
@@ -85,7 +91,72 @@ def name_extract(user: str) -> NameGuess:
     return NameGuess(name=NAME_LEAD.sub("", field(user, "reply")).strip(" .!"))
 
 
+# ---------- grounded generation (ADR-011) ----------
+# Faithful stand-ins: each restates the sources word for word, so the code checks pass. Tests that need a wrong
+# or lenient model give ScriptedModel their own handler.
+
+LANGUAGE_CODES = {name: code for code, name in LANGUAGE_NAMES.items()}
+
+
+def _sources(user: str, name: str = "sources") -> list[dict]:
+    raw = field(user, name)
+    return json.loads(raw) if raw else []
+
+
+def _ref(source: dict) -> DraftSource:
+    return DraftSource(kind=source["kind"], id=source["id"], version=source["version"])
+
+
+def _in_language(source: dict, language: str) -> str | None:
+    if source["kind"] == "interpreter_line":
+        return next((line["text"] for line in source["lines"] if line["language"] == language), None)
+    if source["sourceLanguage"] == language:
+        return source["sourceText"]
+    if source["targetLanguage"] == language:
+        return source["spokenTranslation"]
+    return None
+
+
+def clinical_note(user: str) -> NoteDraft:
+    """One sentence per spoken turn, in its English words, tagged with its speaker: patient turns under History,
+    physician turns under Plan."""
+    sections: dict[str, list[DraftSentence]] = {}
+    for source in _sources(user):
+        text = _in_language(source, "en-CA")
+        if source["kind"] != "turn" or not text:
+            continue
+        heading = "Plan" if source["speaker"] == "physician" else "History"
+        tag = f"{source['speaker']}_stated"
+        sections.setdefault(heading, []).append(DraftSentence(text=text, tag=tag, sources=[_ref(source)]))
+    return NoteDraft(sections=[DraftSection(heading=h, sentences=s) for h, s in sections.items()])
+
+
+def patient_summary(user: str) -> SummaryDraft:
+    """Each spoken turn as the patient heard or said it, one sentence per turn."""
+    language = LANGUAGE_CODES.get(field(user, "patient_language"), field(user, "patient_language"))
+    sentences = [
+        DraftSummarySentence(text=text, sources=[_ref(source)])
+        for source in _sources(user)
+        if source["kind"] == "turn" and (text := _in_language(source, language))
+    ]
+    return SummaryDraft(sentences=sentences)
+
+
+def explain_back(user: str) -> ExplainBackDraft:
+    """A lenient reader: no instructions of its own, and every code item judged matched (code discards that)."""
+    views = [CodeItemView(item_id=item["itemId"], outcome="matched") for item in _sources(user, "code_items")]
+    return ExplainBackDraft(items=[], code_item_views=views)
+
+
 def fake_model() -> ScriptedModel:
     return ScriptedModel(
-        {"translate": translate, "tone_check": tone_check, "empathy": empathy, "name_extract": name_extract}
+        {
+            "translate": translate,
+            "tone_check": tone_check,
+            "empathy": empathy,
+            "name_extract": name_extract,
+            "clinical_note": clinical_note,
+            "patient_summary": patient_summary,
+            "explain_back": explain_back,
+        }
     )
