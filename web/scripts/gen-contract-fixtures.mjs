@@ -1,5 +1,5 @@
 // Turns the server's contract fixtures into TypeScript that must satisfy lib/contracts.ts,
-// so `npm run check:contracts` fails if the two sides drift (CDR-001, CDR-002, CDR-003, CDR-004).
+// so `npm run check:contracts` fails if the two sides drift (CDR-001 to CDR-006).
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,17 @@ const entries = [
   ["voiceSpeaking", "voice_speaking.json", "VoiceSpeaking"],
   ["demoInjectionState", "demo_injection_state.json", "DemoInjectionState"],
   ["markHighRisk", "mark_high_risk.json", "MarkHighRisk"],
+  ["consentNotice", "consent_notice.json", "ConsentNotice"],
+  ["consentState", "consent_state.json", "ConsentState"],
+  ["consentSpeak", "consent_speak.json", "ConsentSpeak"],
+  ["consentGive", "consent_give.json", "ConsentGive"],
+  ["consentWithdraw", "consent_withdraw.json", "ConsentWithdraw"],
+  ["commandRefused", "command_refused.json", "CommandRefused"],
+  ["interpreterDismiss", "interpreter_dismiss.json", "InterpreterDismiss"],
+  ["interpreterDismissed", "interpreter_dismissed.json", "InterpreterDismissed"],
+  ["escalationEntry", "escalation_entry.json", "EscalationEntry"],
+  ["injectionStatus", "injection_status.json", "InjectionStatus"],
+  ["recordIntegrityBroken", "record_integrity_broken.json", "RecordIntegrity"],
 ];
 
 const body = entries

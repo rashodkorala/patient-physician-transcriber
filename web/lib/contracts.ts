@@ -6,6 +6,8 @@
  * @implements CDR-003: Participant names and interpreter lines on the visit channel
  * @implements CDR-004: Interpreter voice playback on the visit channel
  * @implements TDM-002: Presenter mismatch control for the blocked-dose beat
+ * @implements CDR-005: Consent and explain-back on the visit channel
+ * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
  * @contract ws:/ws/visit
  * @contract TurnResult
  * @contract TurnCaption
@@ -107,6 +109,12 @@ export interface VisitStateController {
   introduction?: IntroductionState;
   // CDR-004: optional, so a server built before voice playback still satisfies this type.
   speaking?: VoiceSpeaking | null;
+  // CDR-005 and CDR-006: optional, so a server built before consent and the record chain still satisfies this type.
+  consentNotice?: ConsentNotice | null;
+  consentState?: ConsentState | null;
+  interpreterOpen?: boolean;
+  injection?: InjectionStatus | null;
+  escalations?: EscalationEntry[];
 }
 
 export interface VisitStatePublic {
@@ -123,6 +131,10 @@ export interface VisitStatePublic {
   introduction?: IntroductionState;
   // CDR-004: optional, so a server built before voice playback still satisfies this type.
   speaking?: VoiceSpeaking | null;
+  // CDR-005 and CDR-006: optional, so a server built before consent and the record chain still satisfies this type.
+  consentNotice?: ConsentNotice | null;
+  consentState?: ConsentState | null;
+  interpreterOpen?: boolean;
 }
 
 export interface TurnStarted {
@@ -225,3 +237,94 @@ export interface VoicePlayback {
 export type VoiceSpeaking =
   | { speaking: true; speechId: string; language: Language }
   | { speaking: false; speechId: null; language: null };
+
+// ---------- CDR-005: consent (the explain-back half is built separately) ----------
+
+export type ConsentBy = "patient" | "physician_on_behalf";
+
+/** The reviewed notice for the visit's patient language: lines hold the patient language first, English second. */
+export interface ConsentNotice {
+  noticeId: string;
+  speechId: string;
+  version: string;
+  language: PatientLanguage;
+  lines: { language: Language; text: string }[];
+}
+
+/** consent.speak, controller only: play the notice now, by its speech id. */
+export interface ConsentSpeak {
+  speechId: string;
+  language: PatientLanguage;
+}
+
+/** consent.give, from the review screen (the patient) or the controller (on the patient's behalf). */
+export interface ConsentGive {
+  noticeVersion: string;
+  language: PatientLanguage;
+}
+
+/** consent.withdraw; the reason is at most 200 characters and kept in the record only. */
+export interface ConsentWithdraw {
+  reason?: string | null;
+}
+
+/** consent.changed, and visit.state.consentState: the latest consent change and its chain entry id. */
+export interface ConsentState {
+  state: "given" | "withdrawn";
+  at: string;
+  by: ConsentBy;
+  noticeId: string;
+  noticeVersion: string;
+  language: PatientLanguage;
+  entryId: string;
+}
+
+export type RefusedReason =
+  | "consent_required"
+  | "consent_already_given"
+  | "consent_not_given"
+  | "wrong_notice"
+  | "wrong_language"
+  | "not_allowed"
+  | "not_found"
+  | "not_current"
+  | "busy"
+  | "invalid";
+
+/** command.refused, only to the review connection that sent the command; no free text. */
+export interface CommandRefused {
+  command: string;
+  reason: RefusedReason;
+}
+
+// ---------- CDR-006: record entries and interpreter dismissal ----------
+
+export type DismissReason = "declined" | "resolved" | "simulated_call_ended";
+
+/** interpreter.dismiss, controller only. */
+export interface InterpreterDismiss {
+  reason: DismissReason;
+}
+
+/** interpreter.dismissed, every role: the offer or request ended, so every screen clears it. */
+export interface InterpreterDismissed {
+  reason: DismissReason;
+  at: string;
+  entryId: string;
+}
+
+/** An interpreter offer, request, high-risk mark, or dismissal, as recorded; controller only. */
+export interface EscalationEntry {
+  entryId: string;
+  action: "offer" | "request" | "mark" | "dismiss";
+  reason: EscalationReason | DismissReason;
+  at: string;
+  turnId?: string | null;
+  note?: string | null;
+}
+
+/** visit.state.injection, controller only (TDM-002): armed or idle, and the turns the mismatch fired on. */
+export interface InjectionStatus {
+  state: "idle" | "armed";
+  injectedTurnIds: string[];
+}
