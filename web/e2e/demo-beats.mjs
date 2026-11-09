@@ -90,6 +90,8 @@ await check(await control.locator('[data-testid="typed-send"]').isDisabled(), "c
 await capture("beat4-paused");
 await control.click('[data-testid="resume"]');
 await tv.waitForSelector('[data-testid="paused"]', { state: "detached", timeout: 10000 });
+// The paused notice and the captions swap in separate renders, so wait for the caption rather than counting at once.
+await tv.waitForSelector('[data-testid="caption"]', { timeout: 10000 }).catch(() => null);
 await check((await tv.locator('[data-testid="caption"]').count()) === 1, "captions return when the visit resumes");
 
 // ---------- Beat 5: presenter mismatch, blocked, then repeated (tasks 5.1 and 5.2) ----------
