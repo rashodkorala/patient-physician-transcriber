@@ -1,0 +1,69 @@
+{
+  "noteId": "n3d9a0b1c2e4",
+  "language": "en-CA",
+  "basedOnHead": "9f2c4e1a7b3d5f6081a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
+  "generatedAt": "2026-11-19T19:14:02.512000+00:00",
+  "sections": [
+    {
+      "heading": "Presenting complaint",
+      "sentences": [
+        {
+          "sentenceId": "n3d9a0b1c2e4-s0",
+          "text": "I have pain in my chest.",
+          "tag": "patient_stated",
+          "sources": [
+            {
+              "kind": "turn",
+              "id": "t2",
+              "version": "a7c1e9"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "Plan",
+      "sentences": [
+        {
+          "sentenceId": "n3d9a0b1c2e4-s1",
+          "text": "Take one aspirin, 81 milligrams, once a day.",
+          "tag": "physician_stated",
+          "sources": [
+            {
+              "kind": "turn",
+              "id": "t1",
+              "version": "original"
+            }
+          ]
+        },
+        {
+          "sentenceId": "n3d9a0b1c2e4-s2",
+          "text": "The patient agreed to the plan after the interpreter's introduction.",
+          "tag": "ai_inference",
+          "sources": [
+            {
+              "kind": "turn",
+              "id": "t2",
+              "version": "a7c1e9"
+            },
+            {
+              "kind": "interpreter_line",
+              "id": "intro-1",
+              "version": "original"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "untranslatedTurnIds": [
+    "t3"
+  ],
+  "tagDowngrades": [
+    {
+      "sentenceId": "n3d9a0b1c2e4-s2",
+      "from": "patient_stated",
+      "to": "ai_inference"
+    }
+  ]
+}

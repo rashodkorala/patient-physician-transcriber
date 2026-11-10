@@ -1,0 +1,33 @@
+{
+  "segmentId": "t2",
+  "original": {
+    "turnId": "t2",
+    "speaker": "patient",
+    "sourceLanguage": "pa-IN",
+    "targetLanguage": "en-CA",
+    "sourceText": "ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਡਾਕਟਰ ਜੀ।",
+    "status": "final",
+    "translation": "Hello, doctor.",
+    "toneLabel": "respectful",
+    "glossaryUsed": [],
+    "criticalValues": [],
+    "readbackConfirmed": false
+  },
+  "amendments": [
+    {
+      "amendmentId": "a7c1e9",
+      "sourceText": "ਮੈਨੂੰ ਛਾਤੀ ਵਿੱਚ ਦਰਦ ਹੈ।",
+      "translation": "I have pain in my chest.",
+      "toneLabel": "respectful",
+      "criticalValues": [],
+      "at": "2026-11-19T19:14:02.512000+00:00",
+      "entryId": "a7c1e9"
+    }
+  ],
+  "confirmed": {
+    "version": "original",
+    "at": "2026-11-19T19:13:40.101000+00:00",
+    "entryId": "5be0c2d1f3a4"
+  },
+  "current": "a7c1e9"
+}

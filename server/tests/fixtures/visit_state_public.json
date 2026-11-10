@@ -48,5 +48,77 @@
     "language": "pa-IN",
     "entryId": "c0n5e0700001"
   },
-  "interpreterOpen": true
+  "interpreterOpen": true,
+  "segments": [
+    {
+      "segmentId": "t2",
+      "original": {
+        "turnId": "t2",
+        "speaker": "patient",
+        "sourceLanguage": "pa-IN",
+        "targetLanguage": "en-CA",
+        "sourceText": "ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਡਾਕਟਰ ਜੀ।",
+        "status": "final",
+        "translation": "Hello, doctor.",
+        "toneLabel": "respectful",
+        "glossaryUsed": [],
+        "criticalValues": [],
+        "readbackConfirmed": false
+      },
+      "amendments": [
+        {
+          "amendmentId": "a7c1e9",
+          "sourceText": "ਮੈਨੂੰ ਛਾਤੀ ਵਿੱਚ ਦਰਦ ਹੈ।",
+          "translation": "I have pain in my chest.",
+          "toneLabel": "respectful",
+          "criticalValues": [],
+          "at": "2026-11-19T19:14:02.512000+00:00",
+          "entryId": "a7c1e9"
+        }
+      ],
+      "confirmed": {
+        "version": "original",
+        "at": "2026-11-19T19:13:40.101000+00:00",
+        "entryId": "5be0c2d1f3a4"
+      },
+      "current": "a7c1e9"
+    }
+  ],
+  "explainBack": {
+    "explainBackId": "eb41c07d92aa",
+    "state": "listening",
+    "explanationTurnIds": [
+      "t5",
+      "t6"
+    ]
+  },
+  "summary": {
+    "summaryId": "s8e2f1a0b9c3",
+    "language": "pa-IN",
+    "basedOnHead": "9f2c4e1a7b3d5f6081a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
+    "generatedAt": "2026-11-19T19:14:02.512000+00:00",
+    "sentences": [
+      {
+        "sentenceId": "s8e2f1a0b9c3.0",
+        "index": 0,
+        "text": "ਰੋਜ਼ਾਨਾ ਇੱਕ ਵਾਰ ਇੱਕ ਐਸਪਰੀਨ, 81 ਮਿਲੀਗ੍ਰਾਮ, ਲਓ।",
+        "sources": [
+          {
+            "kind": "turn",
+            "id": "t1",
+            "version": "original"
+          }
+        ]
+      }
+    ],
+    "values": [
+      {
+        "kind": "dose",
+        "text": "81 ਮਿਲੀਗ੍ਰਾਮ",
+        "sourceTurnId": "t1"
+      }
+    ],
+    "check": "passed"
+  },
+  "summaryStale": false
 }

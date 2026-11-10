@@ -8,6 +8,8 @@
  * @implements TDM-002: Presenter mismatch control for the blocked-dose beat
  * @implements CDR-005: Consent and explain-back on the visit channel
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
+ * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
+ * @implements TDM-005: Hidden record-tamper control for the demo
  * @contract ws:/ws/visit
  * @contract TurnResult
  * @contract TurnCaption
@@ -15,6 +17,10 @@
  * @see openspec/tdr/cdr/cdr-002-turn-result-schema.md
  * @see openspec/tdr/cdr/cdr-003-names-and-interpreter-lines.md
  * @see openspec/tdr/cdr/cdr-004-interpreter-voice-playback-events.md
+ * @see openspec/tdr/cdr/cdr-005-consent-and-explain-back-events.md
+ * @see openspec/tdr/cdr/cdr-006-record-entries-review-corrections-and-tamper.md
+ * @see openspec/tdr/cdr/cdr-007-clinical-note-and-patient-summary.md
+ * @see openspec/tdr/tdm/tdm-005-hidden-record-tamper-control.md
  */
 
 export type Language = "pa-IN" | "fr-CA" | "en-CA" | "si-LK" | "ta-LK";
@@ -115,6 +121,16 @@ export interface VisitStateController {
   interpreterOpen?: boolean;
   injection?: InjectionStatus | null;
   escalations?: EscalationEntry[];
+  segments?: SegmentHistoryController[];
+  tamper?: TamperState | null;
+  // CDR-005 explain-back and CDR-007: optional, so an older server still satisfies this type.
+  explainBack?: ExplainBackState | null;
+  explainBackResults?: ExplainBackResult[];
+  note?: ClinicalNote | null;
+  noteStale?: boolean;
+  summaryChecks?: SummaryCheck[];
+  summary?: PatientSummary | null;
+  summaryStale?: boolean;
 }
 
 export interface VisitStatePublic {
@@ -135,6 +151,11 @@ export interface VisitStatePublic {
   consentNotice?: ConsentNotice | null;
   consentState?: ConsentState | null;
   interpreterOpen?: boolean;
+  // CDR-006, CDR-005 explain-back, and CDR-007: optional, so an older server still satisfies this type.
+  segments?: SegmentHistory[];
+  explainBack?: ExplainBackState | null;
+  summary?: PatientSummary | null;
+  summaryStale?: boolean;
 }
 
 export interface TurnStarted {
@@ -238,7 +259,7 @@ export type VoiceSpeaking =
   | { speaking: true; speechId: string; language: Language }
   | { speaking: false; speechId: null; language: null };
 
-// ---------- CDR-005: consent (the explain-back half is built separately) ----------
+// ---------- CDR-005: consent ----------
 
 export type ConsentBy = "patient" | "physician_on_behalf";
 
@@ -327,4 +348,252 @@ export interface EscalationEntry {
 export interface InjectionStatus {
   state: "idle" | "armed";
   injectedTurnIds: string[];
+}
+
+// ---------- CDR-006: review corrections, confirmations, and the tamper control ----------
+
+/** A segment's version: "original", or the amendmentId of an applied correction. */
+export type SegmentVersion = string;
+
+export type CaptionCriticalValue = { kind: string; source: string; translated: string };
+
+/** segment.confirm, review only: confirm the named version, which must still be current. */
+export interface SegmentConfirm {
+  segmentId: string;
+  version: SegmentVersion;
+}
+
+/** segment.amend, review only: the recognised text (1 to 1000 characters) of the patient re-speaking their turn. */
+export interface SegmentAmend {
+  segmentId: string;
+  text: string;
+  language: PatientLanguage;
+  recognitionConfidence: number;
+}
+
+export const SEGMENT_TEXT_MAX = 1000;
+
+/** segment.status, every role: one stage of a correction, or its outcome; never any text. */
+export interface SegmentStatus {
+  segmentId: string;
+  amendmentId: string;
+  stage: "translating" | "verifying" | "retrying" | "applied" | "refused";
+  reason?: "blocked" | "escalated" | "failed" | null;
+}
+
+/** segment.analysis, controller only: a correction's full turn graph result (result.turnId is the amendmentId). */
+export interface SegmentAnalysis {
+  segmentId: string;
+  amendmentId: string;
+  result: TurnResult;
+}
+
+/**
+ * segment.amended, every role (CDR-001, extended by CDR-006): a correction applied or a confirmation recorded.
+ * For "amend", newText, amendmentId, translation, and entryId are set; for "confirm", version and entryId.
+ */
+export interface SegmentAmended {
+  segmentId: string;
+  by: "patient" | "physician";
+  action: "confirm" | "amend";
+  newText?: string | null;
+  amendmentId?: string | null;
+  version?: SegmentVersion | null;
+  translation?: string | null;
+  toneLabel?: ToneLabel | null;
+  criticalValues?: CaptionCriticalValue[] | null;
+  entryId?: string | null;
+}
+
+/** One applied correction in a segment's history, as every role sees it. */
+export interface SegmentAmendment {
+  amendmentId: string;
+  sourceText: string;
+  translation: string;
+  toneLabel: ToneLabel;
+  criticalValues: CaptionCriticalValue[];
+  at: string;
+  entryId: string;
+}
+
+/** One applied correction with its full turn graph result: controller only. */
+export interface SegmentAmendmentWithAnalysis extends SegmentAmendment {
+  analysis: TurnResult;
+}
+
+export interface SegmentConfirmation {
+  version: SegmentVersion;
+  at: string;
+  entryId: string;
+}
+
+/** visit.state.segments, every role: a turn with a confirmation or a correction, original first. */
+export interface SegmentHistory {
+  segmentId: string;
+  original: TurnCaption;
+  amendments: SegmentAmendment[];
+  confirmed: SegmentConfirmation | null;
+  current: SegmentVersion;
+}
+
+/** visit.state.segments for the controller: each amendment carries its analysis. */
+export interface SegmentHistoryController extends SegmentHistory {
+  amendments: SegmentAmendmentWithAnalysis[];
+}
+
+/** demo.tamper_record, controller only (TDM-005): alter one turn or amendment entry, once per visit. */
+export interface TamperRecord {
+  entryId: string;
+}
+
+/** demo.tamper_state, and visit.state.tamper, controller only (TDM-005): the entry the control altered. */
+export interface TamperState {
+  entryId: string;
+  at: string;
+}
+
+// ---------- CDR-005: explain-back ----------
+
+/** explainback.check and explainback.cancel, controller only. explainback.start takes an empty payload. */
+export interface ExplainBackRef {
+  explainBackId: string;
+}
+
+/** explainback.state, and visit.state.explainBack, every role: no text, items, or outcomes. */
+export interface ExplainBackState {
+  explainBackId: string;
+  state: "listening" | "checking" | "done" | "failed" | "cancelled";
+  explanationTurnIds: string[];
+}
+
+export type ExplainBackOutcome = "matched" | "missed" | "contradicted";
+
+export interface ExplainBackItem {
+  itemId: string;
+  kind: "dose" | "frequency" | "medication" | "number" | "date" | "instruction" | "warning" | "follow_up";
+  instruction: string;
+  sourceTurnIds: string[];
+  outcome: ExplainBackOutcome;
+  decidedBy: "code" | "model";
+  expected?: string | null;
+  heard?: string | null;
+  evidenceTurnIds: string[];
+}
+
+/** explainback.result, and visit.state.explainBackResults, controller only. */
+export interface ExplainBackResult {
+  explainBackId: string;
+  planHeadHash: string;
+  explanationTurnIds: string[];
+  items: ExplainBackItem[];
+  entryId: string;
+}
+
+// ---------- CDR-007: clinical note and patient summary ----------
+
+/** note.status (controller only) and summary.status (every role); detail reaches controllers only. */
+export interface ArtefactStatus {
+  artefactId: string;
+  kind: "note" | "summary";
+  stage: "generating" | "checking" | "retrying" | "ready" | "failed" | "refused";
+  detail?: string | null;
+}
+
+/** A cited source: a turn at its frozen effective version, or an interpreter line ("original"). */
+export interface SourceRef {
+  kind: "turn" | "interpreter_line";
+  id: string;
+  version: SegmentVersion;
+}
+
+export type ProvenanceTag =
+  | "patient_stated"
+  | "physician_stated"
+  | "companion_stated"
+  | "interpreter_stated"
+  | "ai_inference";
+
+export type NoteHeading = "Presenting complaint" | "History" | "Assessment" | "Plan" | "Follow-up";
+
+export interface NoteSentence {
+  sentenceId: string;
+  text: string;
+  tag: ProvenanceTag;
+  sources: SourceRef[];
+}
+
+export interface NoteSection {
+  heading: NoteHeading;
+  sentences: NoteSentence[];
+}
+
+export interface TagDowngrade {
+  sentenceId: string;
+  from: ProvenanceTag;
+  to: "ai_inference";
+}
+
+/** note.ready, and visit.state.note, controller only: a checked draft the physician remains author of. */
+export interface ClinicalNote {
+  noteId: string;
+  language: "en-CA";
+  basedOnHead: string;
+  generatedAt: string;
+  sections: NoteSection[];
+  untranslatedTurnIds: string[];
+  tagDowngrades: TagDowngrade[];
+}
+
+/** One summary sentence; its sentenceId is also its speech id, `{summaryId}.{index}`. */
+export interface SummarySentence {
+  sentenceId: string;
+  index: number;
+  text: string;
+  sources: SourceRef[];
+}
+
+/** summary.ready, and visit.state.summary, every role: only ever a summary that passed its value check. */
+export interface PatientSummary {
+  summaryId: string;
+  language: PatientLanguage;
+  basedOnHead: string;
+  generatedAt: string;
+  sentences: SummarySentence[];
+  values: { kind: CriticalKind; text: string; sourceTurnId: string }[];
+  check: "passed";
+}
+
+export interface SummaryMismatch {
+  kind: CriticalKind;
+  expected: string;
+  found: string | null;
+  sourceTurnId: string | null;
+  problem: "changed" | "missing" | "unsupported";
+}
+
+/** summary.check, and visit.state.summaryChecks, controller only: every check outcome and the values compared. */
+export interface SummaryCheck {
+  summaryId: string;
+  attempt: 1 | 2;
+  outcome: "passed" | "failed";
+  mismatches: SummaryMismatch[];
+}
+
+/** summary.read_aloud and summary.stop, from review or the controller; a screen's copy is dropped. */
+export interface SummaryRef {
+  summaryId: string;
+}
+
+/** summary.speak, controller only: play the sentence ids in order (each through the speak gate), or stop. */
+export interface SummarySpeak {
+  summaryId: string;
+  action: "play" | "stop";
+  speechIds: string[];
+}
+
+/** artefacts.stale, every role: the chain grew after the current note or summary; note is false for screens. */
+export interface ArtefactsStale {
+  note: boolean;
+  summary: boolean;
+  headHash: string;
 }

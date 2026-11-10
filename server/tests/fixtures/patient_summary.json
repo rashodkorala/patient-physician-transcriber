@@ -1,0 +1,28 @@
+{
+  "summaryId": "s8e2f1a0b9c3",
+  "language": "pa-IN",
+  "basedOnHead": "9f2c4e1a7b3d5f6081a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
+  "generatedAt": "2026-11-19T19:14:02.512000+00:00",
+  "sentences": [
+    {
+      "sentenceId": "s8e2f1a0b9c3.0",
+      "index": 0,
+      "text": "ਰੋਜ਼ਾਨਾ ਇੱਕ ਵਾਰ ਇੱਕ ਐਸਪਰੀਨ, 81 ਮਿਲੀਗ੍ਰਾਮ, ਲਓ।",
+      "sources": [
+        {
+          "kind": "turn",
+          "id": "t1",
+          "version": "original"
+        }
+      ]
+    }
+  ],
+  "values": [
+    {
+      "kind": "dose",
+      "text": "81 ਮਿਲੀਗ੍ਰਾਮ",
+      "sourceTurnId": "t1"
+    }
+  ],
+  "check": "passed"
+}

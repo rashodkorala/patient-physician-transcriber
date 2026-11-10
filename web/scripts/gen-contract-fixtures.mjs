@@ -1,5 +1,5 @@
 // Turns the server's contract fixtures into TypeScript that must satisfy lib/contracts.ts,
-// so `npm run check:contracts` fails if the two sides drift (CDR-001 to CDR-006).
+// so `npm run check:contracts` fails if the two sides drift (CDR-001 to CDR-007, TDM-005).
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,6 +35,27 @@ const entries = [
   ["escalationEntry", "escalation_entry.json", "EscalationEntry"],
   ["injectionStatus", "injection_status.json", "InjectionStatus"],
   ["recordIntegrityBroken", "record_integrity_broken.json", "RecordIntegrity"],
+  ["explainBackRef", "explain_back_ref.json", "ExplainBackRef"],
+  ["explainBackState", "explain_back_state.json", "ExplainBackState"],
+  ["explainBackResult", "explain_back_result.json", "ExplainBackResult"],
+  ["segmentConfirm", "segment_confirm.json", "SegmentConfirm"],
+  ["segmentAmend", "segment_amend.json", "SegmentAmend"],
+  ["segmentStatus", "segment_status.json", "SegmentStatus"],
+  ["segmentStatusRefused", "segment_status_refused.json", "SegmentStatus"],
+  ["segmentAnalysis", "segment_analysis.json", "SegmentAnalysis"],
+  ["segmentAmendedAmend", "segment_amended_amend.json", "SegmentAmended"],
+  ["segmentAmendedConfirm", "segment_amended_confirm.json", "SegmentAmended"],
+  ["segmentHistory", "segment_history.json", "SegmentHistory"],
+  ["segmentHistoryController", "segment_history_controller.json", "SegmentHistoryController"],
+  ["tamperRecord", "tamper_record.json", "TamperRecord"],
+  ["tamperState", "tamper_state.json", "TamperState"],
+  ["artefactStatus", "artefact_status.json", "ArtefactStatus"],
+  ["clinicalNote", "clinical_note.json", "ClinicalNote"],
+  ["patientSummary", "patient_summary.json", "PatientSummary"],
+  ["summaryCheck", "summary_check.json", "SummaryCheck"],
+  ["summaryRef", "summary_ref.json", "SummaryRef"],
+  ["summarySpeak", "summary_speak.json", "SummarySpeak"],
+  ["artefactsStale", "artefacts_stale.json", "ArtefactsStale"],
 ];
 
 const body = entries

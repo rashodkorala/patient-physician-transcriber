@@ -1,0 +1,21 @@
+{
+  "summaryId": "s8e2f1a0b9c3",
+  "attempt": 1,
+  "outcome": "failed",
+  "mismatches": [
+    {
+      "kind": "dose",
+      "expected": "81 ਮਿਲੀਗ੍ਰਾਮ",
+      "found": "810 ਮਿਲੀਗ੍ਰਾਮ",
+      "sourceTurnId": "t1",
+      "problem": "changed"
+    },
+    {
+      "kind": "frequency",
+      "expected": "ਰੋਜ਼ਾਨਾ ਇੱਕ ਵਾਰ",
+      "found": null,
+      "sourceTurnId": "t1",
+      "problem": "missing"
+    }
+  ]
+}

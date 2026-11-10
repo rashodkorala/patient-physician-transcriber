@@ -1,0 +1,23 @@
+{
+  "segmentId": "t2",
+  "amendmentId": "a7c1e9",
+  "result": {
+    "turnId": "a7c1e9",
+    "speaker": "patient",
+    "sourceLanguage": "pa-IN",
+    "targetLanguage": "en-CA",
+    "sourceText": "ਮੈਨੂੰ ਛਾਤੀ ਵਿੱਚ ਦਰਦ ਹੈ।",
+    "translation": "I have pain in my chest.",
+    "backTranslation": "I have chest pain.",
+    "toneTags": [
+      "respectful"
+    ],
+    "emotion": "calm",
+    "certainty": "high",
+    "glossaryUsed": [],
+    "criticalValues": [],
+    "confidence": 0.93,
+    "status": "final",
+    "attempts": 1
+  }
+}

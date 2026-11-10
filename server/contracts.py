@@ -8,6 +8,8 @@
 @implements TDM-002: Presenter mismatch control for the blocked-dose beat
 @implements CDR-005: Consent and explain-back on the visit channel
 @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
+@implements CDR-007: Clinical note with provenance and patient summary on the visit channel
+@implements TDM-005: Hidden record-tamper control for the demo
 @contract ws:/ws/visit
 @contract TurnResult
 @contract TurnCaption
@@ -17,12 +19,19 @@
 @see openspec/tdr/cdr/cdr-004-interpreter-voice-playback-events.md
 @see openspec/tdr/cdr/cdr-005-consent-and-explain-back-events.md
 @see openspec/tdr/cdr/cdr-006-record-entries-review-corrections-and-tamper.md
+@see openspec/tdr/cdr/cdr-007-clinical-note-and-patient-summary.md
+@see openspec/tdr/tdm/tdm-005-hidden-record-tamper-control.md
 """
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
+
+if TYPE_CHECKING:  # the chains import this module, so their result types are named for type checking only
+    from chains import explain_back as eb
+    from chains import note as nt
+    from chains import summary as sm
 
 Language = Literal["pa-IN", "fr-CA", "en-CA", "si-LK", "ta-LK"]
 PatientLanguage = Literal["pa-IN", "fr-CA", "si-LK", "ta-LK"]
@@ -185,10 +194,22 @@ class InterpreterEscalation(Wire):
 
 
 class SegmentAmended(Wire):
+    """segment.amended, every role: a correction applied or a confirmation recorded (CDR-001, extended by CDR-006).
+
+    For `amend`, newText, amendmentId, translation, and entryId are set; for `confirm`, version and entryId.
+    """
+
     segment_id: str
     by: Literal["patient", "physician"]
     action: Literal["confirm", "amend"]
     new_text: str | None = None
+    # CDR-006: optional, so a client built before review corrections ignores them.
+    amendment_id: str | None = None
+    version: str | None = None
+    translation: str | None = None
+    tone_label: ToneLabel | None = None
+    critical_values: list[CaptionCriticalValue] | None = None
+    entry_id: str | None = None
 
 
 class RecordIntegrity(Wire):
@@ -380,6 +401,380 @@ class InjectionStatus(Wire):
     injected_turn_ids: list[str]
 
 
+# ---------- CDR-006: review corrections, confirmations, and the tamper control ----------
+
+SegmentStage = Literal["translating", "verifying", "retrying", "applied", "refused"]
+SEGMENT_TEXT_MAX = 1000
+# A segment's version: "original", or the amendmentId of an applied correction.
+ORIGINAL = "original"
+
+
+class AmendmentEntryBody(Wire):
+    """An applied correction as chained: it points at the turn entry and never edits it."""
+
+    segment_id: str
+    amendment_id: str
+    replaces: str  # "original" or the amendmentId it replaces
+    source_text: str
+    translation: str
+    tone_label: ToneLabel
+    critical_values: list[CaptionCriticalValue]
+    by: Literal["patient"] = "patient"
+
+
+class ConfirmationEntryBody(Wire):
+    """A confirmation as chained: the version of the segment the patient confirmed."""
+
+    segment_id: str
+    version: str
+    by: Literal["patient"] = "patient"
+
+
+class SegmentConfirm(Wire):
+    """segment.confirm, review only: confirm the named version, which must still be current."""
+
+    segment_id: str
+    version: str
+
+
+class SegmentAmend(Wire):
+    """segment.amend, review only: the recognised text of the patient re-speaking one of their own turns."""
+
+    segment_id: str
+    text: str = Field(min_length=1, max_length=SEGMENT_TEXT_MAX)
+    language: PatientLanguage
+    recognition_confidence: float = Field(ge=0, le=1)
+
+
+class SegmentStatus(Wire):
+    """segment.status, every role: one stage of a correction, or its outcome; never any text."""
+
+    segment_id: str
+    amendment_id: str
+    stage: SegmentStage
+    reason: Literal["blocked", "escalated", "failed"] | None = None
+
+
+class SegmentAnalysis(Wire):
+    """segment.analysis, controller only: a correction's full turn graph result."""
+
+    segment_id: str
+    amendment_id: str
+    result: TurnResult
+
+
+class SegmentAmendment(Wire):
+    """One applied correction in a segment's history, as every role sees it."""
+
+    amendment_id: str
+    source_text: str
+    translation: str
+    tone_label: ToneLabel
+    critical_values: list[CaptionCriticalValue]
+    at: str
+    entry_id: str
+
+
+class SegmentAmendmentWithAnalysis(SegmentAmendment):
+    """One applied correction with its full turn graph result: controller only."""
+
+    analysis: TurnResult
+
+
+class SegmentConfirmation(Wire):
+    version: str
+    at: str
+    entry_id: str
+
+
+class SegmentHistory(Wire):
+    """visit.state.segments, every role: a turn with a confirmation or a correction, original first."""
+
+    segment_id: str
+    original: TurnCaption
+    amendments: list[SegmentAmendment]
+    confirmed: SegmentConfirmation | None
+    current: str  # "original" or the latest amendmentId
+
+
+class SegmentHistoryController(SegmentHistory):
+    """visit.state.segments for the controller: each amendment carries its analysis."""
+
+    amendments: list[SegmentAmendmentWithAnalysis]  # type: ignore[assignment]
+
+
+class TamperRecord(Wire):
+    """demo.tamper_record, controller only (TDM-005): alter one turn or amendment entry, once per visit."""
+
+    entry_id: str
+
+
+class TamperState(Wire):
+    """demo.tamper_state, and visit.state.tamper, controller only (TDM-005): the entry the control altered."""
+
+    entry_id: str
+    at: str
+
+
+# ---------- CDR-005: explain-back ----------
+
+ExplainBackStateValue = Literal["listening", "checking", "done", "failed", "cancelled"]
+ExplainBackOutcome = Literal["matched", "missed", "contradicted"]
+ExplainBackKind = Literal["dose", "frequency", "medication", "number", "date", "instruction", "warning", "follow_up"]
+
+
+class ExplainBackRef(Wire):
+    """explainback.check and explainback.cancel, controller only."""
+
+    explain_back_id: str
+
+
+class ExplainBackState(Wire):
+    """explainback.state, and visit.state.explainBack, every role: no text, items, or outcomes."""
+
+    explain_back_id: str
+    state: ExplainBackStateValue
+    explanation_turn_ids: list[str]
+
+
+class ExplainBackItem(Wire):
+    item_id: str
+    kind: ExplainBackKind
+    instruction: str
+    source_turn_ids: list[str]
+    outcome: ExplainBackOutcome
+    decided_by: Literal["code", "model"]
+    expected: str | None = None
+    heard: str | None = None
+    evidence_turn_ids: list[str]
+
+
+class ExplainBackResultBody(Wire):
+    """An explain-back result as chained: ExplainBackResult without entryId."""
+
+    explain_back_id: str
+    plan_head_hash: str
+    explanation_turn_ids: list[str]
+    items: list[ExplainBackItem]
+
+
+class ExplainBackResult(ExplainBackResultBody):
+    """explainback.result, and visit.state.explainBackResults, controller only."""
+
+    entry_id: str
+
+
+def wire_explain_back(result: "eb.ExplainBackResult") -> ExplainBackResult:
+    """The chain's result as sent, field for field; the internal attempt count is not on the wire."""
+    return ExplainBackResult(
+        explain_back_id=result.explain_back_id,
+        plan_head_hash=result.plan_head_hash,
+        explanation_turn_ids=list(result.explanation_turn_ids),
+        items=[
+            ExplainBackItem(
+                item_id=i.item_id,
+                kind=i.kind,
+                instruction=i.instruction,
+                source_turn_ids=list(i.source_turn_ids),
+                outcome=i.outcome,
+                decided_by=i.decided_by,
+                expected=i.expected,
+                heard=i.heard,
+                evidence_turn_ids=list(i.evidence_turn_ids),
+            )
+            for i in result.items
+        ],
+        entry_id=result.entry_id,
+    )
+
+
+# ---------- CDR-007: clinical note and patient summary ----------
+
+ArtefactKind = Literal["note", "summary"]
+ArtefactStage = Literal["generating", "checking", "retrying", "ready", "failed", "refused"]
+ProvenanceTag = Literal["patient_stated", "physician_stated", "companion_stated", "interpreter_stated", "ai_inference"]
+NoteHeading = Literal["Presenting complaint", "History", "Assessment", "Plan", "Follow-up"]
+
+
+class ArtefactStatus(Wire):
+    """note.status (controller only) and summary.status (every role); detail is for controllers only."""
+
+    artefact_id: str
+    kind: ArtefactKind
+    stage: ArtefactStage
+    detail: str | None = None
+
+
+class SourceRef(Wire):
+    """A cited source: a turn at its frozen effective version, or an interpreter line ("original")."""
+
+    kind: Literal["turn", "interpreter_line"]
+    id: str
+    version: str
+
+
+class NoteSentence(Wire):
+    sentence_id: str
+    text: str
+    tag: ProvenanceTag
+    sources: list[SourceRef] = Field(min_length=1)
+
+
+class NoteSection(Wire):
+    heading: NoteHeading
+    sentences: list[NoteSentence]
+
+
+class TagDowngrade(Wire):
+    """A sentence whose stated tag code changed to ai_inference; `from_` is `from` on the wire."""
+
+    sentence_id: str
+    from_: ProvenanceTag = Field(alias="from")
+    to: Literal["ai_inference"] = "ai_inference"
+
+
+class ClinicalNote(Wire):
+    """note.ready, and visit.state.note, controller only: a checked draft the physician remains author of."""
+
+    note_id: str
+    language: Literal["en-CA"]
+    based_on_head: str
+    generated_at: str
+    sections: list[NoteSection]
+    untranslated_turn_ids: list[str]
+    tag_downgrades: list[TagDowngrade]
+
+
+class SummarySentence(Wire):
+    """One summary sentence; its sentenceId is also its speech id, `{summaryId}.{index}`."""
+
+    sentence_id: str
+    index: int = Field(ge=0)
+    text: str
+    sources: list[SourceRef]
+
+
+class SummaryValue(Wire):
+    kind: CriticalKind
+    text: str
+    source_turn_id: str
+
+
+class PatientSummary(Wire):
+    """summary.ready, and visit.state.summary, every role: only ever a summary that passed its value check."""
+
+    summary_id: str
+    language: PatientLanguage
+    based_on_head: str
+    generated_at: str
+    sentences: list[SummarySentence]
+    values: list[SummaryValue]
+    check: Literal["passed"] = "passed"
+
+
+class SummaryMismatch(Wire):
+    kind: CriticalKind
+    expected: str
+    found: str | None
+    source_turn_id: str | None
+    problem: Literal["changed", "missing", "unsupported"]
+
+
+class SummaryCheck(Wire):
+    """summary.check, and visit.state.summaryChecks, controller only: every check outcome and the values compared."""
+
+    summary_id: str
+    attempt: Literal[1, 2]
+    outcome: Literal["passed", "failed"]
+    mismatches: list[SummaryMismatch]
+
+
+class SummaryRef(Wire):
+    """summary.read_aloud and summary.stop, from review or the controller."""
+
+    summary_id: str
+
+
+class SummarySpeak(Wire):
+    """summary.speak, controller only: play the named sentence ids in order, or stop."""
+
+    summary_id: str
+    action: Literal["play", "stop"]
+    speech_ids: list[str]
+
+
+class ArtefactsStale(Wire):
+    """artefacts.stale, every role: the chain grew after the current note or summary; note is false for screens."""
+
+    note: bool
+    summary: bool
+    head_hash: str
+
+
+def _refs(refs) -> list[SourceRef]:
+    return [SourceRef(kind=r.kind, id=r.id, version=r.version) for r in refs]
+
+
+def wire_note(note: "nt.ClinicalNote") -> ClinicalNote:
+    """The chain's note as sent, field for field; TagDowngrade.from_ goes out as `from`, attempts stays internal."""
+    return ClinicalNote(
+        note_id=note.note_id,
+        language=note.language,
+        based_on_head=note.based_on_head,
+        generated_at=note.generated_at,
+        sections=[
+            NoteSection(
+                heading=section.heading,
+                sentences=[
+                    NoteSentence(sentence_id=s.sentence_id, text=s.text, tag=s.tag, sources=_refs(s.sources))
+                    for s in section.sentences
+                ],
+            )
+            for section in note.sections
+        ],
+        untranslated_turn_ids=list(note.untranslated_turn_ids),
+        tag_downgrades=[TagDowngrade(sentence_id=d.sentence_id, from_=d.from_, to=d.to) for d in note.tag_downgrades],
+    )
+
+
+def wire_summary(summary: "sm.PatientSummary") -> PatientSummary:
+    """The chain's passed summary as sent, field for field."""
+    return PatientSummary(
+        summary_id=summary.summary_id,
+        language=summary.language,  # type: ignore[arg-type]
+        based_on_head=summary.based_on_head,
+        generated_at=summary.generated_at,
+        sentences=[
+            SummarySentence(sentence_id=s.sentence_id, index=s.index, text=s.text, sources=_refs(s.sources))
+            for s in summary.sentences
+        ],
+        values=[
+            SummaryValue(kind=v.kind, text=v.text, source_turn_id=v.source_turn_id)  # type: ignore[arg-type]
+            for v in summary.values
+        ],
+        check=summary.check,
+    )
+
+
+def wire_summary_check(check: "sm.SummaryCheck") -> SummaryCheck:
+    """The chain's check as sent; its internal `problems` reach controllers only through ArtefactStatus.detail."""
+    return SummaryCheck(
+        summary_id=check.summary_id,
+        attempt=check.attempt,  # type: ignore[arg-type]
+        outcome=check.outcome,
+        mismatches=[
+            SummaryMismatch(
+                kind=m.kind,  # type: ignore[arg-type]
+                expected=m.expected,
+                found=m.found,
+                source_turn_id=m.source_turn_id,
+                problem=m.problem,
+            )
+            for m in check.mismatches
+        ],
+    )
+
+
 class CurrentTurnPublic(Wire):
     turn_id: str
     speaker: Speaker
@@ -410,6 +805,17 @@ class VisitStateController(Wire):
     interpreter_open: bool = False
     injection: InjectionStatus | None = None
     escalations: list[EscalationEntry] = Field(default_factory=list)
+    segments: list[SegmentHistoryController] = Field(default_factory=list)
+    tamper: TamperState | None = None
+    # CDR-005 explain-back: the latest one's state for every role; the results are controller only.
+    explain_back: ExplainBackState | None = None
+    explain_back_results: list[ExplainBackResult] = Field(default_factory=list)
+    # CDR-007: the note and every summary check are controller only; only a passed summary is ever held.
+    note: ClinicalNote | None = None
+    note_stale: bool = False
+    summary_checks: list[SummaryCheck] = Field(default_factory=list)
+    summary: PatientSummary | None = None
+    summary_stale: bool = False
 
 
 class VisitStatePublic(Wire):
@@ -431,6 +837,12 @@ class VisitStatePublic(Wire):
     consent_state: ConsentState | None = None
     # CDR-006: optional, for every role.
     interpreter_open: bool = False
+    segments: list[SegmentHistory] = Field(default_factory=list)
+    # CDR-005: the latest explain-back's state only, never its result.
+    explain_back: ExplainBackState | None = None
+    # CDR-007: only a summary that passed its value check.
+    summary: PatientSummary | None = None
+    summary_stale: bool = False
 
 
 # ---------- CDR-001 commands ----------
@@ -532,6 +944,14 @@ CONTROLLER_ONLY_EVENTS = frozenset(
         "visit.name_proposed",
         "consent.speak",
         "error",
+        # CDR-005, CDR-006, TDM-005, and CDR-007.
+        "explainback.result",
+        "segment.analysis",
+        "demo.tamper_state",
+        "note.status",
+        "note.ready",
+        "summary.check",
+        "summary.speak",
     }
 )
 
@@ -553,8 +973,26 @@ CONTROLLER_COMMANDS = frozenset(
         "demo.inject_mismatch",
         "demo.cancel_injection",
         "interpreter.dismiss",
+        # CDR-005, TDM-005, and CDR-007.
+        "explainback.start",
+        "explainback.check",
+        "explainback.cancel",
+        "demo.tamper_record",
+        "note.generate",
+        "summary.generate",
     }
 )
 
 # CDR-005: commands the patient's review screen or the controller may send; a screen's copy is dropped.
-REVIEW_OR_CONTROLLER_COMMANDS = frozenset({"consent.give", "consent.withdraw", "consent.read_aloud"})
+# CDR-007 adds the summary's read-aloud and stop.
+REVIEW_OR_CONTROLLER_COMMANDS = frozenset(
+    {"consent.give", "consent.withdraw", "consent.read_aloud", "summary.read_aloud", "summary.stop"}
+)
+
+# CDR-006: commands only the patient's review screen may send; a controller copy is refused with `error`,
+# and a screen copy is refused silently (a screen never receives `error` or `command.refused`).
+REVIEW_COMMANDS = frozenset({"segment.confirm", "segment.amend"})
+
+# CDR-007: events whose payload differs by role. summary.status loses `detail`, and artefacts.stale always says
+# `note: false`, for screen and review connections.
+ROLE_SHAPED_EVENTS = frozenset({"summary.status", "artefacts.stale"})

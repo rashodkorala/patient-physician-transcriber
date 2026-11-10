@@ -1,0 +1,54 @@
+{
+  "explainBackId": "eb41c07d92aa",
+  "planHeadHash": "9f2c4e1a7b3d5f6081a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
+  "explanationTurnIds": [
+    "t5",
+    "t6"
+  ],
+  "items": [
+    {
+      "itemId": "eb41c07d92aa-c0",
+      "kind": "dose",
+      "instruction": "Take metformin 500 milligrams twice a day",
+      "sourceTurnIds": [
+        "t1"
+      ],
+      "outcome": "matched",
+      "decidedBy": "code",
+      "expected": "500 mg",
+      "heard": "500 mg",
+      "evidenceTurnIds": [
+        "t5"
+      ]
+    },
+    {
+      "itemId": "eb41c07d92aa-c1",
+      "kind": "frequency",
+      "instruction": "Take metformin 500 milligrams twice a day",
+      "sourceTurnIds": [
+        "t1"
+      ],
+      "outcome": "missed",
+      "decidedBy": "code",
+      "expected": "2 times per day",
+      "heard": null,
+      "evidenceTurnIds": []
+    },
+    {
+      "itemId": "eb41c07d92aa-m0",
+      "kind": "instruction",
+      "instruction": "Take it with food",
+      "sourceTurnIds": [
+        "t1"
+      ],
+      "outcome": "matched",
+      "decidedBy": "model",
+      "expected": null,
+      "heard": null,
+      "evidenceTurnIds": [
+        "t6"
+      ]
+    }
+  ],
+  "entryId": "eb41c07d92aa"
+}

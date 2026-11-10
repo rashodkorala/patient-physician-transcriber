@@ -1,0 +1,12 @@
+{
+  "segmentId": "t2",
+  "by": "patient",
+  "action": "amend",
+  "newText": "ਮੈਨੂੰ ਛਾਤੀ ਵਿੱਚ ਦਰਦ ਹੈ।",
+  "amendmentId": "a7c1e9",
+  "version": null,
+  "translation": "I have pain in my chest.",
+  "toneLabel": "respectful",
+  "criticalValues": [],
+  "entryId": "a7c1e9"
+}
