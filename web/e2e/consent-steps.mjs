@@ -27,6 +27,15 @@ export async function chooseLanguage(control, language) {
   );
 }
 
+/** Give consent by the patient's own tap on /review (CDR-005: recorded as by the patient), unless already given. */
+export async function giveConsentOnReview(review) {
+  await review.waitForSelector('[data-testid="connection"][data-state="open"]', { timeout: 15000 });
+  await review.waitForTimeout(300); // the first visit.state decides whether the consent block shows
+  if (!(await review.locator('[data-testid="review-consent"]').count())) return;
+  await review.click('[data-testid="review-consent-give"]');
+  await review.waitForSelector('[data-testid="review-consent"]', { state: "detached", timeout: 15000 });
+}
+
 /** Give consent over a raw controller socket ({ next, send }), using the notice in its first visit.state. */
 export async function giveConsentOnSocket({ next, send }, state) {
   if (state.consent) return;
