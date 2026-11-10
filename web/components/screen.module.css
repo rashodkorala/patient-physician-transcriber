@@ -69,6 +69,23 @@
 /* CDR-005: the consent notice is long, so it reads a size below a caption, still at 3 metres. */
 .consent .text { font-size: clamp(22px, 1.9vw, 38px); line-height: 1.35; }
 .consent .side + .side .text { color: var(--muted); }
+/* CDR-007: the summary spans the row in the patient's language; the sentence being read aloud is inked in. */
+.summary .side:only-child .text, .summary .sentences { max-width: none; }
+.sentences {
+  display: grid; gap: 0.4vh; margin: 1.4vh 0 0; padding: 0; list-style: none; counter-reset: sentence;
+  font-size: clamp(22px, 2vw, 40px); font-weight: 300; line-height: 1.35;
+}
+.sentences li {
+  counter-increment: sentence; display: grid; grid-template-columns: 2em 1fr; gap: 0.4em;
+  padding: 0.25em 0.4em 0.25em 0; border-radius: 0.2em; transition: background 0.2s, color 0.2s;
+}
+.sentences li::before {
+  content: counter(sentence); padding-top: 0.5em; text-align: right; color: var(--muted);
+  font-size: 0.45em; font-weight: 500; letter-spacing: 0.1em; font-variant-numeric: tabular-nums;
+}
+.playing { background: var(--text); color: var(--bg); }
+.playing::before { color: inherit !important; opacity: 0.7; }
+.playing .value { background: var(--bg); color: var(--text); }
 /* CDR-006: the turn the record names as broken keeps its words and gains a signal rule down its side. */
 .broken { box-shadow: inset 3px 0 0 var(--signal); padding-left: 2vw; }
 .lang { font-family: var(--serif); font-style: italic; color: var(--muted); font-size: clamp(16px, 1.2vw, 24px); }

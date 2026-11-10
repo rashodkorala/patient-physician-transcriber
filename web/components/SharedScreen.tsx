@@ -11,12 +11,19 @@
  * @implements CDR-005: Consent and explain-back on the visit channel
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
  * @implements IDR-003: SHA-256 hash chain for the record-verified badge
+ * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
  * @contract TurnCaption
  */
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type {
+  ArtefactsStale,
+  ArtefactStatus,
   ConsentNotice,
+  ExplainBackState,
+  PatientSummary,
+  SegmentAmended,
+  SegmentHistory,
   ConsentState,
   Envelope,
   InterpreterEscalation,
@@ -39,6 +46,7 @@ import {
   bilingual,
 } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
+import { applyAmended, brokenEntryLabel, summaryIndexOf, turnOfEntry } from "@/lib/record";
 import { type ConnectionState, useVisitSocket } from "@/lib/socket";
 import Highlighted from "./Highlighted";
 import Orb, { type OrbMode } from "./Orb";
@@ -211,6 +219,103 @@ function ConsentNoticeRow({ notice }: { notice: ConsentNotice }) {
   );
 }
 
+/** CDR-005: a prompt for the patient while an explain-back listens, in both languages; never an outcome. */
+function ExplainBackPrompt({
+  state,
+  patient,
+  physician,
+}: {
+  state: ExplainBackState["state"];
+  patient: Language;
+  physician: Language;
+}) {
+  const key: NoticeKey = state === "listening" ? "explainBackListening" : "explainBackChecking";
+  return (
+    <article
+      className={`${styles.turn} ${styles.interpreter} ${styles.escalation}`}
+      data-testid="explainback-prompt"
+      data-state={state}
+    >
+      {bilingual(key, patient, physician).map(({ lang, text }) => (
+        <div key={lang} className={styles.side} lang={lang}>
+          <div className={styles.meta}>
+            <span className={styles.speaker}>Interpreter</span>
+            <span className={styles.lang}>{LANGUAGE_LABELS[lang].own}</span>
+          </div>
+          <p className={styles.text}>{text}</p>
+        </div>
+      ))}
+    </article>
+  );
+}
+
+/**
+ * CDR-007: the patient's summary, only once it passed its value check, in the patient's language; the sentence
+ * being read aloud is inked in. Before that, a quiet line that it is being prepared, or that it is not ready.
+ */
+function SummaryRow({
+  summary,
+  stage,
+  stale,
+  playing,
+  patient,
+  physician,
+}: {
+  summary: PatientSummary | null;
+  stage: ArtefactStatus["stage"] | null;
+  stale: boolean;
+  playing: number | null;
+  patient: Language;
+  physician: Language;
+}) {
+  if (!summary) {
+    const key: NoticeKey = stage === "refused" ? "summaryRefused" : "summaryPreparing";
+    return (
+      <article className={`${styles.turn} ${styles.interpreter}`} data-testid="summary" data-state={stage ?? undefined}>
+        {bilingual(key, patient, physician).map(({ lang, text }) => (
+          <div key={lang} className={styles.side} lang={lang}>
+            <div className={styles.meta}>
+              <span className={styles.speaker}>Summary</span>
+              <span className={styles.lang}>{LANGUAGE_LABELS[lang].own}</span>
+            </div>
+            <p className={styles.text}>{text}</p>
+          </div>
+        ))}
+      </article>
+    );
+  }
+  return (
+    <article className={`${styles.turn} ${styles.interpreter} ${styles.summary}`} data-testid="summary" data-state="ready">
+      <div className={styles.side} lang={summary.language}>
+        <div className={styles.meta}>
+          <span className={styles.speaker}>Summary</span>
+          <span className={styles.lang}>{LANGUAGE_LABELS[summary.language].own}</span>
+          {stale && (
+            <span className={styles.tag} data-testid="summary-stale">
+              Record changed since
+            </span>
+          )}
+        </div>
+        <ol className={styles.sentences}>
+          {[...summary.sentences]
+            .sort((a, b) => a.index - b.index)
+            .map((s) => (
+              <li
+                key={s.sentenceId}
+                className={playing === s.index ? styles.playing : undefined}
+                data-playing={playing === s.index || undefined}
+              >
+                <span>
+                  <Highlighted text={s.text} values={summary.values.map((v) => v.text)} className={styles.value} />
+                </span>
+              </li>
+            ))}
+        </ol>
+      </div>
+    </article>
+  );
+}
+
 function nameOf(speaker: Speaker, names: Names): string | null {
   if (speaker === "physician") return names.physicianName ?? null;
   if (speaker === "patient") return names.patientName ?? null;
@@ -367,6 +472,13 @@ export default function SharedScreen() {
   const [notice, setNotice] = useState<ConsentNotice | null>(null);
   const [consent, setConsent] = useState<ConsentState | null>(null);
   const [integrity, setIntegrity] = useState<RecordIntegrity | null>(null);
+  // CDR-005: the explain-back's state only; CDR-006: corrections, to name a broken correction; CDR-007: the summary.
+  const [explainBack, setExplainBack] = useState<ExplainBackState | null>(null);
+  const [segments, setSegments] = useState<SegmentHistory[]>([]);
+  const captionsRef = useRef<TurnCaption[]>([]);
+  const [summary, setSummary] = useState<PatientSummary | null>(null);
+  const [summaryStage, setSummaryStage] = useState<ArtefactStatus["stage"] | null>(null);
+  const [summaryStale, setSummaryStale] = useState(false);
 
   const startCall = useCallback(() => {
     callTimers.current.forEach(clearTimeout);
@@ -392,6 +504,11 @@ export default function SharedScreen() {
         setPaused(state.paused);
         setLanguages({ patient: state.patientLanguage, physician: state.physicianLanguage });
         setCaptions(state.turns);
+        captionsRef.current = state.turns;
+        setExplainBack(state.explainBack ?? null);
+        setSegments(state.segments ?? []);
+        setSummary(state.summary ?? null);
+        setSummaryStale(Boolean(state.summaryStale));
         setNames({ physicianName: state.physicianName ?? null, patientName: state.patientName ?? null });
         setSpeaking(state.speaking ?? null);
         setNotice(state.consentNotice ?? null);
@@ -436,7 +553,11 @@ export default function SharedScreen() {
         break;
       case "turn.result": {
         const caption = event.payload as TurnCaption;
-        setCaptions((prev) => [...prev.filter((c) => c.turnId !== caption.turnId), caption]);
+        setCaptions((prev) => {
+          const next = [...prev.filter((c) => c.turnId !== caption.turnId), caption];
+          captionsRef.current = next;
+          return next;
+        });
         setPending((p) => (p && p.turnId === caption.turnId ? null : p));
         break;
       }
@@ -466,6 +587,29 @@ export default function SharedScreen() {
       case "record.integrity":
         setIntegrity(event.payload as RecordIntegrity);
         break;
+      case "explainback.state":
+        setExplainBack(event.payload as ExplainBackState);
+        break;
+      case "segment.amended": {
+        const amended = event.payload as SegmentAmended;
+        setSegments((all) =>
+          applyAmended(all, amended, (id) => captionsRef.current.find((c) => c.turnId === id) ?? null, event.ts),
+        );
+        break;
+      }
+      case "summary.status": {
+        const status = event.payload as ArtefactStatus;
+        if (status.kind === "summary") setSummaryStage(status.stage);
+        break;
+      }
+      case "summary.ready":
+        setSummary(event.payload as PatientSummary);
+        setSummaryStage("ready");
+        setSummaryStale(false);
+        break;
+      case "artefacts.stale":
+        setSummaryStale((event.payload as ArtefactsStale).summary);
+        break;
     }
   }, [startCall, closeInterpreter]);
 
@@ -475,12 +619,26 @@ export default function SharedScreen() {
   // A block body: newer browsers return a Promise from scrollIntoView, which React would call as a cleanup.
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
-  }, [captions, pending, lines, speaking, interpreter, paused, consent]);
+  }, [captions, pending, lines, speaking, interpreter, paused, consent, explainBack, summary, summaryStage]);
 
   // CDR-005: until consent is given, and again once it is withdrawn, the notice stands in for "ready".
   const consented = consent?.state === "given";
   const brokenAt = integrity?.status === "broken" ? (integrity.brokenAt ?? null) : null;
-  const brokenTurn = brokenAt ? captions.findIndex((c) => c.turnId === brokenAt) : -1;
+  const brokenTurnId = turnOfEntry(brokenAt, segments);
+  const where = brokenEntryLabel(
+    brokenAt,
+    captions.map((c) => c.turnId),
+    segments,
+    { consent: consent ? [consent.entryId] : [], summary: summary ? [summary.summaryId] : [] },
+  );
+  const listening = explainBack && (explainBack.state === "listening" || explainBack.state === "checking");
+  const summaryShown =
+    summary !== null ||
+    summaryStage === "generating" ||
+    summaryStage === "checking" ||
+    summaryStage === "retrying" ||
+    summaryStage === "refused";
+  const playing = summary ? summaryIndexOf(summary.summaryId, speaking?.speaking ? speaking.speechId : null) : null;
 
   return (
     <main className={styles.screen}>
@@ -492,7 +650,7 @@ export default function SharedScreen() {
         <div className={styles.barEnd}>
           <RecordBadge
             integrity={integrity}
-            where={brokenTurn >= 0 ? `turn ${brokenTurn + 1}` : null}
+            where={where}
             className={styles.badge}
           />
           <span className={styles.status} data-testid="connection" data-state={state}>
@@ -508,12 +666,25 @@ export default function SharedScreen() {
           <>
             {captions.length === 0 && lines.slice(-3).map((line) => <Line key={line.lineId} line={line} />)}
             {captions.slice(-6).map((c) => (
-              <Caption key={c.turnId} c={c} names={names} broken={c.turnId === brokenAt} />
+              <Caption key={c.turnId} c={c} names={names} broken={c.turnId === brokenTurnId} />
             ))}
             {interpreter && (
               <InterpreterNotice phase={interpreter} patient={languages.patient} physician={languages.physician} />
             )}
             {!consented && notice && <ConsentNoticeRow notice={notice} />}
+            {consented && listening && (
+              <ExplainBackPrompt state={explainBack.state} patient={languages.patient} physician={languages.physician} />
+            )}
+            {summaryShown && (
+              <SummaryRow
+                summary={summary}
+                stage={summaryStage}
+                stale={summaryStale}
+                playing={playing}
+                patient={languages.patient}
+                physician={languages.physician}
+              />
+            )}
             {speaking?.speaking && <Speaking language={speaking.language} />}
             {consented && pending && <PendingTurn p={pending} names={names} other={other} />}
             {consented &&

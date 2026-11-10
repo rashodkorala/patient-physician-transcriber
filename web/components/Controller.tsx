@@ -2,7 +2,7 @@
 
 /**
  * Physician controller: languages, names, push-to-talk, hands-free listening, typed fallback, read-back, nudges,
- * turns, and latency.
+ * explain-back, the note and summary, the presenter controls, turns, and latency.
  *
  * @implements IDR-001: Push-to-talk per speaker instead of diarisation
  * @implements IDR-004: Hands-free continuous listening, with the speaker found by spoken language
@@ -16,11 +16,16 @@
  * @implements CDR-005: Consent and explain-back on the visit channel
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
  * @implements IDR-003: SHA-256 hash chain for the record-verified badge
+ * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
+ * @implements TDM-005: Hidden record-tamper control for the demo
  * @contract ws:/ws/visit
  */
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type {
+  ArtefactsStale,
+  ArtefactStatus,
+  ClinicalNote,
   ConsentNotice,
   ConsentSpeak,
   ConsentState,
@@ -31,6 +36,8 @@ import type {
   ErrorPayload,
   EscalationEntry,
   EscalationReason,
+  ExplainBackResult,
+  ExplainBackState,
   InterpreterDismissed,
   InterpreterEscalation,
   InterpreterLine,
@@ -40,8 +47,14 @@ import type {
   NameRole,
   Names,
   PatientLanguage,
+  PatientSummary,
   RecordIntegrity,
+  SegmentAmended,
+  SegmentHistory,
   Speaker,
+  SummaryCheck,
+  SummarySpeak,
+  TamperState,
   ToneLabel,
   TurnCaption,
   TurnRef,
@@ -54,22 +67,27 @@ import { NAME_MAX } from "@/lib/contracts";
 import { INTERPRETER_CONNECTING_MS, INTERPRETER_SIMULATED_MS, type InterpreterPhase } from "@/lib/i18n";
 import { LANGUAGE_LABELS, RECOGNITION, ROADMAP } from "@/lib/languages";
 import { type ListeningState, type Side, VOICE_TAIL_MS, isShortReply, listeningState, sideFor } from "@/lib/listening";
-import { type LatencyRow, median, segments, toCsv } from "@/lib/latency";
+import { type LatencyRow, median, segments as latencySegments, toCsv } from "@/lib/latency";
 import { serverHttpUrl, useVisitSocket } from "@/lib/socket";
+import { applyAmended, brokenEntryLabel, captionOf, effective, isConfirmed, summaryIndexOf, summaryReading, turnOfEntry } from "@/lib/record";
 import { playbackMessages } from "@/lib/speaking";
 import {
   type Capture,
   type Heard,
   type Listening,
+  SpeechStopped,
   current,
   onSpeaking,
   speak,
   startCapture,
   startListening,
+  stopSpeaking,
   warmUp,
 } from "@/lib/speech";
 import styles from "./controller.module.css";
+import ExplainBackPanel from "./ExplainBackPanel";
 import Highlighted from "./Highlighted";
+import NoteSummaryPanel from "./NoteSummaryPanel";
 import RecordBadge from "./RecordBadge";
 
 const TONE_LABELS: ToneLabel[] = ["respectful", "reassuring", "empathetic", "neutral"];
@@ -265,6 +283,23 @@ export default function Controller() {
   const [integrity, setIntegrity] = useState<RecordIntegrity | null>(null);
   const [escalations, setEscalations] = useState<EscalationEntry[]>([]);
   const interpreterOpen = useRef(false);
+  // CDR-005: the latest explain-back's state, and every result (private to the physician).
+  const [explainBack, setExplainBack] = useState<ExplainBackState | null>(null);
+  const [explainBackResults, setExplainBackResults] = useState<ExplainBackResult[]>([]);
+  // CDR-006: corrections and confirmations from the review screen; TDM-005: the entry the tamper control altered.
+  const [segments, setSegments] = useState<SegmentHistory[]>([]);
+  const [tamper, setTamper] = useState<TamperState | null>(null);
+  const turnsRef = useRef<TurnResult[]>([]);
+  // CDR-007: the note (read in /record) and the summary, with their progress, checks, and stale flags.
+  const [note, setNote] = useState<ClinicalNote | null>(null);
+  const [noteStale, setNoteStale] = useState(false);
+  const [noteStatus, setNoteStatus] = useState<ArtefactStatus | null>(null);
+  const [summary, setSummary] = useState<PatientSummary | null>(null);
+  const [summaryStale, setSummaryStale] = useState(false);
+  const [summaryStatus, setSummaryStatus] = useState<ArtefactStatus | null>(null);
+  const [summaryChecks, setSummaryChecks] = useState<SummaryCheck[]>([]);
+  const summaryRef = useRef<PatientSummary | null>(null);
+  const [tamperTarget, setTamperTarget] = useState("");
 
   const physicianLanguage: Language = "en-CA";
   const languageOf = (speaker: Speaker): Language => (speaker === "physician" ? physicianLanguage : patientLanguage);
@@ -345,6 +380,92 @@ export default function Controller() {
         if (state.injection) {
           setInjected(new Set(state.injection.injectedTurnIds));
           setInjection((current) => (state.injection?.state === "armed" ? "armed" : current === "armed" ? null : current));
+        }
+        turnsRef.current = state.turns;
+        setExplainBack(state.explainBack ?? null);
+        setExplainBackResults(state.explainBackResults ?? []);
+        setSegments(state.segments ?? []);
+        setTamper(state.tamper ?? null);
+        setNote(state.note ?? null);
+        setNoteStale(Boolean(state.noteStale));
+        summaryRef.current = state.summary ?? null;
+        setSummary(state.summary ?? null);
+        setSummaryStale(Boolean(state.summaryStale));
+        setSummaryChecks(state.summaryChecks ?? []);
+        break;
+      }
+      case "explainback.state":
+        setExplainBack(event.payload as ExplainBackState);
+        break;
+      case "explainback.result": {
+        const result = event.payload as ExplainBackResult;
+        setExplainBackResults((all) => [...all.filter((r) => r.explainBackId !== result.explainBackId), result]);
+        break;
+      }
+      case "segment.amended": {
+        const amended = event.payload as SegmentAmended;
+        setSegments((all) =>
+          applyAmended(
+            all,
+            amended,
+            (id) => {
+              const turn = turnsRef.current.find((t) => t.turnId === id);
+              return turn ? captionOf(turn) : null;
+            },
+            event.ts,
+          ),
+        );
+        break;
+      }
+      case "demo.tamper_state":
+        setTamper(event.payload as TamperState);
+        break;
+      case "note.status":
+        setNoteStatus(event.payload as ArtefactStatus);
+        break;
+      case "note.ready":
+        setNote(event.payload as ClinicalNote);
+        setNoteStale(false);
+        break;
+      case "summary.status":
+        setSummaryStatus(event.payload as ArtefactStatus);
+        break;
+      case "summary.check": {
+        const check = event.payload as SummaryCheck;
+        setSummaryChecks((all) => [...all, check]);
+        break;
+      }
+      case "summary.ready": {
+        const ready = event.payload as PatientSummary;
+        summaryRef.current = ready;
+        setSummary(ready);
+        setSummaryStale(false);
+        break;
+      }
+      case "artefacts.stale": {
+        const stale = event.payload as ArtefactsStale;
+        setNoteStale(stale.note);
+        setSummaryStale(stale.summary);
+        break;
+      }
+      case "summary.speak": {
+        // CDR-007: the patient or physician asked; this controller is the only voice, a sentence at a time.
+        const request = event.payload as SummarySpeak;
+        if (request.action === "stop") {
+          // A stop may name no sentences: it then stops every sentence of that summary.
+          const named = new Set(request.speechIds);
+          stopSpeaking((id) => named.has(id) || summaryIndexOf(request.summaryId, id) !== null);
+          break;
+        }
+        const current = summaryRef.current;
+        if (!current || current.summaryId !== request.summaryId) break;
+        const texts = new Map(summaryReading(current).map((s) => [s.speechId, s.text]));
+        for (const speechId of request.speechIds) {
+          const text = texts.get(speechId);
+          if (!text) continue;
+          speak(text, current.language, speechId).catch((error: Error) => {
+            if (!(error instanceof SpeechStopped)) setNotice(`Summary not spoken: ${error.message}`);
+          });
         }
         break;
       }
@@ -427,7 +548,11 @@ export default function Controller() {
       case "turn.analysis": {
         const result = event.payload as TurnResult;
         updateLatency(result.turnId, { analysisAt: Date.now() });
-        setTurns((prev) => [...prev.filter((t) => t.turnId !== result.turnId), result]);
+        setTurns((prev) => {
+          const next = [...prev.filter((t) => t.turnId !== result.turnId), result];
+          turnsRef.current = next;
+          return next;
+        });
         lastTurn.current = result.turnId;
         if (result.status === "blocked") {
           setNotice("Blocked: a value changed in translation. Ask the speaker to repeat or rephrase.");
@@ -726,7 +851,7 @@ export default function Controller() {
   const decideReadback = (turnId: string, confirmed: boolean) =>
     send(confirmed ? "turn.readback_confirm" : "turn.readback_reject", { turnId });
 
-  const measured = latency.map(segments).filter((s) => s.totalMs !== undefined);
+  const measured = latency.map(latencySegments).filter((s) => s.totalMs !== undefined);
   const medianMs = median(measured.map((s) => s.totalMs));
   const breakdown = [
     { label: "Recognition", ms: median(measured.map((s) => s.recognitionMs)) },
@@ -755,12 +880,33 @@ export default function Controller() {
 
   /** The entry record.integrity names as broken, in words: a turn by its number in the log, or what else it is. */
   const brokenAt = integrity?.status === "broken" ? (integrity.brokenAt ?? null) : null;
-  const brokenTurn = brokenAt ? turns.findIndex((t) => t.turnId === brokenAt) : -1;
-  let brokenWhere: string | null = null;
-  if (brokenTurn >= 0) brokenWhere = `turn ${brokenTurn + 1}`;
-  else if (brokenAt && brokenAt === consentState?.entryId) brokenWhere = "consent";
-  else if (brokenAt && escalations.some((e) => e.entryId === brokenAt)) brokenWhere = "interpreter entry";
-  else if (brokenAt) brokenWhere = "an earlier entry";
+  const brokenWhere = brokenEntryLabel(
+    brokenAt,
+    turns.map((t) => t.turnId),
+    segments,
+    {
+      consent: consentState ? [consentState.entryId] : [],
+      interpreter: escalations.map((e) => e.entryId),
+      explainBack: explainBackResults.map((r) => r.entryId),
+      summary: summary ? [summary.summaryId] : [],
+    },
+  );
+  // The turn a broken or tampered entry belongs to: the turn itself, or the turn a correction amends.
+  const brokenTurnId = turnOfEntry(brokenAt, segments);
+  const tamperedTurnId = turnOfEntry(tamper?.entryId, segments);
+  // TDM-005: the entries the tamper control may alter: settled turns, and applied corrections.
+  const tamperTargets = [
+    ...turns
+      .map((t, i) => ({ entryId: t.turnId, label: `Turn ${i + 1} · ${t.speaker} · ${t.sourceText}` }))
+      .filter((t) => t.entryId !== pendingReadback),
+    ...segments.flatMap((h) =>
+      h.amendments.map((a) => ({
+        entryId: a.amendmentId,
+        label: `Turn ${turns.findIndex((t) => t.turnId === h.segmentId) + 1} correction · ${a.sourceText}`,
+      })),
+    ),
+  ];
+  const target = tamperTargets.some((t) => t.entryId === tamperTarget) ? tamperTarget : (tamperTargets.at(-1)?.entryId ?? "");
 
   const readbackTurn = turns.find((t) => t.turnId === pendingReadback);
   const nudge = [...nudges].reverse().find((n) => !dismissed.has(n.turnId));
@@ -1145,6 +1291,14 @@ export default function Controller() {
             )}
           </section>
 
+          <ExplainBackPanel
+            state={explainBack}
+            results={explainBackResults}
+            turns={turns}
+            ready={state === "open" && consented && !paused && !pendingReadback}
+            send={send}
+          />
+
           {readbackTurn && (
             <section className={styles.readback} data-testid="readback" aria-live="assertive">
               <h2 className={styles.eyebrow}>Read-back · check the values before they are spoken</h2>
@@ -1229,6 +1383,19 @@ export default function Controller() {
             )}
           </section>
 
+          <NoteSummaryPanel
+            open={state === "open"}
+            note={note}
+            noteStale={noteStale}
+            noteStatus={noteStatus}
+            summary={summary}
+            summaryStale={summaryStale}
+            summaryStatus={summaryStatus}
+            summaryChecks={summaryChecks}
+            turns={turns}
+            send={send}
+          />
+
           {/* TDM-002: folded away so it is never pressed by accident; its state shows on the fold itself. */}
           <details className={styles.presenter} data-testid="presenter">
             <summary>
@@ -1236,6 +1403,11 @@ export default function Controller() {
               {injection === "armed" && (
                 <span className={`${styles.tag} ${styles.stop}`} data-testid="injection-state">
                   mismatch armed
+                </span>
+              )}
+              {tamper && (
+                <span className={`${styles.tag} ${styles.stop}`} data-testid="tamper-fold-state">
+                  record altered
                 </span>
               )}
             </summary>
@@ -1266,6 +1438,44 @@ export default function Controller() {
                   >
                     Arm mismatch
                   </button>
+                )}
+              </div>
+              {/* TDM-005: once per visit; the badge turns from the server's own verification, never from here. */}
+              <div className={styles.tamper} data-testid="tamper" data-state={tamper ? "fired" : "ready"}>
+                <p className={styles.aside}>
+                  Tamper control for the record beat: alters one stored turn without rehashing it, once per visit. The
+                  TV shows only the broken badge.
+                </p>
+                {tamper ? (
+                  <p className={styles.injection} data-state="fired" data-testid="tamper-state">
+                    Altered {brokenEntryLabel(tamper.entryId, turns.map((t) => t.turnId), segments) ?? "an entry"} at{" "}
+                    {clock(tamper.at)}. Start a new visit to use it again.
+                  </p>
+                ) : (
+                  <div className={styles.tamperRow}>
+                    <select
+                      data-testid="tamper-target"
+                      aria-label="Entry to alter"
+                      value={target}
+                      disabled={!tamperTargets.length}
+                      onChange={(e) => setTamperTarget(e.target.value)}
+                    >
+                      {tamperTargets.length === 0 && <option value="">No settled turn yet</option>}
+                      {tamperTargets.map((t) => (
+                        <option key={t.entryId} value={t.entryId}>
+                          {t.label.length > 72 ? `${t.label.slice(0, 71)}…` : t.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className={styles.secondary}
+                      data-testid="tamper-fire"
+                      disabled={state !== "open" || !target}
+                      onClick={() => send("demo.tamper_record", { entryId: target })}
+                    >
+                      Alter record
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -1305,7 +1515,10 @@ export default function Controller() {
                 const unspoken =
                   t.status === "blocked" || t.status === "escalated" || outcome.discarded || outcome.voiceFailed;
                 const wasInjected = injected.has(t.turnId);
-                const altered = t.turnId === brokenAt;
+                const altered = t.turnId === brokenTurnId;
+                const tampered = t.turnId === tamperedTurnId;
+                const history = segments.find((h) => h.segmentId === t.turnId);
+                const now = effective(t, history);
                 return [
                   <li
                     key={t.turnId}
@@ -1313,6 +1526,7 @@ export default function Controller() {
                     data-status={t.status}
                     data-injected={wasInjected || undefined}
                     data-broken={altered || undefined}
+                    data-tampered={tampered || undefined}
                   >
                     <div className={styles.turnHead}>
                       <span className={`${styles.speaker} ${styles[t.speaker]}`}>{t.speaker}</span>
@@ -1330,13 +1544,33 @@ export default function Controller() {
                           record broken here
                         </span>
                       )}
+                      {tampered && (
+                        <span className={`${styles.tag} ${styles.stop}`} data-testid="tampered">
+                          altered by the tamper control
+                        </span>
+                      )}
+                      {now.corrected && (
+                        <span className={styles.tag} data-testid="corrected">
+                          corrected by the patient
+                        </span>
+                      )}
+                      {isConfirmed(history) && (
+                        <span className={styles.tag} data-testid="confirmed">
+                          confirmed by the patient
+                        </span>
+                      )}
                     </div>
                     <p className={styles.line} lang={t.sourceLanguage}>
-                      {t.sourceText}
+                      {now.sourceText}
                     </p>
                     <p className={`${styles.line} ${unspoken ? styles.unspoken : ""}`} lang={t.targetLanguage}>
-                      {t.translation}
+                      {now.translation}
                     </p>
+                    {now.corrected && (
+                      <p className={styles.analysis}>
+                        Original: <span lang={t.sourceLanguage}>{t.sourceText}</span>
+                      </p>
+                    )}
                     {t.status === "blocked" && (
                       <>
                         <ValuesTable turn={t} only="mismatched" />

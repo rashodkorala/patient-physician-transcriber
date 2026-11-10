@@ -189,6 +189,39 @@
 .injection { margin: 0; font-size: 15px; }
 .injection[data-state="armed"], .injection[data-state="fired"] { color: var(--signal); font-weight: 500; }
 
+/* TDM-005: the tamper control sits under the mismatch control, separated by a hairline. */
+.tamper { display: grid; gap: 12px; margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+.tamperRow { display: flex; gap: 12px; flex-wrap: wrap; }
+.tamperRow select { flex: 1 1 260px; min-width: 0; max-width: 480px; }
+
+/* CDR-005: the explain-back result, problems first, each item with its outcome tag and who decided it. */
+.pulse::before { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+.signal { color: var(--signal); }
+.result { display: grid; gap: 12px; }
+.resultHead { display: flex; align-items: baseline; gap: 6px 20px; flex-wrap: wrap; margin: 0; font-size: 20px; font-weight: 300; letter-spacing: -0.01em; }
+.resultHead .signal { font-weight: 400; }
+.resultFrom { color: var(--muted); font-family: var(--serif); font-style: italic; font-size: 15px; }
+.items { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.items li { display: grid; grid-template-columns: 7.5em 1fr; gap: 12px; align-items: start; padding: 12px 0; border-top: 1px solid var(--line); }
+.items .tag { justify-self: start; margin-top: 2px; }
+.itemBody { display: grid; gap: 2px; min-width: 0; }
+.itemText { margin: 0; font-size: 16px; }
+.itemBody .analysis { margin: 0; }
+
+/* CDR-007: the note and summary rows, a title with its state, then actions. */
+.artefact { display: grid; gap: 12px; }
+.artefact + .artefact { padding-top: 16px; border-top: 1px solid var(--line); }
+.artefactHead { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 16px; flex-wrap: wrap; }
+.artefactTitle { margin: 0; font-size: 17px; font-weight: 500; }
+.artefactState { margin: 0; color: var(--muted); font-family: var(--serif); font-style: italic; font-size: 16px; }
+.artefact .actions { margin-top: 0; align-items: center; gap: 12px 20px; }
+.link { font-size: 14px; font-weight: 500; text-underline-offset: 0.25em; text-decoration-thickness: 1px; }
+.refusal { display: grid; gap: 10px; }
+.refusal .instruction { margin: 0; }
+.summaryText { display: grid; gap: 6px; margin: 0; padding: 0 0 0 1.4em; font-size: 17px; line-height: 1.45; }
+.summaryText li::marker { color: var(--muted); font-size: 13px; }
+
 .typed { display: grid; grid-template-columns: 220px 1fr auto; gap: 12px; align-items: stretch; }
 .typed textarea { width: 100%; }
 .notice { margin: 0; padding: 12px 16px; border-left: 2px solid var(--text); background: var(--field); }
