@@ -47,8 +47,18 @@ export interface Capture {
   stop(): Promise<Captured>;
 }
 
+type FakeCapture = (language: Language) => Capture;
+
+/** End-to-end tests replace push-to-talk recognition; the hook exists only in builds made with the test flag. */
+function fakeCapture(): FakeCapture | null {
+  if (process.env.NEXT_PUBLIC_SPEECH_TEST_HOOKS !== "on") return null;
+  return (window as unknown as { __fakeCapture?: FakeCapture }).__fakeCapture ?? null;
+}
+
 /** Starts recognising when the speaker's button is pressed; stop() on release. */
 export async function startCapture(language: Language): Promise<Capture> {
+  const fake = fakeCapture();
+  if (fake) return fake(language);
   const sdk = await loadSdk();
   const { token: authToken, region } = await token();
   const config = sdk.SpeechConfig.fromAuthorizationToken(authToken, region);
@@ -257,14 +267,57 @@ export async function warmUp(languages: Language[]): Promise<void> {
  * Resolves with the time audio started, for latency logging (task 1.7).
  */
 export function speak(text: string, language: Language, speechId: string): Promise<{ startedAt: number }> {
-  const audio = serverSpeech(speechId, language); // fetched now, while anything before it still plays
+  const ticket: Ticket = { speechId, stopped: false, abort: new AbortController() };
+  waiting.add(ticket);
+  // Fetched now, while anything before it still plays; a stop before its turn comes is reported then.
+  const audio = serverSpeech(speechId, language, ticket.abort.signal);
+  audio.catch(() => undefined);
   const next = queue.then(async () => {
-    const response = await audio;
-    const item = { speechId, language };
-    return response ? playStream(response, item) : speakWithAzure(text, item);
+    try {
+      if (ticket.stopped) throw new SpeechStopped();
+      const response = await audio;
+      // Stopped while its audio was on the way: never fall back to another voice.
+      if (ticket.stopped) throw new SpeechStopped();
+      const item = { speechId, language };
+      return await (response ? playStream(response, item) : speakWithAzure(text, item));
+    } finally {
+      waiting.delete(ticket);
+    }
   });
   queue = next.catch(() => undefined);
   return next;
+}
+
+/** Thrown by speak() for an item stopped before or while it played; not a failure to report. */
+export class SpeechStopped extends Error {
+  constructor() {
+    super("stopped");
+  }
+}
+
+interface Ticket {
+  speechId: string;
+  stopped: boolean;
+  abort: AbortController;
+}
+
+// Items asked for and not yet finished, so a stop can reach those still queued.
+const waiting = new Set<Ticket>();
+// The item playing now, and how to cut it short.
+let playing: { speechId: string; stop: () => void } | null = null;
+
+/**
+ * Stops the speech ids `which` picks: any still queued are dropped unplayed, and the one playing ends now (CDR-007
+ * summary.stop). Other items in the queue play on.
+ * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
+ */
+export function stopSpeaking(which: (speechId: string) => boolean): void {
+  for (const ticket of waiting) {
+    if (!which(ticket.speechId)) continue;
+    ticket.stopped = true;
+    ticket.abort.abort();
+  }
+  if (playing && which(playing.speechId)) playing.stop();
 }
 
 // One voice at a time, in the order asked for, whichever voice says it.
@@ -287,12 +340,13 @@ export const isSpeaking = (): boolean => speaking.current() !== null;
 export const onSpeaking = speaking.onSpeaking;
 
 /** The server's audio, or null when Azure should speak instead. */
-async function serverSpeech(speechId: string, language: Language): Promise<Response | null> {
+async function serverSpeech(speechId: string, language: Language, signal: AbortSignal): Promise<Response | null> {
   let response: Response;
   try {
     const query = new URLSearchParams({ language });
-    response = await fetch(`${serverHttpUrl()}/api/speech/${encodeURIComponent(speechId)}?${query}`);
+    response = await fetch(`${serverHttpUrl()}/api/speech/${encodeURIComponent(speechId)}?${query}`, { signal });
   } catch {
+    if (signal.aborted) throw new SpeechStopped();
     return null; // server unreachable for audio: the turn already passed its checks, so Azure says it
   }
   if (response.ok) return response;
@@ -315,9 +369,17 @@ async function playStream(response: Response, item: Speaking): Promise<{ started
       };
       audio.onended = () => resolve({ startedAt: startedAt || Date.now() });
       audio.onerror = () => reject(new SpeechUnavailable("the voice could not be played"));
+      playing = {
+        speechId: item.speechId,
+        stop: () => {
+          audio.pause();
+          reject(new SpeechStopped());
+        },
+      };
       audio.play().catch((error: Error) => reject(new SpeechUnavailable(error.message)));
     });
   } finally {
+    if (playing?.speechId === item.speechId) playing = null;
     ended?.();
     URL.revokeObjectURL(url);
   }
