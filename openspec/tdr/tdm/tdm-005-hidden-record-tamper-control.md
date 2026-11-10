@@ -1,7 +1,7 @@
 ---
 id: tdm-005
 title: "Hidden record-tamper control for the demo"
-status: proposed
+status: accepted
 date: 2026-11-09
 authors: ["Claude (agent)"]
 reviewers: ["rashodkorala"]
@@ -87,3 +87,4 @@ Tests: the command is dropped from screen and review connections; it alters a tu
 ## Review Notes
 
 - 2026-11-09, Claude (agent): Drafted as a proposal for the supervising session, at rashodkorala's direction (relayed by the supervising session) that the tamper control gets its own memo with an expiry. Awaiting human review; do not implement until accepted.
+- 2026-11-09, rashodkorala: Accepted ("accept TDM-005 and record it"). Recorded by Claude (agent) at rashodkorala's explicit request.

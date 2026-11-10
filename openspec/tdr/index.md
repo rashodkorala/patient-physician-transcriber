@@ -38,7 +38,7 @@ Only a human decides a status; an agent may record an explicit human verdict (ED
 | [TDM-002](tdm/tdm-002-presenter-mismatch-control.md) | Presenter mismatch control for the blocked-dose beat | TDM | accepted | rashodkorala | demo-night-mvp |
 | [TDM-003](tdm/tdm-003-sinhala-tamil-test-languages.md) | Sinhala and Tamil as test-only languages before demo night | TDM | accepted | rashodkorala | demo-night-mvp |
 | [TDM-004](tdm/tdm-004-tamil-live-language.md) | Tamil is the chosen live language, alongside Punjabi and French, spoken by ElevenLabs | TDM | accepted | rashodkorala | demo-night-mvp, mediator-voice |
-| [TDM-005](tdm/tdm-005-hidden-record-tamper-control.md) | Hidden record-tamper control for the demo | TDM | proposed | rashodkorala | demo-night-mvp |
+| [TDM-005](tdm/tdm-005-hidden-record-tamper-control.md) | Hidden record-tamper control for the demo | TDM | accepted | rashodkorala | demo-night-mvp |
 
 ## Hierarchy
 
