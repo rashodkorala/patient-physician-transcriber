@@ -63,13 +63,20 @@ def set_languages(ws, patient_language):
     )
 
 
-def make_client(kb, translate=None, tone_check=None, consent=True, language="pa-IN", settings=None, **app_options):
+def make_client(
+    kb, translate=None, tone_check=None, consent=True, language="pa-IN", settings=None, handlers=None, **app_options
+):
     model = ScriptedModel(
         {
             "translate": translate or fake_model.translate,
             "tone_check": tone_check or fake_model.tone_check,
             "empathy": fake_model.empathy,
             "name_extract": fake_model.name_extract,
+            # ADR-011 chains: the faithful stand-ins unless a test gives its own (EDR-002).
+            "explain_back": fake_model.explain_back,
+            "clinical_note": fake_model.clinical_note,
+            "patient_summary": fake_model.patient_summary,
+            **(handlers or {}),
         }
     )
     app = create_app(model=model, settings=settings or SETTINGS, kb=kb, **app_options)

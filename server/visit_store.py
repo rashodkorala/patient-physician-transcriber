@@ -9,20 +9,28 @@
 @implements CDR-005: Consent and explain-back on the visit channel
 @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
 @implements IDR-003: SHA-256 hash chain for the record-verified badge
+@implements CDR-007: Clinical note with provenance and patient summary on the visit channel
+@implements TDM-005: Hidden record-tamper control for the demo
+@implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
 @contract ws:/ws/visit
 @see openspec/tdr/adr/adr-007-in-memory-state-websocket.md
 @see openspec/tdr/cdr/cdr-006-record-entries-review-corrections-and-tamper.md
+@see openspec/tdr/cdr/cdr-007-clinical-note-and-patient-summary.md
 """
 
 import asyncio
+import copy
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from chains import snapshot as sources
 from contracts import (
     CONTROLLER_ONLY_EVENTS,
+    ORIGINAL,
     SILENT,
+    ClinicalNote,
     ConsentNotice,
     ConsentState,
     CurrentTurnPublic,
@@ -30,13 +38,23 @@ from contracts import (
     EntryKind,
     Envelope,
     EscalationEntry,
+    ExplainBackResult,
+    ExplainBackState,
     InjectionStatus,
     InterpreterLine,
     IntroductionState,
     Names,
+    PatientSummary,
     RecordEntry,
     RecordIntegrity,
     Role,
+    SegmentAmendment,
+    SegmentAmendmentWithAnalysis,
+    SegmentConfirmation,
+    SegmentHistory,
+    SegmentHistoryController,
+    SummaryCheck,
+    TamperState,
     TurnEntryBody,
     TurnResult,
     VisitStateController,
@@ -46,6 +64,9 @@ from contracts import (
 )
 from hash_chain import HashChain
 from introduction import CONSENT_NOTICES
+
+# TDM-005: what the tamper control does to an entry's stored text; the hash is left as it was.
+TAMPER_MARK = " (altered)"
 
 
 class Sender(Protocol):
@@ -70,6 +91,18 @@ def now() -> str:
 def new_entry_id() -> str:
     """An id for a chain entry that is not a turn (a turn's entry id is its turnId, CDR-006)."""
     return uuid.uuid4().hex[:12]
+
+
+@dataclass
+class SegmentRecord:
+    """A patient turn's applied corrections and latest confirmation (CDR-006); each is also a chain entry."""
+
+    amendments: list[SegmentAmendmentWithAnalysis] = field(default_factory=list)
+    confirmed: SegmentConfirmation | None = None
+
+    @property
+    def current(self) -> str:
+        return self.amendments[-1].amendment_id if self.amendments else ORIGINAL
 
 
 @dataclass
@@ -134,6 +167,26 @@ class Visit:
     # verification is named by the id the server recorded, whatever the stored payload now says.
     chain: HashChain = field(default_factory=HashChain)
     entry_ids: list[str] = field(default_factory=list)
+    # CDR-006: corrections and confirmations by segment id, in the order a segment first got one; at most one
+    # correction runs at a time, for any turn.
+    segments: dict[str, SegmentRecord] = field(default_factory=dict)
+    amend_in_flight: str | None = None
+    # TDM-005: the tamper control's one use in this visit; controller only.
+    tamper: TamperState | None = None
+    # CDR-005: the latest explain-back, the plan frozen when it opened, and every finished result.
+    explain_back: ExplainBackState | None = None
+    explain_back_plan: sources.Snapshot | None = None
+    explain_back_results: list[ExplainBackResult] = field(default_factory=list)
+    # CDR-007: the current note and passed summary, whether each is being made, and their stale flags. A summary
+    # is fresh while the chain head is `summary_head`, the head just after its own entry, which never makes it stale.
+    note: ClinicalNote | None = None
+    note_stale: bool = False
+    note_generating: bool = False
+    summary: PatientSummary | None = None
+    summary_head: str = ""
+    summary_stale: bool = False
+    summary_generating: bool = False
+    summary_checks: list[SummaryCheck] = field(default_factory=list)
 
     def names(self) -> Names:
         return Names(physician_name=self.physician_name, patient_name=self.patient_name)
@@ -166,6 +219,73 @@ class Visit:
             patient_name=self.patient_name,
         )
         return self.append("turn", turn_id, body.wire())
+
+    def spoken(self, turn_id: str) -> bool:
+        """Whether a turn settled as spoken: final, or read-back confirmed."""
+        record = self.turns.get(turn_id)
+        return bool(
+            record
+            and record.settled
+            and record.result
+            and (record.result.status == "final" or record.readback_confirmed)
+        )
+
+    def freeze(self) -> sources.Snapshot:
+        """ADR-011's frozen sources: the chain as stored now, and the interpreter's own lines."""
+        return sources.freeze(
+            self.chain.head_hash, [e.payload for e in self.chain.entries], self.interpreter_lines.values()
+        )
+
+    def explain_back_open(self) -> bool:
+        return self.explain_back is not None and self.explain_back.state in ("listening", "checking")
+
+    def tamper_entry(self, entry_id: str) -> bool:
+        """TDM-005: alter one turn or amendment entry's stored text in place, without rehashing it.
+
+        Returns False, changing nothing, for an entry that does not exist or is of another kind.
+        """
+        if entry_id not in self.entry_ids:
+            return False
+        index = self.entry_ids.index(entry_id)
+        payload = copy.deepcopy(self.chain.entries[index].payload)
+        if payload.get("kind") not in ("turn", "amendment"):
+            return False
+        body = payload["body"]
+        body["sourceText"] = f"{body.get('sourceText', '')}{TAMPER_MARK}"
+        self.chain.tamper(index, payload=payload)
+        return True
+
+    def stale_flags(self) -> tuple[bool, bool]:
+        """(note, summary): whether the chain grew after each current artefact was made (CDR-007 stale rule)."""
+        head = self.chain.head_hash
+        note = self.note is not None and (self.note_stale or self.note.based_on_head != head)
+        summary = self.summary is not None and (self.summary_stale or self.summary_head != head)
+        return note, summary
+
+    def segment_histories(self, controller: bool) -> list[dict]:
+        out: list[dict] = []
+        for segment_id, segment in self.segments.items():
+            record = self.turns[segment_id]
+            assert record.result is not None
+            original = to_caption(record.result, record.readback_confirmed)
+            if controller:
+                history: SegmentHistory = SegmentHistoryController(
+                    segment_id=segment_id,
+                    original=original,
+                    amendments=segment.amendments,
+                    confirmed=segment.confirmed,
+                    current=segment.current,
+                )
+            else:
+                history = SegmentHistory(
+                    segment_id=segment_id,
+                    original=original,
+                    amendments=[SegmentAmendment(**a.model_dump(exclude={"analysis"})) for a in segment.amendments],
+                    confirmed=segment.confirmed,
+                    current=segment.current,
+                )
+            out.append(history.wire())
+        return out
 
     def integrity(self) -> RecordIntegrity:
         """record.integrity: brokenAt is the entryId of the first entry that fails, a turn's segmentId (CDR-006)."""
@@ -203,6 +323,15 @@ class Visit:
                     state="armed" if self.injection_armed else "idle", injected_turn_ids=self.injected_turns
                 ),
                 escalations=self.escalations,
+                segments=self.segment_histories(controller=True),
+                tamper=self.tamper,
+                explain_back=self.explain_back,
+                explain_back_results=self.explain_back_results,
+                note=self.note,
+                note_stale=self.note_stale,
+                summary_checks=self.summary_checks,
+                summary=self.summary,
+                summary_stale=self.summary_stale,
             ).wire()
 
         current_public = None
@@ -234,6 +363,10 @@ class Visit:
             consent_notice=notice,
             consent_state=self.consent_state,
             interpreter_open=self.interpreter_open,
+            segments=self.segment_histories(controller=False),
+            explain_back=self.explain_back,
+            summary=self.summary,
+            summary_stale=self.summary_stale,
         ).wire()
 
 
@@ -276,6 +409,13 @@ class Hub:
     async def publish(self, event_type: str, payload: dict) -> None:
         for conn in list(self.connections):
             await self.send_to(conn, event_type, payload)
+
+    async def publish_shaped(self, event_type: str, controller: dict, public: dict | None) -> None:
+        """An event whose payload differs by role (CDR-007): screen and review get `public`, or nothing if None."""
+        for conn in list(self.connections):
+            payload = controller if conn.role == "controller" else public
+            if payload is not None:
+                await self.send_to(conn, event_type, payload)
 
     async def send_state(self, conn: Connection) -> None:
         await self.send_to(conn, "visit.state", self.visit.snapshot(conn.role))

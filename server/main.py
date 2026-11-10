@@ -15,11 +15,17 @@ Run with the app factory so nothing loads on import: uvicorn main:create_app --f
 @implements CDR-005: Consent and explain-back on the visit channel
 @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
 @implements IDR-003: SHA-256 hash chain for the record-verified badge
+@implements CDR-007: Clinical note with provenance and patient summary on the visit channel
+@implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
+@implements ADR-006: LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary
+@implements TDM-005: Hidden record-tamper control for the demo
 @contract ws:/ws/visit
 @contract http:GET /api/speech/{speech_id}
 @see openspec/tdr/adr/adr-001-system-architecture.md
 @see openspec/tdr/cdr/cdr-005-consent-and-explain-back-events.md
 @see openspec/tdr/cdr/cdr-006-record-entries-review-corrections-and-tamper.md
+@see openspec/tdr/cdr/cdr-007-clinical-note-and-patient-summary.md
+@see openspec/tdr/tdm/tdm-005-hidden-record-tamper-control.md
 """
 
 import asyncio
@@ -32,12 +38,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
+from chains.checks import GenerationFailed
+from chains.explain_back import check_explain_back
+from chains.note import generate_note
+from chains.summary import generate_summary
 from config import LIVE_MODEL, TONE_MODEL, Settings, load_settings
 from contracts import (
     CONTROLLER_COMMANDS,
+    REVIEW_COMMANDS,
     REVIEW_OR_CONTROLLER_COMMANDS,
     TEST_LANGUAGES,
+    AmendmentEntryBody,
+    ArtefactsStale,
+    ArtefactStatus,
     CommandRefused,
+    ConfirmationEntryBody,
     ConsentBy,
     ConsentEntryBody,
     ConsentGive,
@@ -49,6 +64,9 @@ from contracts import (
     ErrorPayload,
     EscalationEntry,
     EscalationReason,
+    ExplainBackRef,
+    ExplainBackResultBody,
+    ExplainBackState,
     InterpreterDismiss,
     InterpreterDismissed,
     InterpreterEscalation,
@@ -60,13 +78,28 @@ from contracts import (
     NameReply,
     Names,
     RefusedReason,
+    SegmentAmend,
+    SegmentAmended,
+    SegmentAmendmentWithAnalysis,
+    SegmentAnalysis,
+    SegmentConfirm,
+    SegmentConfirmation,
+    SegmentStatus,
     SetLanguages,
+    SummaryRef,
+    SummarySpeak,
+    TamperRecord,
+    TamperState,
     TurnRef,
     TurnStarted,
     TurnStatus,
     TurnSubmit,
     VoicePlayback,
     to_caption,
+    wire_explain_back,
+    wire_note,
+    wire_summary,
+    wire_summary_check,
 )
 from empathy import EmpathyAdvisor
 from graph.turn_graph import TurnPipeline
@@ -75,7 +108,7 @@ from kb.embeddings import make_embedder
 from kb.store import KnowledgeBase
 from llm import ClaudeModel, Model
 from speech_token import SpeechNotConfigured, issue_token
-from visit_store import Connection, Hub, Speech, TurnRecord, Visit, new_entry_id, now
+from visit_store import Connection, Hub, SegmentRecord, Speech, TurnRecord, Visit, new_entry_id, now
 from voice import (
     DEFAULT_MODEL,
     DEFAULT_VOICE,
@@ -182,6 +215,14 @@ def create_app(
             if language != notice.language:
                 return None
             return notice.lines[0].text, notice.language, LINE_DELIVERY
+        # CDR-007: `{summaryId}.{n}`, a sentence of the current passed summary only, in its language only, with
+        # the calm interpreter-line delivery. A refused or replaced summary is never held, so never served.
+        summary = visit.summary
+        if summary and speech_id.startswith(f"{summary.summary_id}."):
+            sentence = next((s for s in summary.sentences if s.sentence_id == speech_id), None)
+            if sentence is None or language != summary.language:
+                return None
+            return sentence.text, summary.language, LINE_DELIVERY
         record = visit.turns.get(speech_id)
         if record and record.result:
             result = record.result
@@ -226,8 +267,30 @@ def create_app(
         await hub.publish("turn.status", TurnStatus(turn_id=turn_id, stage=stage).wire())
 
     async def publish_integrity() -> None:
-        """CDR-006: every role hears the chain's state after every append."""
+        """CDR-006: every role hears the chain's state after every append; CDR-007: then any artefact gone stale."""
         await hub.publish("record.integrity", hub.visit.integrity().wire())
+        await refresh_stale()
+
+    async def refresh_stale() -> None:
+        """CDR-007 stale rule: mark the note or summary stale once the chain grows past it, and say so once.
+
+        Screens and review never hear about the note, so they get the event only when the summary turns stale.
+        """
+        visit = hub.visit
+        note, summary = visit.stale_flags()
+        note_turned, summary_turned = note and not visit.note_stale, summary and not visit.summary_stale
+        if not (note_turned or summary_turned):
+            return
+        visit.note_stale, visit.summary_stale = note, summary
+        stale = ArtefactsStale(note=note, summary=summary, head_hash=visit.chain.head_hash)
+        public = stale.model_copy(update={"note": False}).wire() if summary_turned else None
+        await hub.publish_shaped("artefacts.stale", stale.wire(), public)
+
+    def spawn(coro) -> None:
+        """Run slow work (the turn graph, a model chain) off the receive loop, so the socket stays responsive."""
+        task = asyncio.create_task(coro)
+        background.add(task)
+        task.add_done_callback(background.discard)
 
     async def refuse_without_consent(conn: Connection, command: str) -> bool:
         """CDR-005 consent rule 1: nothing that captures speech runs until consent is given."""
@@ -325,6 +388,10 @@ def create_app(
             # Discarded unspoken, exactly as turn.readback_reject.
             turn_id, visit.pending_readback = visit.pending_readback, None
             await status(turn_id, "discarded")
+        if visit.explain_back_open():
+            # An open explain-back is cancelled. One already checking is cancelled too (the record is silent on
+            # it; this is the narrower choice), and its result is discarded unchained when the check returns.
+            await set_explain_back("cancelled")
 
     async def read_consent_aloud(conn: Connection, payload: dict) -> None:
         notice = hub.visit.consent_notice()
@@ -333,10 +400,10 @@ def create_app(
             return
         await hub.publish("consent.speak", ConsentSpeak(speech_id=notice.speech_id, language=notice.language).wire())
 
-    async def refuse_while_paused(conn: Connection, command: str) -> bool:
+    async def refuse_while_paused(conn: Connection, command: str, reason: RefusedReason = "invalid") -> bool:
         """Off the record: nothing said is captured or relayed until the visit resumes (demo spec, CDR-001)."""
         if hub.visit.paused:
-            await error(conn, "Paused: nothing is recorded until you resume", command)
+            await error(conn, "Paused: nothing is recorded until you resume", command, reason)
             return True
         return False
 
@@ -460,6 +527,10 @@ def create_app(
 
         turn_id = uuid.uuid4().hex[:10]
         epoch = visit.consent_epoch
+        # CDR-005 explain-back rule 2: only a patient turn begun and settled final while the same explain-back is
+        # listening joins the explanation. A turn begun before it opened does not (narrowest reading).
+        eb = visit.explain_back
+        listening_to = eb.explain_back_id if eb is not None and eb.state == "listening" else None
         record = TurnRecord(result=None, speaker=cmd.speaker, source_text=cmd.text, stage="listening")
         visit.turns[turn_id] = record
         visit.current_turn_id = turn_id
@@ -524,6 +595,15 @@ def create_app(
         await publish_integrity()
         if result.status == "escalated" and reason:
             await escalate(reason, turn_id)  # type: ignore[arg-type]
+        eb = visit.explain_back
+        if (
+            result.status == "final"
+            and result.speaker == "patient"
+            and eb is not None
+            and eb.state == "listening"
+            and eb.explain_back_id == listening_to
+        ):
+            await set_explain_back("listening", [*eb.explanation_turn_ids, turn_id])
         if result.status == "final" and result.speaker == "patient":
             task = asyncio.create_task(send_nudge(turn_id, result.emotion, result.translation))
             background.add(task)
@@ -624,6 +704,393 @@ def create_app(
         hub.visit.injection_armed = False
         await hub.publish("demo.injection_state", DemoInjectionState(state="cancelled").wire())
 
+    # ---------- TDM-005: hidden record-tamper control ----------
+
+    async def tamper_record(conn: Connection, payload: dict) -> None:
+        # @implements TDM-005: Hidden record-tamper control for the demo
+        # Controller only (dropped from other roles in the receive loop), once per visit, turn or amendment
+        # entries only. Removed after demo night with demo.tamper_state and visit.state.tamper (TDM-005).
+        cmd = TamperRecord.model_validate(payload)
+        visit = hub.visit
+        command = "demo.tamper_record"
+        if visit.tamper is not None:
+            await error(conn, "The tamper control has already been used in this visit", command, "not_allowed")
+            return
+        if cmd.entry_id not in visit.entry_ids:
+            await error(conn, "No record entry with that id", command, "not_found")
+            return
+        if not visit.tamper_entry(cmd.entry_id):
+            await error(conn, "Only a turn or a correction can be altered", command, "not_allowed")
+            return
+        visit.tamper = TamperState(entry_id=cmd.entry_id, at=now())
+        await hub.publish("demo.tamper_state", visit.tamper.wire())
+        # The normal IDR-003 verification names the altered entry in brokenAt; screens learn of it only this way.
+        await publish_integrity()
+
+    # ---------- CDR-006: review corrections and confirmations ----------
+
+    async def own_final_turn(conn: Connection, segment_id: str, command: str) -> bool:
+        """Refuse unless the segment is a settled final patient turn (the patient corrects only their own turns)."""
+        record = hub.visit.turns.get(segment_id)
+        if record is None or not record.settled or record.result is None:
+            await error(conn, "No settled turn with that id", command, "not_found")
+            return False
+        if record.result.speaker != "patient" or record.result.status != "final":
+            await error(
+                conn, "Only the patient's own spoken turns can be confirmed or corrected", command, "not_allowed"
+            )
+            return False
+        return True
+
+    async def confirm_segment(conn: Connection, payload: dict) -> None:
+        cmd = SegmentConfirm.model_validate(payload)
+        visit = hub.visit
+        command = "segment.confirm"
+        if not await own_final_turn(conn, cmd.segment_id, command):
+            return
+        segment = visit.segments.get(cmd.segment_id) or SegmentRecord()
+        if cmd.version != segment.current:
+            await error(conn, "That version is no longer current", command, "not_current")
+            return
+        if segment.confirmed is not None and segment.confirmed.version == segment.current:
+            await error(conn, "That version is already confirmed", command, "not_allowed")
+            return
+        at, entry_id = now(), new_entry_id()
+        visit.append(
+            "confirmation", entry_id, ConfirmationEntryBody(segment_id=cmd.segment_id, version=cmd.version).wire(), at
+        )
+        segment.confirmed = SegmentConfirmation(version=cmd.version, at=at, entry_id=entry_id)
+        visit.segments[cmd.segment_id] = segment
+        amended = SegmentAmended(
+            segment_id=cmd.segment_id, by="patient", action="confirm", version=cmd.version, entry_id=entry_id
+        )
+        await hub.publish("segment.amended", amended.wire())
+        await publish_integrity()
+
+    async def amend_segment(conn: Connection, payload: dict) -> None:
+        cmd = SegmentAmend.model_validate(payload)
+        visit = hub.visit
+        command = "segment.amend"
+        # Re-speaking captures speech, so it waits for consent (CDR-005) and stops while paused (CDR-006).
+        if await refuse_without_consent(conn, command):
+            return
+        if await refuse_while_paused(conn, command, "not_allowed"):
+            return
+        if not await own_final_turn(conn, cmd.segment_id, command):
+            return
+        if cmd.language != visit.patient_language:
+            await error(conn, "A correction is spoken in the patient's language", command, "wrong_language")
+            return
+        if not cmd.text.strip():
+            await error(conn, "Nothing was heard", command, "invalid")
+            return
+        if visit.amend_in_flight is not None:
+            await error(conn, "Another correction is still being checked", command, "busy")
+            return
+        visit.amend_in_flight = cmd.segment_id
+        spawn(run_amendment(conn, cmd, new_entry_id()))
+
+    async def run_amendment(conn: Connection, cmd: SegmentAmend, amendment_id: str) -> None:
+        """The correction through the same turn graph as a live turn; applied and chained only if it ends final."""
+        visit = hub.visit
+        segment_id, epoch = cmd.segment_id, visit.consent_epoch
+
+        async def segment_status(stage: str, reason: str | None = None) -> None:
+            event = SegmentStatus(segment_id=segment_id, amendment_id=amendment_id, stage=stage, reason=reason)  # type: ignore[arg-type]
+            await hub.publish("segment.status", event.wire())
+
+        async def emit(stage: str) -> None:
+            if stage in ("translating", "verifying", "retrying"):
+                await segment_status(stage)
+
+        try:
+            try:
+                # The TurnResult is named by the amendmentId, so it never collides with the original turn.
+                result, _ = await pipeline.run(
+                    turn_id=amendment_id,
+                    speaker="patient",
+                    source=visit.patient_language,
+                    target=visit.physician_language,
+                    text=cmd.text,
+                    recognition_confidence=cmd.recognition_confidence,
+                    physician_name=visit.physician_name,
+                    patient_name=visit.patient_name,
+                    emit=emit,
+                )
+            except Exception:
+                log.exception("correction pipeline failed")
+                await segment_status("refused", "failed")
+                return
+            if visit.consent_epoch != epoch:
+                # Consent was withdrawn while it was checked: discarded like a live turn, never chained or shown.
+                await segment_status("refused", "failed")
+                return
+            await hub.publish(
+                "segment.analysis",
+                SegmentAnalysis(segment_id=segment_id, amendment_id=amendment_id, result=result).wire(),
+            )
+            if result.status != "final":
+                # Blocked or escalated: refused, unchained, the current version stays, no translation anywhere
+                # public. No interpreter offer either: an offer would be chained, and a refused correction is not.
+                reason = result.status if result.status in ("blocked", "escalated") else "failed"
+                await segment_status("refused", reason)
+                return
+            caption = to_caption(result)
+            assert caption.translation is not None and caption.tone_label is not None
+            segment = visit.segments.get(segment_id) or SegmentRecord()
+            at = now()
+            body = AmendmentEntryBody(
+                segment_id=segment_id,
+                amendment_id=amendment_id,
+                replaces=segment.current,
+                source_text=cmd.text,
+                translation=caption.translation,
+                tone_label=caption.tone_label,
+                critical_values=caption.critical_values,
+            )
+            visit.append("amendment", amendment_id, body.wire(), at)
+            segment.amendments.append(
+                SegmentAmendmentWithAnalysis(
+                    amendment_id=amendment_id,
+                    source_text=cmd.text,
+                    translation=caption.translation,
+                    tone_label=caption.tone_label,
+                    critical_values=caption.critical_values,
+                    at=at,
+                    entry_id=amendment_id,
+                    analysis=result,
+                )
+            )
+            visit.segments[segment_id] = segment
+            amended = SegmentAmended(
+                segment_id=segment_id,
+                by="patient",
+                action="amend",
+                new_text=cmd.text,
+                amendment_id=amendment_id,
+                translation=caption.translation,
+                tone_label=caption.tone_label,
+                critical_values=caption.critical_values,
+                entry_id=amendment_id,
+            )
+            await hub.publish("segment.amended", amended.wire())
+            await segment_status("applied")
+            await publish_integrity()
+        finally:
+            visit.amend_in_flight = None
+
+    # ---------- CDR-005: explain-back ----------
+
+    async def set_explain_back(state: str, turn_ids: list[str] | None = None) -> None:
+        visit = hub.visit
+        assert visit.explain_back is not None
+        update: dict = {"state": state}
+        if turn_ids is not None:
+            update["explanation_turn_ids"] = turn_ids
+        visit.explain_back = visit.explain_back.model_copy(update=update)
+        await hub.publish("explainback.state", visit.explain_back.wire())
+
+    async def start_explain_back(conn: Connection, payload: dict) -> None:
+        visit = hub.visit
+        command = "explainback.start"
+        if await refuse_without_consent(conn, command):
+            return
+        if await refuse_while_paused(conn, command, "not_allowed"):
+            return
+        if visit.pending_readback:
+            await error(conn, "Confirm or reject the highlighted dose first", command, "busy")
+            return
+        if visit.explain_back_open():
+            await error(conn, "An explain-back is already open", command, "busy")
+            return
+        if not any(visit.spoken(t) and r.speaker == "physician" for t, r in visit.turns.items()):
+            await error(conn, "Explain the plan before asking the patient to explain it back", command, "not_allowed")
+            return
+        # Opening freezes the plan: the physician turns spoken so far, at their effective versions (ADR-011).
+        visit.explain_back_plan = visit.freeze()
+        visit.explain_back = ExplainBackState(
+            explain_back_id=new_entry_id(), state="listening", explanation_turn_ids=[]
+        )
+        await hub.publish("explainback.state", visit.explain_back.wire())
+
+    async def open_explain_back(conn: Connection, payload: dict, command: str) -> str | None:
+        """The id named, if it is the open explain-back and still listening; otherwise refused."""
+        ref = ExplainBackRef.model_validate(payload)
+        eb = hub.visit.explain_back
+        if eb is None or eb.explain_back_id != ref.explain_back_id:
+            await error(conn, "No explain-back with that id", command, "not_found")
+            return None
+        if eb.state != "listening":
+            await error(conn, "That explain-back is not listening", command, "not_allowed")
+            return None
+        return eb.explain_back_id
+
+    async def check_explain_back_cmd(conn: Connection, payload: dict) -> None:
+        command = "explainback.check"
+        explain_back_id = await open_explain_back(conn, payload, command)
+        if explain_back_id is None:
+            return
+        visit = hub.visit
+        assert visit.explain_back is not None
+        turn_ids = list(visit.explain_back.explanation_turn_ids)
+        if not turn_ids:
+            await error(conn, "The patient has not explained anything back yet", command, "not_allowed")
+            return
+        await set_explain_back("checking")
+        spawn(run_explain_back(conn, explain_back_id, turn_ids))
+
+    async def run_explain_back(conn: Connection, explain_back_id: str, turn_ids: list[str]) -> None:
+        visit = hub.visit
+        plan = visit.explain_back_plan
+        assert plan is not None
+        # The explanation at its effective versions now, so a correction made while listening is used.
+        explanation = visit.freeze().turns_by_id(turn_ids)
+
+        def current() -> bool:
+            eb = visit.explain_back
+            return eb is not None and eb.explain_back_id == explain_back_id and eb.state == "checking"
+
+        try:
+            result = await check_explain_back(
+                model, explain_back_id=explain_back_id, plan=plan, explanation=explanation
+            )
+        except Exception as exc:
+            log.exception("explain-back check failed")
+            if current():
+                # Failed: nothing is chained, and the controller hears why (CDR-005 explain-back rule 3).
+                await set_explain_back("failed")
+                detail = "; ".join(exc.problems) if isinstance(exc, GenerationFailed) else str(exc)
+                await error(conn, f"The explain-back check failed: {detail}", "explainback.check")
+            return
+        if not current():
+            return  # cancelled by a consent withdrawal while checking: discarded, never chained
+        wired = wire_explain_back(result)
+        body = ExplainBackResultBody(**wired.model_dump(exclude={"entry_id"}))
+        visit.append("explain_back", wired.entry_id, body.wire())
+        visit.explain_back_results.append(wired)
+        await hub.publish("explainback.result", wired.wire())
+        await set_explain_back("done")
+        await publish_integrity()
+
+    async def cancel_explain_back(conn: Connection, payload: dict) -> None:
+        if await open_explain_back(conn, payload, "explainback.cancel") is not None:
+            await set_explain_back("cancelled")
+
+    # ---------- CDR-007: clinical note and patient summary ----------
+
+    async def refuse_artefact(conn: Connection, command: str) -> bool:
+        """CDR-007 generation rules shared by note.generate and summary.generate."""
+        visit = hub.visit
+        if not any(visit.spoken(t) for t in visit.turns):
+            await error(conn, "Nothing has been spoken yet", command, "not_allowed")
+        elif visit.pending_readback:
+            await error(conn, "Confirm or reject the highlighted dose first", command, "busy")
+        elif visit.amend_in_flight is not None:
+            await error(conn, "A correction is still being checked", command, "busy")
+        elif visit.explain_back is not None and visit.explain_back.state == "checking":
+            await error(conn, "The explain-back is still being checked", command, "busy")
+        else:
+            return False
+        return True
+
+    async def generate_note_cmd(conn: Connection, payload: dict) -> None:
+        visit = hub.visit
+        if await refuse_artefact(conn, "note.generate"):
+            return
+        if visit.note_generating:
+            await error(conn, "A note is already being written", "note.generate", "busy")
+            return
+        visit.note_generating = True
+        spawn(run_note(new_entry_id(), visit.freeze()))
+
+    async def run_note(note_id: str, snapshot) -> None:
+        visit = hub.visit
+
+        async def note_status(stage: str, detail: str | None = None) -> None:
+            event = ArtefactStatus(artefact_id=note_id, kind="note", stage=stage, detail=detail)  # type: ignore[arg-type]
+            await hub.publish("note.status", event.wire())
+
+        try:
+            try:
+                note = await generate_note(model, snapshot, note_id=note_id, on_stage=note_status)
+            except Exception as exc:
+                log.exception("note generation failed")
+                detail = "; ".join(exc.problems) if isinstance(exc, GenerationFailed) else str(exc)
+                await note_status("failed", detail)
+                return
+            # Regenerating replaces the current note; it is fresh until the chain grows past its head.
+            visit.note, visit.note_stale = wire_note(note), False
+            await note_status("ready")
+            await hub.publish("note.ready", visit.note.wire())
+            await refresh_stale()
+        finally:
+            visit.note_generating = False
+
+    async def generate_summary_cmd(conn: Connection, payload: dict) -> None:
+        visit = hub.visit
+        if await refuse_artefact(conn, "summary.generate"):
+            return
+        if visit.summary_generating:
+            await error(conn, "A summary is already being written", "summary.generate", "busy")
+            return
+        visit.summary_generating = True
+        spawn(run_summary(new_entry_id(), visit.patient_language, visit.freeze()))
+
+    async def run_summary(summary_id: str, language: str, snapshot) -> None:
+        visit = hub.visit
+
+        async def summary_status(stage: str, detail: str | None = None) -> None:
+            # Every role hears the stage; only controllers hear the detail (CDR-007).
+            event = ArtefactStatus(artefact_id=summary_id, kind="summary", stage=stage, detail=detail)  # type: ignore[arg-type]
+            await hub.publish_shaped("summary.status", event.wire(), event.model_copy(update={"detail": None}).wire())
+
+        try:
+            try:
+                outcome = await generate_summary(
+                    model, snapshot, summary_id=summary_id, language=language, on_stage=summary_status
+                )
+            except Exception as exc:
+                log.exception("summary generation failed")
+                await summary_status("refused", str(exc))
+                return
+            for check in outcome.checks:
+                wired = wire_summary_check(check)
+                visit.summary_checks.append(wired)
+                await hub.publish("summary.check", wired.wire())
+            if outcome.summary is None:
+                # Refused: never published, spoken, or chained. A summary that passed earlier stays current (the
+                # records are silent; a refused attempt makes no artefact, so it replaces nothing).
+                await summary_status("refused", outcome.detail)
+                return
+            summary = wire_summary(outcome.summary)
+            head_before = visit.chain.head_hash
+            visit.append("summary", summary.summary_id, summary.wire())
+            visit.summary = summary
+            # Its own entry never makes it stale, but entries appended while it was written do.
+            visit.summary_head = visit.chain.head_hash if head_before == summary.based_on_head else ""
+            visit.summary_stale = False
+            await summary_status("ready")
+            await hub.publish("summary.ready", summary.wire())
+            await publish_integrity()
+        finally:
+            visit.summary_generating = False
+
+    async def read_summary_aloud(conn: Connection, payload: dict) -> None:
+        ref = SummaryRef.model_validate(payload)
+        summary = hub.visit.summary
+        if summary is None or summary.summary_id != ref.summary_id:
+            await error(conn, "That is not the current summary", "summary.read_aloud", "not_current")
+            return
+        speak = SummarySpeak(
+            summary_id=summary.summary_id, action="play", speech_ids=[s.sentence_id for s in summary.sentences]
+        )
+        await hub.publish("summary.speak", speak.wire())
+
+    async def stop_summary(conn: Connection, payload: dict) -> None:
+        # Stopping is always safe, so any summary id is accepted (the record sets no rule); it names no sentences.
+        ref = SummaryRef.model_validate(payload)
+        await hub.publish("summary.speak", SummarySpeak(summary_id=ref.summary_id, action="stop", speech_ids=[]).wire())
+
     # ---------- CDR-004: interpreter voice playback ----------
 
     async def set_speech(speech: Speech | None) -> None:
@@ -681,6 +1148,16 @@ def create_app(
         "consent.give": give_consent,
         "consent.withdraw": withdraw_consent,
         "consent.read_aloud": read_consent_aloud,
+        "demo.tamper_record": tamper_record,
+        "segment.confirm": confirm_segment,
+        "segment.amend": amend_segment,
+        "explainback.start": start_explain_back,
+        "explainback.check": check_explain_back_cmd,
+        "explainback.cancel": cancel_explain_back,
+        "note.generate": generate_note_cmd,
+        "summary.generate": generate_summary_cmd,
+        "summary.read_aloud": read_summary_aloud,
+        "summary.stop": stop_summary,
     }
 
     @app.websocket("/ws/visit")
@@ -718,7 +1195,12 @@ def create_app(
                 if command in CONTROLLER_COMMANDS and conn.role != "controller":
                     continue  # screens may not send controller commands
                 if command in REVIEW_OR_CONTROLLER_COMMANDS and conn.role == "screen":
-                    continue  # CDR-005: the TV has no input; a screen's copy of a consent command is dropped
+                    continue  # CDR-005 and CDR-007: the TV has no input; a screen's copy is dropped
+                if command in REVIEW_COMMANDS and conn.role != "review":
+                    # CDR-006: only the patient's review screen confirms or corrects; the controller is refused
+                    # with `error`, and a screen, which never receives refusals, hears nothing.
+                    await error(conn, "Only the patient's review screen can do that", command, "not_allowed")
+                    continue
                 if command not in handlers:
                     await error(conn, f"Unsupported command: {command}", command)
                     continue
