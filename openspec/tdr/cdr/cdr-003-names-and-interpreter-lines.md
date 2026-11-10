@@ -103,3 +103,4 @@ The `mediator-voice` change, task groups 1 and 3.
 - 2026-11-03, Claude (agent): Drafted as a proposal for the `mediator-voice` change. Awaiting human review; do not implement until accepted.
 - 2026-11-03, rashodkorala: Accepted in session. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Additive amendment by CDR-008: `InterpreterLine.purpose` gains `signal_not_understood`, `signal_slower`, and `ask_if_clear`. Recorded by Claude (agent) under the blanket authorisation given in session (see MDD-005).
