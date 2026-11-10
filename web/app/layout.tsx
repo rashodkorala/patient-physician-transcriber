@@ -1,24 +1,29 @@
-import type { Metadata } from "next";
-import "@fontsource/inter-tight/300.css";
-import "@fontsource/inter-tight/400.css";
-import "@fontsource/inter-tight/500.css";
-import "@fontsource/newsreader/400.css";
-import "@fontsource/newsreader/400-italic.css";
-import "@fontsource/noto-sans-gurmukhi/300.css";
+import type { Metadata, Viewport } from "next";
+// ADR-012: one legibility-first family for Latin script, and Noto Sans for the three other scripts in use.
+import "@fontsource-variable/atkinson-hyperlegible-next";
 import "@fontsource/noto-sans-gurmukhi/400.css";
 import "@fontsource/noto-sans-gurmukhi/500.css";
-// TDM-003 test languages.
-import "@fontsource/noto-sans-sinhala/300.css";
+import "@fontsource/noto-sans-gurmukhi/600.css";
 import "@fontsource/noto-sans-sinhala/400.css";
 import "@fontsource/noto-sans-sinhala/500.css";
-import "@fontsource/noto-sans-tamil/300.css";
+import "@fontsource/noto-sans-sinhala/600.css";
 import "@fontsource/noto-sans-tamil/400.css";
 import "@fontsource/noto-sans-tamil/500.css";
+import "@fontsource/noto-sans-tamil/600.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Demo Night Interpreter",
-  description: "Live medical interpretation between a patient and a physician.",
+  title: "Medical interpreter",
+  description: "Live medical interpretation between a patient and a physician, with a record both can trust.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f7f6" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1a1d" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -10,7 +10,7 @@ proposed_by: agent
 category: implementation
 related_decisions: [idr-001, adr-005, cdr-001, mdd-003, edr-002]
 related_specs: []
-related_changes: [continuous-listening]
+related_changes: [continuous-listening, trust-across-the-barrier]
 ai_context:
   implementation_priorities:
     - "Push-to-talk (IDR-001) stays the default and the fallback; hands-free is an opt-in mode on the controller"
@@ -89,3 +89,4 @@ Tests: a unit test for the mapping and the pause rule, and an end-to-end hands-f
 - 2026-11-06, Claude (agent): Drafted as a proposal at rashodkorala's request for continuous listening with speaker detection. Awaiting human review; do not implement until accepted.
 - 2026-11-06, rashodkorala: Accepted. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-07, rashodkorala: Amended: no wrong-speaker correction, since the interpreter routes each utterance by its language and push-to-talk covers anything said again (resolves task 0.2; no CDR-001 amendment). Voice recognition, enrolled during the name introduction, is a follow-up change for short replies and companions. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.

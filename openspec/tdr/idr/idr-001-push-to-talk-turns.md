@@ -10,7 +10,7 @@ proposed_by: agent
 category: implementation
 related_decisions: [adr-005, mdd-003]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice]
+related_changes: [demo-night-mvp, mediator-voice, trust-across-the-barrier]
 ai_context:
   implementation_priorities:
     - "Controller has a button per speaker; speaker and language are known per turn"
@@ -60,3 +60,4 @@ Use push-to-talk per speaker for the demo. The roadmap's automatic diarisation r
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.

@@ -10,7 +10,7 @@ proposed_by: agent
 category: architecture
 related_decisions: [adr-004]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice]
+related_changes: [demo-night-mvp, mediator-voice, trust-across-the-barrier]
 ai_context:
   implementation_priorities:
     - "Live turn calls must be fast"
@@ -68,3 +68,4 @@ The tone check is a yes or no judgement on the original and its back-translation
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-25, rashodkorala: Amended after a measured 8.18 s median on the demo laptop: the tone check moves to Claude Haiku 5.5; translation stays on Sonnet 5.5. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.

@@ -68,12 +68,16 @@ The system SHALL translate using approved medical terms and a respectful registe
 - **WHEN** the physician uses a medical term that has an approved translation
 - **THEN** the translation uses the approved term and the shared screen shows a plain-language explanation beside it
 
-### Requirement: Tone labels
-The system SHALL show on each spoken caption one label describing the register of the translation: respectful, reassuring, empathetic, or neutral. Labels SHALL describe the translation, never the speaker's emotion.
+### Requirement: Manner labels
+The system SHALL show beneath the translation of each spoken physician turn whose manner is not plain one label, in the patient's language with English beside it, stating how the physician said it (warmly, with reassurance, gently, seriously, urgently, with an apology, or with encouragement). Patient and companion captions SHALL carry no manner or emotion label. (Amended 2026-11-10 by the `trust-across-the-barrier` change, MDD-005 and IDR-005; this replaces the translation-register labels.)
 
 #### Scenario: Label shown
-- **WHEN** a spoken caption appears on the shared screen
-- **THEN** it carries one translation-register label
+- **WHEN** a physician turn with a reassuring manner is spoken to a Punjabi patient
+- **THEN** its caption carries, in Punjabi and English, that it was said with reassurance
+
+#### Scenario: Patient caption unlabelled
+- **WHEN** a patient turn is spoken
+- **THEN** its caption carries no manner or emotion label
 
 ### Requirement: Patient emotion stays with the physician
 The system SHALL send detected emotion, certainty, and back-translations only to the physician's controller, never to the shared screen or review screens.
@@ -129,8 +133,10 @@ The system SHALL let the physician ask the patient to explain the plan back, and
 The system SHALL let either party pause capture, SHALL show a paused notice in both languages, and SHALL record nothing while paused.
 
 #### Scenario: Pause
-- **WHEN** the patient presses pause
+- **WHEN** the patient presses pause, on their own device or through the physician's controller
 - **THEN** the shared screen shows the paused notice in Punjabi and English and no turns are captured until resumed
+
+(The patient's own device is specified by the `trust-across-the-barrier` change, capability `patient-voice`, 2026-11-10.)
 
 ### Requirement: Human interpreter offer
 The system SHALL offer a human interpreter when a turn still fails its confidence or tone check after one retry or when the physician marks a moment as high risk, and SHALL let either party request one at any time, showing a connecting state in both languages. Critical value mismatches are blocked instead (see Critical value mismatch blocks speech).
@@ -144,7 +150,7 @@ The system SHALL offer a human interpreter when a turn still fails its confidenc
 - **THEN** a human interpreter is offered in both languages and the mark is recorded in the transcript
 
 #### Scenario: Requested
-- **WHEN** the patient presses the human interpreter button
+- **WHEN** the patient presses the human interpreter button, on their own device or through the physician's controller
 - **THEN** a connecting state is shown and the request is recorded in the transcript
 
 #### Scenario: Simulated connection ends

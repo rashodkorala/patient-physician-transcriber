@@ -10,9 +10,12 @@
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
  * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
  * @implements TDM-005: Hidden record-tamper control for the demo
+ * @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
+ * @implements IDR-005: Manner vocabulary and voice delivery
  * @contract ws:/ws/visit
  * @contract TurnResult
  * @contract TurnCaption
+ * @see openspec/tdr/cdr/cdr-008-patient-voice-manner-and-trust-events.md
  * @see openspec/tdr/cdr/cdr-001-visit-websocket-events.md
  * @see openspec/tdr/cdr/cdr-002-turn-result-schema.md
  * @see openspec/tdr/cdr/cdr-003-names-and-interpreter-lines.md
@@ -29,6 +32,13 @@ export type Speaker = "patient" | "physician" | "companion";
 export type ToneTag = "reassuring" | "respectful" | "empathetic" | "neutral" | "urgent" | "uncertain";
 export type ToneLabel = "respectful" | "reassuring" | "empathetic" | "neutral";
 export type Emotion = "calm" | "worried" | "embarrassed" | "in_pain" | "relieved" | "confused";
+/** IDR-005: how a turn was said, read from the words; plain is the default. */
+export type Manner = "plain" | "warm" | "reassuring" | "gentle" | "serious" | "urgent" | "apologetic" | "encouraging";
+export const MANNERS: Manner[] = ["plain", "warm", "reassuring", "gentle", "serious", "urgent", "apologetic", "encouraging"];
+/** CDR-008: the patient's own signals during the visit. */
+export type PatientSignal = "not_understood" | "slower" | "repeat";
+export const PATIENT_SIGNALS: PatientSignal[] = ["not_understood", "slower", "repeat"];
+export type TrustCueKind = "reassurance" | "understanding" | "culture";
 export type Certainty = "high" | "medium" | "low";
 export type CriticalKind = "dose" | "unit" | "frequency" | "date" | "number" | "medication";
 export type TurnStatusValue = "final" | "readback_required" | "blocked" | "escalated";
@@ -36,7 +46,15 @@ export type CaptionStatus = "final" | "blocked" | "escalated";
 export type Role = "controller" | "screen" | "review";
 export type IntroductionState = "pending" | "asking_physician" | "asking_patient" | "done" | "skipped";
 export type NameRole = "physician" | "patient";
-export type LinePurpose = "introduction" | "ask_physician_name" | "ask_patient_name" | "welcome";
+export type LinePurpose =
+  | "introduction"
+  | "ask_physician_name"
+  | "ask_patient_name"
+  | "welcome"
+  // CDR-008: the interpreter relays a patient signal to the physician, and asks the patient if anything is unclear.
+  | "signal_not_understood"
+  | "signal_slower"
+  | "ask_if_clear";
 
 export interface GlossaryEntry {
   term: string;
@@ -68,6 +86,8 @@ export interface TurnResult {
   confidence: number;
   status: TurnStatusValue;
   attempts: number;
+  /** IDR-005: how the speaker said it, read from the words. Optional so an older server still satisfies the type. */
+  manner?: Manner;
 }
 
 /** Public projection: every screen (turn.result). */
@@ -83,6 +103,43 @@ export interface TurnCaption {
   glossaryUsed: GlossaryEntry[];
   criticalValues: { kind: string; source: string; translated: string }[];
   readbackConfirmed: boolean;
+  /** CDR-008: the physician's manner on a final physician turn only; null for every patient or companion turn. */
+  manner?: Manner | null;
+}
+
+// ---------- CDR-008: patient signals and trust updates ----------
+
+/** patient.signal command, from the patient's device (review role) only. */
+export interface PatientSignalCommand {
+  signal: PatientSignal;
+}
+
+/** patient.signal event to every role, and the body of a `signal` chain entry. */
+export interface PatientSignalEntry {
+  signalId: string;
+  signal: PatientSignal;
+  afterTurnId: string | null;
+  at: string;
+}
+
+export const TRUST_CUE_MAX = 200;
+
+/** A short English suggestion for the physician only. */
+export interface TrustCue {
+  kind: TrustCueKind;
+  text: string;
+}
+
+/** trust.update, controller only: one per settled final turn, and one per accepted patient signal. */
+export interface TrustUpdate {
+  turnId: string | null;
+  speaker: Speaker | null;
+  emotion: Emotion | null;
+  manner: Manner | null;
+  reassuranceLanded: boolean | null;
+  signal: PatientSignal | null;
+  cue: TrustCue | null;
+  at: string;
 }
 
 export interface RecordIntegrity {
@@ -131,6 +188,9 @@ export interface VisitStateController {
   summaryChecks?: SummaryCheck[];
   summary?: PatientSummary | null;
   summaryStale?: boolean;
+  // CDR-008: the patient's signals for every role, and the trust timeline for the controller only.
+  signals?: PatientSignalEntry[];
+  trust?: TrustUpdate[];
 }
 
 export interface VisitStatePublic {
@@ -156,6 +216,8 @@ export interface VisitStatePublic {
   explainBack?: ExplainBackState | null;
   summary?: PatientSummary | null;
   summaryStale?: boolean;
+  // CDR-008: the patient's signals; never the trust timeline.
+  signals?: PatientSignalEntry[];
 }
 
 export interface TurnStarted {

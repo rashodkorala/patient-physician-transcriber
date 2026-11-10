@@ -10,7 +10,7 @@ proposed_by: agent
 category: api-contract
 related_decisions: [adr-002, adr-004, cdr-001]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice]
+related_changes: [demo-night-mvp, mediator-voice, trust-across-the-barrier]
 ai_context:
   implementation_priorities:
     - "Single shape for every translated turn"
@@ -143,3 +143,4 @@ Code carries `@contract TurnResult` or `@contract TurnCaption` and `@implements 
 - 2026-10-22, rashodkorala: Amended to reference the new `tone_failure` escalation reason in CDR-001. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-10-22, rashodkorala: Amended in place before implementation: status precedence (blocked, escalated, readback_required, final); public `TurnCaption` projection so emotion, certainty, back-translations, and unspoken or blocked translations never reach shared screens. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.
