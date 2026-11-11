@@ -1,10 +1,12 @@
 /**
- * The interpreter's orb on the shared screen: blurred colour blobs turning inside a dark ball.
- * Cool while the physician speaks, warm while the patient or companion speaks, quick and ringed while
- * the turn is translated or checked, both colours with rings moving out while the interpreter speaks, and dim
- * when nothing is happening.
+ * The interpreter's orb on the shared screen: blurred colour blobs turning inside a soft ball on paper.
+ * The physician's colour while the physician speaks, the patient's while the patient or companion speaks, quick
+ * and ringed in the care colour while the turn is translated or checked, both speakers' colours with rings moving
+ * out while the interpreter speaks, and the paper's greys when nothing is happening. The colours are the speaker
+ * tokens, so the orb matches the rows beside it.
  *
  * @implements ADR-001: Architecture: Python FastAPI server, Next.js front end, shared TV screen client
+ * @implements ADR-012: Clinic design system
  * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-004: Interpreter voice playback on the visit channel
  */

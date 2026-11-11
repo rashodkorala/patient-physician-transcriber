@@ -4,8 +4,11 @@
                             ^                 +-> block     (critical value still mismatched)
                             +-- retry once ---+-> escalate  (confidence or tone still failing)
 
-translate also reads the speaker's emotion, certainty, and medications, in the same call: the
+translate also reads the speaker's emotion, certainty, manner, and medications, in the same call: the
 latency mitigation ADR-004 names, applied 2026-10-25. Retrieval is local, so it adds no model call.
+Manner (IDR-005) is read from the words alone, defaults to plain, and may enter the reporting frame as one
+adverb (gentle, serious, urgent, or apologetic only) when the relayed words alone would lose it; the tone check
+is told to expect that adverb.
 
 Outcome order when several apply: blocked, escalated, readback_required, final (CDR-002).
 
@@ -22,10 +25,13 @@ attempt of the turn, and the normal verify node blocks it. The graph never sets 
 @implements CDR-002: Turn result schema
 @implements MDD-004: Mediator voice: the interpreter speaks as a person between the parties, in reported speech
 @implements TDM-002: Presenter mismatch control for the blocked-dose beat
+@implements IDR-005: Manner vocabulary and voice delivery
+@implements MDD-005: Trust across the barrier
 @contract TurnResult
 @see openspec/tdr/adr/adr-004-langgraph-turn-graph.md
 @see openspec/tdr/mdd/mdd-004-mediator-voice.md
 @see openspec/tdr/tdm/tdm-002-presenter-mismatch-control.md
+@see openspec/tdr/idr/idr-005-manner-vocabulary-and-voice-delivery.md
 """
 
 import operator
@@ -40,7 +46,7 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel
 
 import critical_values
-from contracts import Certainty, CriticalValue, Emotion, GlossaryEntry, ToneTag, TurnResult
+from contracts import Certainty, CriticalValue, Emotion, GlossaryEntry, Manner, ToneTag, TurnResult
 from kb.store import KnowledgeBase
 from llm import Model
 
@@ -70,6 +76,8 @@ class Draft(BaseModel):
     # Read first, so the translation keeps what was read (one call instead of analyse then translate).
     emotion: Emotion
     certainty: Certainty
+    # IDR-005: how the speaker said it, read from the words in the same call; plain unless clearly marked.
+    manner: Manner
     medications: list[str]
     translation: str
     back_translation: str
@@ -117,6 +125,12 @@ TRANSLATE_SYSTEM = """You are the interpreter in a medical consultation, sitting
 who do not share a language. You are a person in the room relaying what each of them says to the other.
 First read the speaker: emotion is how they feel, certainty is how sure they sound, and medications lists
 every medication name exactly as said (empty list if none).
+Also read manner: how the speaker said it, from the words alone, as one of plain, warm, reassuring, gentle,
+serious, urgent, apologetic, or encouraging. plain is the default: the words inform or ask without marked
+feeling. Pick another value only when the words clearly carry it: warm when they are friendly and personal;
+reassuring when they lower the listener's concern; gentle when they handle difficult content with care; serious
+when they mark the content as grave; urgent when they call for action now; apologetic when they apologise or
+acknowledge a fault; encouraging when they praise or encourage.
 Then relay the utterance to the listener in the target language, in reported speech that names the speaker,
 as a warm human interpreter would. For example, "Take this medicine two times a day after every meal" from the
 physician becomes "Dr. Thomas is saying you should take this medicine 2 times a day after every meal".
@@ -124,7 +138,15 @@ Rules:
 - Open the turn with one short frame naming the speaker as speaker_name gives it ("Dr. Thomas is saying",
   "your doctor is asking"), then speak to the listener as "you". Do not repeat the frame in every sentence.
   Write a name as it sounds, in the target language's script.
-- Use indirect speech throughout: the speaker is never "I" in your relay, and never quote them after a colon.
+- The frame may name the manner, once, as one adverb in the target language's natural form ("Dr. Thomas is
+  saying, gently, that ..."), only for gentle, serious, urgent, or apologetic, and only when the relayed words
+  alone would lose it. Never for plain, warm, reassuring, or encouraging (the voice carries those), never
+  anywhere but the opening frame, and never in a way that changes an instruction, a certainty word, or a number.
+- Use indirect speech in every sentence, not only the first: the speaker is never "I" or "we" anywhere in your
+  relay; say "they", "the doctor", or the name instead, and never quote them after a colon. For example, "We
+  found it early. I will start you on a new medicine today." from the physician becomes "Dr. Thomas is saying
+  they found it early. They will start you on a new medicine today." and never "Dr. Thomas is saying we found
+  it early. I will start you on a new medicine today."
 - Never guess anyone's gender from their name. In English, use "they" for someone whose gender you were not
   told. In a language that needs a gender, repeat the name or role, or use a respectful form that avoids it.
 - Keep everything that was said: every instruction, warning, condition, and question, and every count,
@@ -146,6 +168,11 @@ TONE_SYSTEM = """You check an interpretation in a medical consultation.
 The interpreter relays each utterance in reported speech that names the speaker, for example "Dr. Thomas is
 saying you should rest". That reporting frame, the change from first to third person, and a plain instruction
 ("rest") reported as "you should rest" are expected: never count them as a problem.
+The frame may also carry one manner adverb (gently, reassuringly, seriously, urgently, apologetically, warmly, or
+encouragingly) naming how the speaker spoke, as in "Dr. Thomas is saying, gently, that ...": any such adverb in
+the frame is expected and never a problem, whichever manner it names.
+It describes the speaker, not the news: a relay whose seriousness or certainty changed still fails
+certainty_preserved, whatever the frame says.
 Compare the original utterance with the back-translation of the interpretation.
 meaning_preserved: every instruction, warning, condition, and question in the original is there, and nothing
 was added, such as advice or an answer the speaker did not give.
@@ -399,6 +426,7 @@ class TurnPipeline:
             tone_tags=draft.tone_tags,
             emotion=draft.emotion,
             certainty=draft.certainty,
+            manner=draft.manner,
             glossary_used=used,
             critical_values=state["critical"],
             confidence=state["confidence"],

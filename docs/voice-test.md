@@ -113,3 +113,101 @@ Sources: OpenAI's [text to speech guide](https://developers.openai.com/api/docs/
 - 6.4 keeps the religious sense of விரதம் ("vratham, a religious fast"), as the script asks.
 - The HbA1c gloss was changed from "மூன்று மாத" (three-month) to "நீண்டகால" (long-term), so the gloss no longer adds a number the physician did not say.
 - ElevenLabs `eleven_v4` with `language_code` `ta` spoke relay 7.3 (first audio 1.2 s) and the introduction line (0.7 s); a Tamil speaker still has to judge the voice.
+
+## Trust layer run, 11 November 2026 (trust-across-the-barrier task 5.2)
+
+- Server: the real app (`uvicorn main:create_app --factory`) with `server/.env` and `.env.local` loaded.
+  Its start-up line: "Translator: Claude (claude-sonnet-5-5, tone check claude-haiku-5-5). Speech: Azure, voice ElevenLabs (eleven_v4) with Azure fallback."
+  The voice is the default account voice (Sarah), since no `ELEVENLABS_VOICE_ID` is set; embeddings are E5.
+- Visit: Punjabi (pa-IN) and English (en-CA), names Dr Patel and Gurpreet Singh, consent given from the patient's device (the review connection).
+- Runner: a scratch Node script with raw WebSocket connections as a controller, a shared screen, and the patient's device, as `web/e2e/visit-steps.mjs` `socket()` does.
+  Turns were typed with recognition confidence 1.0, not spoken, and no browser played the audio.
+- Leak check: the screen and the patient's device received no `turn.analysis`, `trust.update`, or `empathy.nudge`, and no `trust` in any `visit.state`.
+  Both received both `patient.signal` events, and every caption the screen received carried the manner the controller saw.
+
+### Turns
+
+Punjabi relays are drafts for the native speaker to rate, as in the runs above.
+Manner is the physician's manner read from the words; for patient and companion turns it stays private, and their captions carry no manner.
+
+| # | Speaker | Said | Manner | Emotion | Certainty | Status (attempts) | Relay | Back-translation | Seconds |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | physician | Hello Mr Singh, I'm Dr Patel. How have you been since your visit to the emergency department? | warm | calm | high | final (1) | ਡਾਕਟਰ ਪਟੇਲ ਜੀ ਤੁਹਾਨੂੰ ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਕਹਿ ਰਹੇ ਹਨ, ਸਿੰਘ ਜੀ, ਅਤੇ ਦੱਸ ਰਹੇ ਹਨ ਕਿ ਉਹ ਡਾਕਟਰ ਪਟੇਲ ਹਨ। ਉਹ ਪੁੱਛ ਰਹੇ ਹਨ ਕਿ ਐਮਰਜੈਂਸੀ ਵਿਭਾਗ ਵਿੱਚ ਆਉਣ ਤੋਂ ਬਾਅਦ ਤੁਸੀਂ ਕਿਵੇਂ ਰਹੇ ਹੋ? | Dr Patel is saying hello to you, Mr Singh, and is telling you that they are Dr Patel. They are asking how you have been since your visit to the emergency department. | 7.2 |
+| 2 | patient | ਡਾਕਟਰ ਜੀ, ਕੀ ਮੈਨੂੰ ਵੀ ਮੇਰੇ ਪਿਤਾ ਜੀ ਵਾਂਗ ਦਿਲ ਦਾ ਦੌਰਾ ਪਵੇਗਾ? ਮੈਨੂੰ ਬਹੁਤ ਡਰ ਲੱਗਦਾ ਹੈ। | plain | worried | low | final (1) | Gurpreet Singh is asking, Doctor, whether you think they will also have a heart attack like their father did. They are saying they are very scared. | Gurpreet Singh is asking, Doctor, whether they will also have a heart attack like their father did. They are saying they are very scared. | 4.5 |
+| 3 | physician | I understand why you are scared, especially after losing your father. Your heart tests were reassuring. You did not have a heart attack, and we have found this early. | reassuring | calm | high | final (1) | ਡਾਕਟਰ ਪਟੇਲ ਕਹਿ ਰਹੇ ਹਨ, ਤਸੱਲੀ ਨਾਲ, ਕਿ ਉਹ ਸਮਝਦੇ ਹਨ ਕਿ ਤੁਸੀਂ ਕਿਉਂ ਡਰੇ ਹੋਏ ਹੋ, ਖ਼ਾਸ ਕਰਕੇ ਆਪਣੇ ਪਿਤਾ ਜੀ ਨੂੰ ਗੁਆਉਣ ਤੋਂ ਬਾਅਦ। ਤੁਹਾਡੇ ਦਿਲ ਦੇ ਟੈਸਟ ਤਸੱਲੀ ਦੇਣ ਵਾਲੇ ਸਨ। ਤੁਹਾਨੂੰ ਦਿਲ ਦਾ ਦੌਰਾ ਨਹੀਂ ਪਿਆ, ਅਤੇ ਅਸੀਂ ਇਹ ਜਲਦੀ ਲੱਭ ਲਿਆ ਹੈ। | Dr Patel is saying, reassuringly, that they understand why you are scared, especially after losing your father. Your heart tests were reassuring. You did not have a heart attack, and we have found this early. | 6.0 |
+| 4 | patient | ਠੀਕ ਹੈ ਡਾਕਟਰ ਜੀ, ਇਹ ਸੁਣ ਕੇ ਮੈਨੂੰ ਕੁਝ ਰਾਹਤ ਮਿਲੀ। | plain | relieved | medium | final (1) | Gurpreet Singh is saying, okay doctor, that hearing this has given them some relief. | Gurpreet Singh is saying that, okay doctor, hearing this has given them some relief. | 4.0 |
+| 5 | physician | Can I ask, do you drink alcohol, even occasionally? | plain | calm | high | final (1) | ਡਾਕਟਰ ਪਟੇਲ ਪੁੱਛ ਰਹੇ ਹਨ ਕਿ ਕੀ ਤੁਸੀਂ ਸ਼ਰਾਬ ਪੀਂਦੇ ਹੋ, ਭਾਵੇਂ ਕਦੇ-ਕਦੇ ਹੀ ਸਹੀ? | Dr Patel is asking whether you drink alcohol, even if only occasionally. | 4.4 |
+| 6 | physician | If the pain is not better after 5 minutes, call 911. | plain | calm | high | readback_required (1), confirmed | ਡਾਕਟਰ ਪਟੇਲ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਜੇ 5 ਮਿੰਟ ਬਾਅਦ ਵੀ ਤੁਹਾਡਾ ਦਰਦ ਠੀਕ ਨਾ ਹੋਵੇ, ਤਾਂ ਤੁਹਾਨੂੰ 911 ਨੂੰ ਫ਼ੋਨ ਕਰਨਾ ਚਾਹੀਦਾ ਹੈ। | Dr Patel is saying that if your pain is not better after 5 minutes, you should call 911. | 4.7 |
+| 7 | companion | ਉਹ ਰਾਤ ਨੂੰ ਵੀ ਸਾਹ ਚੜ੍ਹਨ ਦੀ ਸ਼ਿਕਾਇਤ ਕਰਦੇ ਹਨ। | plain | worried | high | final (1) | The patient's companion is saying that the patient also complains of shortness of breath at night. | The patient's companion is saying that the patient also complains of shortness of breath at night. | 4.0 |
+
+- Seconds run from `turn.submit` to `turn.result` on the controller; for turn 6 they include the read-back confirmation.
+  Each turn is one translate call on Sonnet (2.4 to 4.8 s) and one tone check on Haiku (1.3 to 2.2 s).
+- Turn 6's critical values matched on the first attempt: 5 minutes to 5 ਮਿੰਟ, and 911 to 911.
+- The captions carried `warm`, `reassuring`, `plain`, and `plain` for turns 1, 3, 5, and 6, and `null` for turns 2, 4, and 7.
+
+### Trust updates on the controller
+
+| Turn | Speaker | Emotion | Manner | reassuranceLanded | Cue |
+|---|---|---|---|---|---|
+| 1 | physician | - | warm | null | none |
+| 2 | patient | worried | plain | null | reassurance: "Acknowledge the family's fear directly and gently before answering the heart attack question." |
+| 3 | physician | - | reassuring | null | culture: "Sensitive: the patient is grieving her father's heart death. Naming the grief is good, but say the finding plainly. Consider noting that the tests show no heart attack, so she is not at the same risk " (cut at 200 characters) |
+| 4 | patient | relieved | plain | **true** | none |
+| 5 | physician | - | plain | null | culture: "Alcohol is a sensitive topic here. Ask gently, without judgement, and explain it matters for safe medicine dosing and liver health. Address the patient directly, not family." |
+| 6 | physician | - | plain | null | none |
+| after 6 | signal `not_understood` | - | - | null | understanding: "Say it another way, in shorter sentences, one instruction at a time." |
+| after 6 | signal `slower` | - | - | null | understanding: "Slow down and pause between sentences." |
+| 7 | companion | worried | plain | null | none (a companion turn gets neither a nudge nor a cue) |
+
+- Turn 2 also produced an `empathy.nudge` to the controller, with the phrase "I understand why you are scared, especially with what happened to your father."
+- Each trust update arrived 1.2 to 4.6 s after its turn, off the turn's critical path.
+
+### Signals and interpreter lines
+
+- `not_understood` and then `slower`, three seconds apart from the patient's device, both accepted with `afterTurnId` set to turn 6, and both shown to every role.
+- Lines said to the physician, in English only: "Gurpreet Singh is saying they did not understand that. Could you say it another way?" and "Gurpreet Singh is asking you to speak more slowly."
+- The closing check (`visit.ask_if_clear`), Punjabi first and English shown: "Gurpreet Singh ਜੀ, ਕੀ ਅੱਜ ਡਾਕਟਰ ਜੀ ਨੇ ਕੋਈ ਅਜਿਹੀ ਗੱਲ ਕਹੀ ਹੈ ਜੋ ਤੁਸੀਂ ਦੁਬਾਰਾ ਸਮਝਣਾ ਚਾਹੋਗੇ?" and "Gurpreet Singh, is there anything the doctor said today that you would like explained again?"
+  The Punjabi line keeps the name in Latin script, as typed; the native speaker should hear how the voice reads it.
+
+### Voice fetches
+
+The server log does not print the delivery; the delivery below is what `delivery_for_turn` in `server/voice.py` gives for each turn's manner, emotion, and certainty.
+
+| Speech | Language | HTTP | Bytes | Audio | Delivery | Fetch seconds |
+|---|---|---|---|---|---|---|
+| Turn 3, the reassuring physician turn | pa-IN | 200 | 254,163 | 15.9 s | `[reassuringly]`, stability 0.6 (0.5 plus 0.1 for high certainty) | 8.3 |
+| Turn 2, the worried patient turn | en-CA | 200 | 140,060 | 8.8 s | `[concerned]`, stability 0.6 | 3.2 |
+| The closing check | pa-IN | 200 | 102,861 | 6.4 s | `[warmly]`, stability 0.5 | 3.7 |
+| The closing check | en-CA | 404 | - | - | never spoken, only shown (CDR-008) | 0.0 |
+| The `not_understood` line (second, model-free run on a fresh server) | en-CA | 200 | 81,128 | 5.1 s | `[warmly]`, stability 0.5 | 2.1 |
+| The `not_understood` line | pa-IN | 404 | - | - | spoken to the physician only | 0.0 |
+
+Fetch seconds are to the last byte, not to the first audio.
+Nobody has listened to the clips yet; whether `[reassuringly]` sounds reassuring in Punjabi is for the listening test.
+
+### Verdict
+
+Matched IDR-005:
+
+- Manner is read in the translate call with no extra model call: `warm` for the greeting, `reassuring` for the reassurance, `plain` for the alcohol question and the 911 instruction.
+- Physician captions carry the manner; patient and companion captions never do.
+- The reassuring turn is voiced `[reassuringly]` and the worried patient turn `[concerned]`, conveying the patient's worry to the physician rather than soothing it.
+- The frame took the adverb once, inside the frame ("ਕਹਿ ਰਹੇ ਹਨ, ਤਸੱਲੀ ਨਾਲ," / "is saying, reassuringly,"), and the tone check passed it.
+  It is debatable whether the words alone ("Your heart tests were reassuring") already carried it, which IDR-005 says should leave the adverb out.
+
+Matched CDR-008:
+
+- `reassuranceLanded: true` on turn 4, after a worried turn 2 and a reassuring turn 3; `null` on every other turn.
+- The alcohol question produced a `culture` cue; the greeting and the 911 instruction produced none.
+- Signals reach every role, are relayed to the physician in English only and are speakable there, and each brings an understanding cue to the controller.
+- The companion turn is accepted in Punjabi, framed as the companion, carries its emotion, and brings no nudge or cue.
+- Nothing private reached the screen or the patient's device.
+
+Did not match, or needs a look:
+
+- The culture cue on turn 3 is cut mid-sentence at 200 characters, ending "so she is not at the same risk " with a trailing space: the model wrote more than the 200 characters it was asked for, and `_cue` in `server/trust.py` cuts with `text[:TRUST_CUE_MAX]`, with no word boundary and no trim.
+- The same cue calls the patient "she" and "her", though the patient is Mr Singh and the relays use "they"; the culture prompt says nothing about gender.
+  It is also clinical phrasing advice rather than a cultural sensitivity, which the culture prompt does not ask for.
+- Turn 2's relay adds "you think" ("whether you think they will also have a heart attack"), which the patient did not say; the back-translation drops it again, so the check cannot see it.
+- Turn 3's relay frames only its first sentence; the rest is direct speech, with "we have found this early" in the first person, as in the earlier runs.
+- The 911 instruction is `plain`, not `urgent`; as a conditional safety instruction rather than a call to act now, that reading fits IDR-005, but the speakers may want it said more firmly.

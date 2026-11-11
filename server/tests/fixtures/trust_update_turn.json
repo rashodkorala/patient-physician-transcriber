@@ -1,0 +1,10 @@
+{
+  "turnId": "t5",
+  "speaker": "patient",
+  "emotion": "relieved",
+  "manner": "plain",
+  "reassuranceLanded": true,
+  "signal": null,
+  "cue": null,
+  "at": "2026-11-19T19:08:02.512000+00:00"
+}

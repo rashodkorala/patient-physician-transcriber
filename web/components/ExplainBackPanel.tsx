@@ -7,6 +7,7 @@
  *
  * @implements CDR-005: Consent and explain-back on the visit channel
  * @implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
+ * @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
  * @contract ws:/ws/visit
  */
 
@@ -55,10 +56,10 @@ export default function ExplainBackPanel({
 
   return (
     <section className={styles.section} data-testid="explainback" data-state={state?.state ?? "none"}>
-      <h2 className={styles.eyebrow}>Explain-back · the result is private to you</h2>
+      <h2 className={styles.eyebrow}>Explain-back, private to you</h2>
       {state?.state === "listening" && (
         <p className={styles.listening} data-state="listening" aria-live="polite">
-          Listening to the patient&rsquo;s explanation · {state.explanationTurnIds.length} turn
+          Listening to the patient&rsquo;s explanation, {state.explanationTurnIds.length} turn
           {state.explanationTurnIds.length === 1 ? "" : "s"} so far
         </p>
       )}
@@ -102,6 +103,16 @@ export default function ExplainBackPanel({
             {result ? "Start another explain-back" : "Start explain-back"}
           </button>
         )}
+        {/* CDR-008 and MDD-005 rule 6: the interpreter asks the patient, in their language, whether anything should
+            be explained again; the English is shown here. Not while a read-back waits or the visit is paused. */}
+        <button
+          className={styles.secondary}
+          data-testid="ask-if-clear"
+          disabled={!ready}
+          onClick={() => send("visit.ask_if_clear", {})}
+        >
+          Ask if anything is unclear
+        </button>
       </div>
       {!open && !result && (
         <p className={styles.aside}>
@@ -141,9 +152,9 @@ export default function ExplainBackPanel({
                     <p className={styles.itemText}>{item.instruction}</p>
                     <p className={styles.analysis}>
                       {KIND_TEXT[item.kind]}
-                      {item.expected && ` · expected ${item.expected}`}
-                      {item.decidedBy === "code" && ` · heard ${item.heard ?? "nothing"}`}
-                      {" · "}
+                      {item.expected && `, expected ${item.expected}`}
+                      {item.decidedBy === "code" && `, heard ${item.heard ?? "nothing"}`}
+                      {", "}
                       <span data-testid="decided-by">
                         {item.decidedBy === "code" ? "checked by code" : "judged by the model"}
                       </span>

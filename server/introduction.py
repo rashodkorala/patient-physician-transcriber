@@ -1,14 +1,18 @@
-"""The interpreter's own fixed words: the consent notice, then its introduction and the names it does not know yet.
+"""The interpreter's own fixed words: the consent notice, its introduction and the names it does not know yet, the
+patient's signals relayed to the physician, and the closing check.
 
 Lines are fixed, reviewed text from kb/content/interpreter/ and kb/content/consent/, never written by a model.
 Only reading a name out of a spoken reply uses the model, and the physician confirms that name before it is
 used. The introduction starts only after consent (CDR-005); the server enforces that order.
 
 @implements MDD-004: Mediator voice: the interpreter speaks as a person between the parties, in reported speech
+@implements MDD-005: Trust across the barrier
 @implements CDR-003: Participant names and interpreter lines on the visit channel
 @implements CDR-005: Consent and explain-back on the visit channel
+@implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
 @see openspec/tdr/cdr/cdr-003-names-and-interpreter-lines.md
 @see openspec/tdr/cdr/cdr-005-consent-and-explain-back-events.md
+@see openspec/tdr/cdr/cdr-008-patient-voice-manner-and-trust-events.md
 """
 
 import hashlib
@@ -18,7 +22,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel
 
-from contracts import ConsentNotice, InterpreterLine, LinePurpose, LineText, NameRole, clean_name
+from contracts import ConsentNotice, InterpreterLine, LinePurpose, LineText, NameRole, PatientSignal, clean_name
 from hash_chain import canonical_json
 from llm import Model
 
@@ -77,6 +81,36 @@ def introduction_line(physician_language: str, patient_language: str) -> Interpr
     return interpreter_line(
         "introduction",
         [(language, line_text(language, "introduction")) for language in (physician_language, patient_language)],
+    )
+
+
+# ---------- the patient's signals and the closing check (CDR-008) ----------
+
+# The signals the interpreter relays aloud; `repeat` is a replay and says nothing new.
+SIGNAL_LINE_KEYS: dict[str, LinePurpose] = {"not_understood": "signal_not_understood", "slower": "signal_slower"}
+
+
+def named_line(language: str, key: str, patient_name: str | None) -> str:
+    """A line naming the patient when the name is known, else its `_unnamed` form ("the patient")."""
+    if patient_name:
+        return line_text(language, key, patient=patient_name)
+    return line_text(language, f"{key}_unnamed")
+
+
+def signal_line(signal: PatientSignal, physician_language: str, patient_name: str | None) -> InterpreterLine:
+    """What the interpreter says to the physician, in the physician's language, when the patient signals."""
+    key = SIGNAL_LINE_KEYS[signal]
+    return interpreter_line(key, [(physician_language, named_line(physician_language, key, patient_name))])
+
+
+def ask_if_clear_line(physician_language: str, patient_language: str, patient_name: str | None) -> InterpreterLine:
+    """The closing check: asked of the patient in their language (spoken), shown to the physician in theirs."""
+    return interpreter_line(
+        "ask_if_clear",
+        [
+            (language, named_line(language, "ask_if_clear", patient_name))
+            for language in (patient_language, physician_language)
+        ],
     )
 
 

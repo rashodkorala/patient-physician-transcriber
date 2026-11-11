@@ -18,6 +18,10 @@
  * @implements IDR-003: SHA-256 hash chain for the record-verified badge
  * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
  * @implements TDM-005: Hidden record-tamper control for the demo
+ * @implements MDD-005: Trust across the barrier
+ * @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
+ * @implements IDR-005: Manner vocabulary and voice delivery
+ * @implements ADR-012: Clinic design system
  * @contract ws:/ws/visit
  */
 
@@ -31,6 +35,7 @@ import type {
   ConsentState,
   DemoInjectionState,
   DismissReason,
+  Emotion,
   EmpathyNudge,
   Envelope,
   ErrorPayload,
@@ -43,10 +48,13 @@ import type {
   InterpreterLine,
   IntroductionState,
   Language,
+  Manner,
   NameProposed,
   NameRole,
   Names,
   PatientLanguage,
+  PatientSignal,
+  PatientSignalEntry,
   PatientSummary,
   RecordIntegrity,
   SegmentAmended,
@@ -55,7 +63,7 @@ import type {
   SummaryCheck,
   SummarySpeak,
   TamperState,
-  ToneLabel,
+  TrustUpdate,
   TurnCaption,
   TurnRef,
   TurnResult,
@@ -71,6 +79,7 @@ import { type LatencyRow, median, segments as latencySegments, toCsv } from "@/l
 import { serverHttpUrl, useVisitSocket } from "@/lib/socket";
 import { applyAmended, brokenEntryLabel, captionOf, effective, isConfirmed, summaryIndexOf, summaryReading, turnOfEntry } from "@/lib/record";
 import { playbackMessages } from "@/lib/speaking";
+import { insertTrust, lastSpokenIn, settledOrder } from "@/lib/trust";
 import {
   type Capture,
   type Heard,
@@ -89,8 +98,6 @@ import ExplainBackPanel from "./ExplainBackPanel";
 import Highlighted from "./Highlighted";
 import NoteSummaryPanel from "./NoteSummaryPanel";
 import RecordBadge from "./RecordBadge";
-
-const TONE_LABELS: ToneLabel[] = ["respectful", "reassuring", "empathetic", "neutral"];
 
 // The physician's name, saved once on a clinic device so no visit has to ask for it (CDR-003).
 const DEFAULT_NAME_KEY = "interpreter.defaultPhysicianName";
@@ -161,6 +168,40 @@ const ACTION_FOR: Record<EscalationReason, EscalationEntry["action"]> = {
   requested: "request",
 };
 
+const SPEAKER_TEXT: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
+
+/** CDR-008 trust view: the patient's or companion's emotion in plain words. */
+const EMOTION_TEXT: Record<Emotion, string> = {
+  calm: "sounds calm",
+  worried: "sounds worried",
+  embarrassed: "sounds embarrassed",
+  in_pain: "sounds in pain",
+  relieved: "sounds relieved",
+  confused: "sounds confused",
+};
+
+/** IDR-005: the physician's manner in plain words, as read from what they said. */
+const MANNER_TEXT: Record<Manner, string> = {
+  plain: "said plainly",
+  warm: "said warmly",
+  reassuring: "said with reassurance",
+  gentle: "said gently",
+  serious: "said seriously",
+  urgent: "said urgently",
+  apologetic: "said with an apology",
+  encouraging: "said with encouragement",
+};
+
+/** CDR-008: each patient signal as the trust view lists it. */
+const SIGNAL_TEXT: Record<PatientSignal, string> = {
+  not_understood: "Patient: did not understand",
+  slower: "Patient: asked for slower",
+  repeat: "Patient: asked to hear it again",
+};
+
+/** The three speakers the controller captures for, in the order of their keys (1, 2, 3). */
+const TALK_SPEAKERS: Speaker[] = ["physician", "patient", "companion"];
+
 /** A time of day for the record lists: hours and minutes, in the laptop's locale. */
 function clock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -180,10 +221,6 @@ interface Outcome {
   voiceFailed?: boolean;
   discarded?: boolean;
   escalation?: EscalationReason;
-}
-
-function toneLabel(turn: TurnResult): ToneLabel {
-  return (turn.toneTags.find((t) => (TONE_LABELS as string[]).includes(t)) as ToneLabel | undefined) ?? "neutral";
 }
 
 function ValuesTable({ turn, only }: { turn: TurnResult; only?: "mismatched" }) {
@@ -300,6 +337,12 @@ export default function Controller() {
   const [summaryChecks, setSummaryChecks] = useState<SummaryCheck[]>([]);
   const summaryRef = useRef<PatientSummary | null>(null);
   const [tamperTarget, setTamperTarget] = useState("");
+  // CDR-008: the private trust timeline, oldest first, and the last translation spoken in the patient's language,
+  // so "say that again" can play it once more through the speak gate without a new turn.
+  const [trust, setTrust] = useState<TrustUpdate[]>([]);
+  const lastSpoken = useRef<{ text: string; language: Language; speechId: string } | null>(null);
+  // CDR-008: settled turns in the order they settled, so a late trust update is listed at its turn's place.
+  const settled = useRef<string[]>([]);
 
   const physicianLanguage: Language = "en-CA";
   const languageOf = (speaker: Speaker): Language => (speaker === "physician" ? physicianLanguage : patientLanguage);
@@ -392,6 +435,33 @@ export default function Controller() {
         setSummary(state.summary ?? null);
         setSummaryStale(Boolean(state.summaryStale));
         setSummaryChecks(state.summaryChecks ?? []);
+        const trustList = state.trust ?? [];
+        setTrust(trustList);
+        // CDR-008: a reloaded controller still knows the turn order and what was last said to the patient.
+        settled.current = settledOrder(state.turns, trustList, state.pendingReadback ?? null);
+        lastSpoken.current = lastSpokenIn(state.turns, trustList, settled.current, state.patientLanguage);
+        break;
+      }
+      case "trust.update": {
+        // CDR-008: controller only; one per settled turn and one per patient signal, never shown anywhere else.
+        // A turn's update arrives when its advisor returns, so it is placed by spoken order, as the server keeps it.
+        const update = event.payload as TrustUpdate;
+        setTrust((all) => insertTrust(all, update, settled.current));
+        break;
+      }
+      case "patient.signal": {
+        // CDR-008: "say that again" replays the last spoken translation by its id, so the speak gate serves it
+        // again and voice.started and voice.ended fire as for a normal relay.
+        const entry = event.payload as PatientSignalEntry;
+        if (entry.signal !== "repeat") break;
+        const last = lastSpoken.current;
+        if (!last) {
+          setNotice("The patient asked to hear it again, but nothing spoken to them is known here. Say it again.");
+          break;
+        }
+        speak(last.text, last.language, last.speechId).catch((error: Error) => {
+          if (!(error instanceof SpeechStopped)) setNotice(`Not repeated: ${error.message}`);
+        });
         break;
       }
       case "explainback.state":
@@ -514,9 +584,16 @@ export default function Controller() {
       }
       case "interpreter.line": {
         const line = event.payload as InterpreterLine;
+        // CDR-008: the closing check is spoken in the patient's language only; its English is shown here.
+        const closing = line.purpose === "ask_if_clear";
+        const spoken = closing ? line.lines.filter((l) => l.language !== physicianLanguage) : line.lines;
         // speak() keeps lines in order and fetches each one's audio straight away.
-        for (const { language, text } of line.lines) {
+        for (const { language, text } of spoken) {
           speak(text, language, line.lineId).catch((error: Error) => setNotice(`Not spoken: ${error.message}`));
+        }
+        if (closing) {
+          const english = line.lines.find((l) => l.language === physicianLanguage)?.text;
+          if (english) setNotice(`Asked the patient: ${english}`);
         }
         break;
       }
@@ -564,11 +641,16 @@ export default function Controller() {
         break;
       case "turn.result": {
         const caption = event.payload as TurnCaption;
+        // Every turn.result is a turn settling (spoken, blocked, or escalated), in the order the server settled it.
+        if (!settled.current.includes(caption.turnId)) settled.current = [...settled.current, caption.turnId];
         updateLatency(caption.turnId, { resultAt: Date.now(), spoken: caption.status === "final" });
         // The public caption is the signal to speak (CDR-002: shown only once spoken).
         if (caption.status === "final" && caption.translation) {
           updateOutcome(caption.turnId, { spoken: true });
           setPendingReadback((p) => (p === caption.turnId ? null : p));
+          if (caption.targetLanguage !== physicianLanguage) {
+            lastSpoken.current = { text: caption.translation, language: caption.targetLanguage, speechId: caption.turnId };
+          }
           speak(caption.translation, caption.targetLanguage, caption.turnId)
             .then(({ startedAt }) => updateLatency(caption.turnId, { speechStartAt: startedAt }))
             .catch((error: Error) => {
@@ -613,7 +695,7 @@ export default function Controller() {
         break;
       }
     }
-  }, [startCall, closeInterpreter]);
+  }, [startCall, closeInterpreter, physicianLanguage]);
 
   const { state, send } = useVisitSocket("controller", onEvent);
 
@@ -820,16 +902,17 @@ export default function Controller() {
     submit(speaker, first.text, first.confidence, first.endOfSpeechAt);
   };
 
-  // Hold 1 for the physician and 2 for the patient; with a short reply waiting, 1 or 2 says whose it was.
+  // Hold 1 for the physician, 2 for the patient, and 3 for a companion; with a short reply waiting, 1 or 2 says
+  // whose it was (a companion's reply is taken with the companion control, never from hands-free: IDR-004).
   useEffect(() => {
-    const keyToSpeaker: Record<string, Speaker> = { "1": "physician", "2": "patient" };
+    const keyToSpeaker: Record<string, Speaker> = { "1": "physician", "2": "patient", "3": "companion" };
     const down = (e: KeyboardEvent) => {
       const speaker = keyToSpeaker[e.key];
       const focused = document.activeElement;
       const typing =
         focused instanceof HTMLTextAreaElement || (focused instanceof HTMLInputElement && focused.type === "text");
       if (!speaker || e.repeat || typing) return;
-      if (held.length) resolveHeld(speaker);
+      if (held.length && speaker !== "companion") resolveHeld(speaker);
       else void pressTalk(speaker);
     };
     const up = (e: KeyboardEvent) => {
@@ -873,7 +956,7 @@ export default function Controller() {
       .map((m) => (
         <li key={`marker-${m.id}`} className={styles.marker} data-testid="marker" data-reason={m.reason}>
           <span className={styles.eyebrow}>
-            {m.reason === "high_risk" ? "Marked high risk · interpreter offered" : "Human interpreter requested"}
+            {m.reason === "high_risk" ? "Marked high risk, interpreter offered" : "Human interpreter requested"}
           </span>
         </li>
       ));
@@ -897,12 +980,12 @@ export default function Controller() {
   // TDM-005: the entries the tamper control may alter: settled turns, and applied corrections.
   const tamperTargets = [
     ...turns
-      .map((t, i) => ({ entryId: t.turnId, label: `Turn ${i + 1} · ${t.speaker} · ${t.sourceText}` }))
+      .map((t, i) => ({ entryId: t.turnId, label: `Turn ${i + 1}, ${SPEAKER_TEXT[t.speaker]}: ${t.sourceText}` }))
       .filter((t) => t.entryId !== pendingReadback),
     ...segments.flatMap((h) =>
       h.amendments.map((a) => ({
         entryId: a.amendmentId,
-        label: `Turn ${turns.findIndex((t) => t.turnId === h.segmentId) + 1} correction · ${a.sourceText}`,
+        label: `Turn ${turns.findIndex((t) => t.turnId === h.segmentId) + 1} correction: ${a.sourceText}`,
       })),
     ),
   ];
@@ -957,7 +1040,7 @@ export default function Controller() {
                     else if (test) note = "test only";
                     return (
                       <option key={english} value={language ?? english} disabled={!selectable}>
-                        {own} ({english}){note && ` · ${note}`}
+                        {own} ({english}){note && `, ${note}`}
                       </option>
                     );
                   })}
@@ -1017,7 +1100,7 @@ export default function Controller() {
                   <p className={styles.consentStatus} data-testid="consent-status">
                     Consent given {clock(consentState.at)}
                     <span className={styles.consentBy}>
-                      {consentState.by === "patient" ? " · by the patient" : " · on the patient’s behalf"}
+                      {consentState.by === "patient" ? ", by the patient" : ", on the patient’s behalf"}
                     </span>
                   </p>
                   <div className={styles.consentLinks}>
@@ -1038,8 +1121,8 @@ export default function Controller() {
                   <p className={styles.eyebrow}>
                     Consent
                     {consentState?.state === "withdrawn"
-                      ? ` · withdrawn ${clock(consentState.at)}, nothing is captured`
-                      : " · needed before anyone speaks"}
+                      ? `: withdrawn ${clock(consentState.at)}, nothing is captured`
+                      : ": needed before anyone speaks"}
                   </p>
                   {consentNotice ? (
                     <div className={styles.consentNotice} data-testid="consent-notice">
@@ -1165,24 +1248,23 @@ export default function Controller() {
                 {paused ? "Paused: off the record" : LISTENING_TEXT[listenState]}
                 {lastHeard && (
                   <span className={styles.lastHeard}>
-                    {" "}
-                    · last heard {lastHeard.speaker}, {LANGUAGE_LABELS[lastHeard.language].own}
+                    , last heard {lastHeard.speaker}, {LANGUAGE_LABELS[lastHeard.language].own}
                   </span>
                 )}
               </p>
             )}
             {held[0] && (
               <div className={styles.held} data-testid="held-reply" aria-live="assertive">
-                <p className={styles.eyebrow}>Short reply · whose words were these?</p>
+                <p className={styles.eyebrow}>Short reply: whose words were these?</p>
                 <p className={styles.heldText} data-testid="held-text">
                   {held[0].text}
                 </p>
                 <div className={styles.actions}>
                   <button className={styles.primary} data-testid="held-physician" onClick={() => resolveHeld("physician")}>
-                    Physician · 1
+                    Physician (1)
                   </button>
                   <button className={styles.primary} data-testid="held-patient" onClick={() => resolveHeld("patient")}>
-                    Patient · 2
+                    Patient (2)
                   </button>
                   <button className={styles.secondary} data-testid="held-discard" onClick={() => resolveHeld(null)}>
                     Discard
@@ -1190,19 +1272,25 @@ export default function Controller() {
                 </div>
               </div>
             )}
+            {/* CDR-008: a companion speaks the patient's language as a labelled third speaker; hands-free never labels one. */}
             <div className={styles.talk}>
-              {(["physician", "patient"] as Speaker[]).map((speaker, i) => (
+              {TALK_SPEAKERS.map((speaker, i) => (
                 <button
                   key={speaker}
-                  className={`${styles.talkButton} ${recording === speaker ? styles.recording : ""}`}
+                  className={`${styles.talkButton} ${styles[speaker]} ${recording === speaker ? styles.recording : ""}`}
+                  data-testid={`speak-${speaker}`}
                   onPointerDown={() => void pressTalk(speaker)}
                   onPointerUp={() => void releaseTalk()}
                   onPointerLeave={() => recording === speaker && void releaseTalk()}
                 >
                   <span className={styles.eyebrow}>
-                    {recording === speaker ? "Listening" : handsFree ? `Hold ${i + 1} to override` : `Hold or press ${i + 1}`}
+                    {recording === speaker
+                      ? "Listening"
+                      : handsFree && speaker !== "companion"
+                        ? `Hold ${i + 1} to override`
+                        : `Hold or press ${i + 1}`}
                   </span>
-                  <span className={styles.talkRole}>{speaker === "physician" ? "Physician" : "Patient"}</span>
+                  <span className={styles.talkRole}>{SPEAKER_TEXT[speaker]}</span>
                   <span className={styles.talkLang}>{LANGUAGE_LABELS[languageOf(speaker)].own}</span>
                 </button>
               ))}
@@ -1252,7 +1340,7 @@ export default function Controller() {
               >
                 <p className={styles.eyebrow}>
                   Human interpreter
-                  {interpreter.phase === "offered" && ` · ${REASON_TEXT[interpreter.reason]}`}
+                  {interpreter.phase === "offered" && `: ${REASON_TEXT[interpreter.reason]}`}
                 </p>
                 <p className={styles.interpreterText}>{INTERPRETER_TEXT[interpreter.phase]}</p>
                 {interpreter.phase === "offered" && (
@@ -1282,9 +1370,9 @@ export default function Controller() {
                   <li key={e.entryId} data-action={e.action}>
                     <span className={styles.recordedTime}>{clock(e.at)}</span>
                     {ESCALATION_TEXT[e.action]}
-                    {e.action === "dismiss" && ` · ${DISMISS_TEXT[e.reason as DismissReason] ?? e.reason}`}
-                    {e.action === "offer" && ` · ${REASON_TEXT[e.reason as EscalationReason] ?? e.reason}`}
-                    {e.note && ` · ${e.note}`}
+                    {e.action === "dismiss" && `: ${DISMISS_TEXT[e.reason as DismissReason] ?? e.reason}`}
+                    {e.action === "offer" && `: ${REASON_TEXT[e.reason as EscalationReason] ?? e.reason}`}
+                    {e.note && `, ${e.note}`}
                   </li>
                 ))}
               </ol>
@@ -1301,7 +1389,7 @@ export default function Controller() {
 
           {readbackTurn && (
             <section className={styles.readback} data-testid="readback" aria-live="assertive">
-              <h2 className={styles.eyebrow}>Read-back · check the values before they are spoken</h2>
+              <h2 className={styles.eyebrow}>Read-back: check the values before they are spoken</h2>
               <p className={styles.readbackLine} lang={readbackTurn.sourceLanguage}>
                 <Highlighted
                   text={readbackTurn.sourceText}
@@ -1339,7 +1427,7 @@ export default function Controller() {
           {nudge && (
             <section className={`${styles.section} ${styles.nudge}`} data-testid="nudge" aria-live="polite">
               <div className={styles.nudgeHead}>
-                <h2 className={styles.eyebrow}>Empathy nudge · patient seems {nudge.emotion.replace("_", " ")}</h2>
+                <h2 className={styles.eyebrow}>Empathy nudge: patient seems {nudge.emotion.replace("_", " ")}</h2>
                 <button className={styles.quiet} onClick={() => setDismissed((d) => new Set(d).add(nudge.turnId))}>
                   Dismiss
                 </button>
@@ -1359,6 +1447,7 @@ export default function Controller() {
               >
                 <option value="physician">Physician (English)</option>
                 <option value="patient">Patient ({LANGUAGE_LABELS[patientLanguage].english})</option>
+                <option value="companion">Companion ({LANGUAGE_LABELS[patientLanguage].english})</option>
               </select>
               <textarea
                 data-testid="typed-text"
@@ -1505,8 +1594,71 @@ export default function Controller() {
             </button>
           </section>
 
+          {/* CDR-008 and MDD-005 rule 4: how the visit is landing, for the physician only; a quiet list, newest last. */}
+          <section className={styles.section} data-testid="trust" aria-label="Trust, private to the physician">
+            <h2 className={styles.eyebrow}>Trust, private to the physician</h2>
+            {trust.length === 0 && <p className={styles.aside}>How the visit is landing shows here, turn by turn.</p>}
+            <ol className={styles.trust}>
+              {trust.map((u, i) => {
+                const after = u.turnId ? turns.findIndex((t) => t.turnId === u.turnId) + 1 : 0;
+                if (u.signal) {
+                  return (
+                    <li key={`${u.at}-${i}`} data-testid="trust-signal" data-signal={u.signal} data-after-turn={u.turnId ?? undefined}>
+                      <p className={styles.trustLine}>
+                        <span className={`${styles.trustSpeaker} ${styles.patient}`}>{SIGNAL_TEXT[u.signal]}</span>
+                        {after > 0 && <span className={styles.trustAfter}>after turn {after}</span>}
+                      </p>
+                      {u.cue && (
+                        <p className={styles.cue} data-testid="cue" data-kind={u.cue.kind}>
+                          {u.cue.text}
+                        </p>
+                      )}
+                    </li>
+                  );
+                }
+                const speaker = u.speaker ?? "patient";
+                const reading =
+                  speaker === "physician"
+                    ? MANNER_TEXT[u.manner ?? "plain"]
+                    : u.emotion
+                      ? EMOTION_TEXT[u.emotion]
+                      : null;
+                return (
+                  <li
+                    key={`${u.at}-${i}`}
+                    data-testid="trust-turn"
+                    data-speaker={speaker}
+                    data-emotion={u.emotion ?? undefined}
+                    data-manner={u.manner ?? undefined}
+                  >
+                    <p className={styles.trustLine}>
+                      <span className={`${styles.trustSpeaker} ${styles[speaker]}`}>{SPEAKER_TEXT[speaker]}</span>
+                      {reading && <span>{reading}</span>}
+                      {after > 0 && <span className={styles.trustAfter}>turn {after}</span>}
+                    </p>
+                    {u.reassuranceLanded !== null && (
+                      <p
+                        className={u.reassuranceLanded ? styles.landed : styles.notLanded}
+                        data-testid="landed"
+                        data-landed={u.reassuranceLanded ? "true" : "false"}
+                      >
+                        {u.reassuranceLanded ? "Reassurance landed" : "Still worried after reassurance"}
+                      </p>
+                    )}
+                    {u.cue && (
+                      <p className={styles.cue} data-testid="cue" data-kind={u.cue.kind}>
+                        {/* The Empathy nudge panel already shows the suggestion with its phrase; this only points to it. */}
+                        {u.cue.kind === "reassurance" ? "Empathy nudge shown" : u.cue.text}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+
           <section className={styles.section}>
-            <h2 className={styles.eyebrow}>Turns · private to the physician</h2>
+            <h2 className={styles.eyebrow}>Turns, private to the physician</h2>
             {turns.length === 0 && markers.length === 0 && <p className={styles.aside}>Nothing said yet.</p>}
             <ol className={styles.turns}>
               {markersAfter(null)}
@@ -1529,11 +1681,16 @@ export default function Controller() {
                     data-tampered={tampered || undefined}
                   >
                     <div className={styles.turnHead}>
-                      <span className={`${styles.speaker} ${styles[t.speaker]}`}>{t.speaker}</span>
+                      <span className={`${styles.speaker} ${styles[t.speaker]}`}>{SPEAKER_TEXT[t.speaker]}</span>
                       <span className={`${styles.tag} ${unspoken ? styles.stop : ""}`}>
                         {statusText(t, outcome, t.turnId === pendingReadback)}
                       </span>
-                      {!unspoken && <span className={styles.tag}>{toneLabel(t)}</span>}
+                      {/* IDR-005: how the speaker said it, read from the words; the patient's stays private here. Plain goes unsaid. */}
+                      {t.manner && t.manner !== "plain" && (
+                        <span className={styles.manner} data-testid="turn-manner" data-manner={t.manner}>
+                          {MANNER_TEXT[t.manner]}
+                        </span>
+                      )}
                       {wasInjected && (
                         <span className={`${styles.tag} ${styles.stop}`} data-testid="injected">
                           presenter mismatch
@@ -1590,8 +1747,8 @@ export default function Controller() {
                       </p>
                     )}
                     <p className={styles.analysis}>
-                      Back: {t.backTranslation} · {t.emotion.replace("_", " ")} · certainty {t.certainty} · confidence{" "}
-                      {t.confidence.toFixed(2)} · attempts {t.attempts}
+                      Back: {t.backTranslation}. {t.emotion.replace("_", " ")}, certainty {t.certainty}, confidence{" "}
+                      {t.confidence.toFixed(2)}, attempts {t.attempts}.
                     </p>
                   </li>,
                   ...markersAfter(t.turnId),

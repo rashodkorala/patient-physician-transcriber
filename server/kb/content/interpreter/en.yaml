@@ -8,3 +8,10 @@ lines:
   ask_patient_name_with_physician: "{physician} is your doctor today. May I have your name, please?"
   welcome: Thank you. Please go ahead whenever you're ready.
   welcome_with_patient: Thank you, {patient}. Please go ahead whenever you're ready.
+  # CDR-008: the patient's signals relayed to the physician, and the closing check asked of the patient.
+  signal_not_understood: "{patient} is saying they did not understand that. Could you say it another way?"
+  signal_not_understood_unnamed: "The patient is saying they did not understand that. Could you say it another way?"
+  signal_slower: "{patient} is asking you to speak more slowly."
+  signal_slower_unnamed: "The patient is asking you to speak more slowly."
+  ask_if_clear: "{patient}, is there anything the doctor said today that you would like explained again?"
+  ask_if_clear_unnamed: "Is there anything the doctor said today that you would like explained again?"

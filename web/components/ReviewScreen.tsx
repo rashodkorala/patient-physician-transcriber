@@ -1,21 +1,29 @@
 "use client";
 
 /**
- * The patient's review screen (/review, a tablet or phone): consent by the patient's own tap, the bilingual
- * transcript with the patient's own turns to confirm or correct by re-speaking (every original kept in the
- * history), the explain-back prompt with no outcome, and the summary once it has passed its check, read aloud a
- * sentence at a time by the controller's voice. Receives only public events; refusals arrive as command.refused.
+ * The patient's review content, as parts the patient device (/patient) composes: consent by the patient's own
+ * tap, the bilingual transcript with the patient's own turns to confirm or correct by re-speaking (every original
+ * kept in the history), the explain-back prompt with no outcome, and the summary once it has passed its check,
+ * read aloud a sentence at a time by the controller's voice. The review role receives only public events;
+ * refusals arrive as command.refused. Nothing here shows an emotion, a nudge, or anything the physician sees
+ * privately (MDD-005 rule 3).
+ *
+ * `useReviewVisit` holds the state every part reads and the visit connection; a screen passes its own handler
+ * for the events it adds (the patient device's signals). The default export is the plain review composition.
  *
  * @implements CDR-005: Consent and explain-back on the visit channel
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
  * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
+ * @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
+ * @implements IDR-005: Manner vocabulary and voice delivery
  * @implements IDR-003: SHA-256 hash chain for the record-verified badge
  * @implements TDM-002: Presenter mismatch control for the blocked-dose beat
+ * @implements ADR-012: Clinic design system
  * @contract ws:/ws/visit
  * @contract TurnCaption
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type {
   ArtefactsStale,
   ArtefactStatus,
@@ -37,7 +45,7 @@ import type {
   VisitStatePublic,
   VoiceSpeaking,
 } from "@/lib/contracts";
-import { type NoticeKey, notice } from "@/lib/i18n";
+import { type NoticeKey, SPEAKER_KEY, mannerLabel, notice } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
 import {
   applyAmended,
@@ -57,12 +65,14 @@ import styles from "./review.module.css";
 
 type ReviewState = VisitStatePublic;
 
-const SPEAKER_LABEL: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
 const STATE_LABEL: Record<ConnectionState, string> = { open: "Connected", connecting: "Connecting", closed: "Reconnecting" };
-const ENGLISH: Language = "en-CA";
+export const ENGLISH: Language = "en-CA";
+
+/** The commands this screen's own parts send; a refusal of any other command is left to the composing screen. */
+const REVIEW_COMMANDS = new Set(["consent.give", "segment.confirm", "segment.amend", "summary.read_aloud", "summary.stop"]);
 
 /** command.refused carries a reason code only; each maps to a plain line in both languages. */
-function refusalKey(reason: CommandRefused["reason"]): NoticeKey {
+export function refusalKey(reason: CommandRefused["reason"]): NoticeKey {
   if (reason === "busy") return "refusedBusy";
   if (reason === "not_current") return "refusedNotCurrent";
   return "refusedGeneric";
@@ -72,8 +82,8 @@ function clock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-/** A label in the patient's language, with English beneath it. */
-function Bi({ k, patient, className }: { k: NoticeKey; patient: Language; className?: string }) {
+/** A label in the patient's language, with English beneath it (or after a slash, inline). */
+export function Bi({ k, patient, className }: { k: NoticeKey; patient: Language; className?: string }) {
   return (
     <span className={`${styles.bi} ${className ?? ""}`}>
       <span lang={patient}>{notice(k, patient)}</span>
@@ -87,7 +97,7 @@ function Bi({ k, patient, className }: { k: NoticeKey; patient: Language; classN
 }
 
 /** A notice in the patient's language and English, as the interpreter's words. */
-function Notice({ k, patient, testId, className }: { k: NoticeKey; patient: Language; testId?: string; className?: string }) {
+export function Notice({ k, patient, testId, className }: { k: NoticeKey; patient: Language; testId?: string; className?: string }) {
   return (
     <div className={`${styles.notice} ${className ?? ""}`} data-testid={testId ?? `notice-${k}`}>
       <p lang={patient}>{notice(k, patient)}</p>
@@ -107,7 +117,18 @@ interface Correction {
   stage: SegmentStatus["stage"];
 }
 
-export default function ReviewScreen() {
+/** A turn still being interpreted, as the public channel tells it: who, and the stage it reached. */
+export interface PendingTurn {
+  turnId: string;
+  speaker: Speaker;
+  stage: string;
+}
+
+/**
+ * The visit as the patient's device sees it, and the connection. `onExtra` receives every event after the shared
+ * handling, so a composing screen adds its own without a second connection.
+ */
+export function useReviewVisit(onExtra?: (event: Envelope) => void) {
   const [patient, setPatient] = useState<PatientLanguage>("pa-IN");
   const [captions, setCaptions] = useState<TurnCaption[]>([]);
   const [segments, setSegments] = useState<SegmentHistory[]>([]);
@@ -116,6 +137,7 @@ export default function ReviewScreen() {
   const [consent, setConsent] = useState<ConsentState | null>(null);
   const [integrity, setIntegrity] = useState<RecordIntegrity | null>(null);
   const [paused, setPaused] = useState(false);
+  const [pending, setPending] = useState<PendingTurn | null>(null);
   const [explainBack, setExplainBack] = useState<ExplainBackState | null>(null);
   const [summary, setSummary] = useState<PatientSummary | null>(null);
   const [summaryStale, setSummaryStale] = useState(false);
@@ -151,10 +173,21 @@ export default function ReviewScreen() {
           setConsent(state.consentState ?? null);
           setIntegrity(state.integrity);
           setPaused(state.paused);
+          setPending(state.currentTurn ? { turnId: state.currentTurn.turnId, speaker: state.currentTurn.speaker, stage: state.currentTurn.stage } : null);
           setExplainBack(state.explainBack ?? null);
           setSummary(state.summary ?? null);
           setSummaryStale(Boolean(state.summaryStale));
           setSpeaking(state.speaking ?? null);
+          break;
+        }
+        case "turn.started": {
+          const started = event.payload as { turnId: string; speaker: Speaker };
+          setPending({ turnId: started.turnId, speaker: started.speaker, stage: "listening" });
+          break;
+        }
+        case "turn.status": {
+          const status = event.payload as { turnId: string; stage: string };
+          setPending((p) => (p && p.turnId === status.turnId ? { ...p, stage: status.stage } : p));
           break;
         }
         case "turn.result": {
@@ -164,14 +197,18 @@ export default function ReviewScreen() {
             captionsRef.current = next;
             return next;
           });
+          setPending((p) => (p && p.turnId === caption.turnId ? null : p));
           break;
         }
         case "visit.names":
           setNames(event.payload as Names);
           break;
-        case "consent.changed":
-          setConsent(event.payload as ConsentState);
+        case "consent.changed": {
+          const changed = event.payload as ConsentState;
+          setConsent(changed);
+          if (changed.state === "withdrawn") setPending(null);
           break;
+        }
         case "record.integrity":
           setIntegrity(event.payload as RecordIntegrity);
           break;
@@ -226,13 +263,15 @@ export default function ReviewScreen() {
           break;
         case "command.refused": {
           const refused = event.payload as CommandRefused;
+          if (!REVIEW_COMMANDS.has(refused.command)) break;
           if (refused.command === "segment.amend") setCorrection(null);
           say(refusalKey(refused.reason));
           break;
         }
       }
+      onExtra?.(event);
     },
-    [say],
+    [say, onExtra],
   );
 
   const { state, send } = useVisitSocket("review", onEvent);
@@ -285,281 +324,363 @@ export default function ReviewScreen() {
     segments,
     { consent: consent ? [consent.entryId] : [], summary: summary ? [summary.summaryId] : [] },
   );
-  const repeats = repeatedBy(captions);
-  const playing = summary ? summaryIndexOf(summary.summaryId, speaking?.speaking ? speaking.speechId : null) : null;
-  const preparing = summaryStage === "generating" || summaryStage === "checking" || summaryStage === "retrying";
 
+  return {
+    state,
+    send,
+    open,
+    patient,
+    captions,
+    segments,
+    names,
+    consentNotice,
+    consent,
+    consented,
+    integrity,
+    where,
+    brokenTurn,
+    paused,
+    pending,
+    explainBack,
+    summary,
+    summaryStale,
+    summaryStage,
+    speaking,
+    correction,
+    refusedOn,
+    recording,
+    message,
+    say,
+    giveConsent,
+    toggleCorrection,
+  };
+}
+
+export type ReviewVisit = ReturnType<typeof useReviewVisit>;
+
+/** The title in the patient's language, the visit pair, the record badge, and the connection state. */
+export function ReviewHeader({ visit, badge = true }: { visit: ReviewVisit; badge?: boolean }) {
+  const { patient, state, integrity, where } = visit;
   return (
-    <main className={styles.page}>
-      <header className={styles.bar}>
-        <Bi k="reviewTitle" patient={patient} className={styles.title} />
-        <span className={styles.pair}>
-          {LANGUAGE_LABELS[patient].own} / {LANGUAGE_LABELS[ENGLISH].own}
+    <header className={styles.bar}>
+      <Bi k="reviewTitle" patient={patient} className={styles.title} />
+      <span className={styles.pair}>
+        {LANGUAGE_LABELS[patient].own} / {LANGUAGE_LABELS[ENGLISH].own}
+      </span>
+      <div className={styles.barEnd}>
+        {badge && <RecordBadge integrity={integrity} where={where} className={styles.badge} />}
+        <span className={styles.status} data-testid="connection" data-state={state}>
+          {STATE_LABEL[state]}
         </span>
-        <div className={styles.barEnd}>
-          <RecordBadge integrity={integrity} where={where} className={styles.badge} />
-          <span className={styles.status} data-testid="connection" data-state={state}>
-            {STATE_LABEL[state]}
-          </span>
-        </div>
-      </header>
+      </div>
+    </header>
+  );
+}
 
-      {message && (
-        <div className={styles.message} role="status" data-testid="review-message" data-key={message}>
-          <Bi k={message} patient={patient} />
-        </div>
-      )}
+/** The refusal or microphone line the device last had to say, in both languages, for eight seconds. */
+export function ReviewMessage({ visit }: { visit: ReviewVisit }) {
+  const { message, patient } = visit;
+  if (!message) return null;
+  return (
+    <div className={styles.message} role="status" data-testid="review-message" data-key={message}>
+      <Bi k={message} patient={patient} />
+    </div>
+  );
+}
 
-      {/* CDR-005: the patient's own tap; the server records it as given by the patient. */}
-      {!consented && consentNotice && (
-        <section className={styles.consent} data-testid="review-consent">
-          {consentNotice.lines.map(({ language, text }) => (
-            <p key={language} lang={language}>
-              {text}
-            </p>
-          ))}
-          <button
-            className={styles.primary}
-            data-testid="review-consent-give"
-            disabled={!open}
-            onClick={giveConsent}
-          >
-            <Bi k="consentAgree" patient={patient} />
-          </button>
-        </section>
-      )}
+/** CDR-005: the patient's own tap; the server records it as given by the patient. */
+export function ConsentSection({ visit }: { visit: ReviewVisit }) {
+  const { consented, consentNotice, patient, open, giveConsent } = visit;
+  if (consented || !consentNotice) return null;
+  return (
+    <section className={styles.consent} data-testid="review-consent">
+      {consentNotice.lines.map(({ language, text }) => (
+        <p key={language} lang={language}>
+          {text}
+        </p>
+      ))}
+      <button className={styles.primary} data-testid="review-consent-give" disabled={!open} onClick={giveConsent}>
+        <Bi k="consentAgree" patient={patient} />
+      </button>
+    </section>
+  );
+}
 
-      {paused && <Notice k="paused" patient={patient} testId="review-paused" />}
+export function PausedNotice({ visit }: { visit: ReviewVisit }) {
+  return visit.paused ? <Notice k="paused" patient={visit.patient} testId="review-paused" /> : null;
+}
 
-      {/* CDR-005: a prompt only; the patient never sees what was matched or missed. */}
-      {explainBack && (explainBack.state === "listening" || explainBack.state === "checking") && (
-        <section className={styles.prompt} data-testid="review-explainback" data-state={explainBack.state}>
-          <Notice
-            k={explainBack.state === "listening" ? "explainBackListening" : "explainBackChecking"}
-            patient={patient}
-          />
-        </section>
-      )}
+/** CDR-005: a prompt only; the patient never sees what was matched or missed. */
+export function ExplainBackPrompt({ visit }: { visit: ReviewVisit }) {
+  const { explainBack, patient } = visit;
+  if (!explainBack || (explainBack.state !== "listening" && explainBack.state !== "checking")) return null;
+  return (
+    <section className={styles.prompt} data-testid="review-explainback" data-state={explainBack.state}>
+      <Notice k={explainBack.state === "listening" ? "explainBackListening" : "explainBackChecking"} patient={patient} />
+    </section>
+  );
+}
 
-      {/* CDR-007: shown only once it has passed its value check; a refusal says only that it is not ready. */}
-      {(summary || preparing || summaryStage === "refused") && (
-        <section className={styles.summary} data-testid="review-summary" data-state={summary ? "ready" : summaryStage}>
-          <div className={styles.sectionHead}>
-            <h2 className={styles.heading}>
-              <Bi k="summaryTitle" patient={patient} />
-            </h2>
-            {summary && (
-              <div className={styles.actions}>
-                <button
-                  className={styles.primary}
-                  data-testid="summary-listen"
-                  disabled={!open}
-                  onClick={() => send("summary.read_aloud", { summaryId: summary.summaryId })}
-                >
-                  <Bi k="listen" patient={patient} />
-                </button>
-                <button
-                  className={styles.secondary}
-                  data-testid="summary-stop"
-                  disabled={!open}
-                  onClick={() => send("summary.stop", { summaryId: summary.summaryId })}
-                >
-                  <Bi k="stop" patient={patient} />
-                </button>
-              </div>
-            )}
-          </div>
-          {summary ? (
-            <>
-              {summaryStale && <Notice k="summaryStale" patient={patient} testId="summary-stale" />}
-              <ol className={styles.sentences} lang={summary.language}>
-                {[...summary.sentences]
-                  .sort((a, b) => a.index - b.index)
-                  .map((s) => (
-                    <li
-                      key={s.sentenceId}
-                      data-testid="summary-sentence"
-                      data-playing={playing === s.index || undefined}
-                      className={playing === s.index ? styles.playing : undefined}
-                    >
-                      <span>
-                        <Highlighted
-                          text={s.text}
-                          values={summary.values.map((v) => v.text)}
-                          className={styles.value}
-                        />
-                      </span>
-                    </li>
-                  ))}
-              </ol>
-            </>
-          ) : (
-            <Notice
-              k={summaryStage === "refused" ? "summaryRefused" : "summaryPreparing"}
-              patient={patient}
-              testId={summaryStage === "refused" ? "summary-refused" : "summary-preparing"}
-            />
-          )}
-        </section>
-      )}
-
-      <section className={styles.transcript}>
+/** CDR-007: shown only once it has passed its value check; a refusal says only that it is not ready. */
+export function SummarySection({ visit }: { visit: ReviewVisit }) {
+  const { summary, summaryStage, summaryStale, speaking, patient, open, send } = visit;
+  const preparing = summaryStage === "generating" || summaryStage === "checking" || summaryStage === "retrying";
+  if (!summary && !preparing && summaryStage !== "refused") return null;
+  const playing = summary ? summaryIndexOf(summary.summaryId, speaking?.speaking ? speaking.speechId : null) : null;
+  return (
+    <section className={styles.summary} data-testid="review-summary" data-state={summary ? "ready" : summaryStage}>
+      <div className={styles.sectionHead}>
         <h2 className={styles.heading}>
-          <Bi k="transcriptTitle" patient={patient} />
+          <Bi k="summaryTitle" patient={patient} />
         </h2>
-        <ol className={styles.turns}>
-          {captions.map((c, i) => {
-            const history = segments.find((h) => h.segmentId === c.turnId);
-            const now = effective(c, history);
-            const mine = c.speaker === "patient" && c.status === "final";
-            const spoken = c.status === "final" && now.translation !== null;
-            const confirmed = isConfirmed(history);
-            const checking = correction?.segmentId === c.turnId;
-            const refused = refusedOn === c.turnId;
-            const broken = brokenTurn === c.turnId;
-            const repeatedAs = repeats.get(c.turnId);
-            // The patient's language on the left for every turn: the original for the patient, the
-            // spoken translation for the physician.
-            const patientSide = c.sourceLanguage === patient ? now.sourceText : spoken ? now.translation : null;
-            const englishSide = c.sourceLanguage === patient ? (spoken ? now.translation : null) : now.sourceText;
-            const values = c.criticalValues;
-            const patientValues = values.map((v) => (c.sourceLanguage === patient ? v.source : v.translated));
-            const englishValues = values.map((v) => (c.sourceLanguage === patient ? v.translated : v.source));
-            const recordingThis = recording === c.turnId;
-            return (
-              <li
-                key={c.turnId}
-                id={`turn-${c.turnId}`}
-                className={`${styles.turn} ${broken ? styles.broken : ""}`}
-                data-testid="review-turn"
-                data-turn-id={c.turnId}
-                data-status={c.status}
-                data-version={now.version}
-                data-confirmed={confirmed || undefined}
-                data-broken={broken || undefined}
-              >
-                <div className={styles.meta}>
-                  <span className={styles.number}>{i + 1}</span>
-                  <span className={`${styles.speaker} ${styles[c.speaker]}`}>{SPEAKER_LABEL[c.speaker]}</span>
-                  {nameOf(c.speaker, names) && <span className={styles.name}>{nameOf(c.speaker, names)}</span>}
-                  {!spoken && <span className={`${styles.tag} ${styles.stop}`}>Not spoken</span>}
-                  {now.corrected && (
-                    <span className={styles.tag} data-testid="corrected">
-                      <Bi k="corrected" patient={patient} className={styles.inline} />
-                    </span>
-                  )}
-                  {confirmed && (
-                    <span className={styles.tag} data-testid="confirmed">
-                      <Bi k="confirmed" patient={patient} className={styles.inline} />
-                    </span>
-                  )}
-                  {broken && (
-                    <span className={`${styles.tag} ${styles.stop}`} data-testid="record-broken-here">
-                      Record broken here
-                    </span>
-                  )}
-                </div>
-                <div className={styles.columns}>
-                  <div className={styles.side} lang={patientSide !== null ? patient : undefined}>
-                    {patientSide !== null ? (
+        {summary && (
+          <div className={styles.actions}>
+            <button
+              className={styles.primary}
+              data-testid="summary-listen"
+              disabled={!open}
+              onClick={() => send("summary.read_aloud", { summaryId: summary.summaryId })}
+            >
+              <Bi k="listen" patient={patient} />
+            </button>
+            <button
+              className={styles.secondary}
+              data-testid="summary-stop"
+              disabled={!open}
+              onClick={() => send("summary.stop", { summaryId: summary.summaryId })}
+            >
+              <Bi k="stop" patient={patient} />
+            </button>
+          </div>
+        )}
+      </div>
+      {summary ? (
+        <>
+          {summaryStale && <Notice k="summaryStale" patient={patient} testId="summary-stale" />}
+          <ol className={styles.sentences} lang={summary.language}>
+            {[...summary.sentences]
+              .sort((a, b) => a.index - b.index)
+              .map((s) => (
+                <li
+                  key={s.sentenceId}
+                  data-testid="summary-sentence"
+                  data-playing={playing === s.index || undefined}
+                  className={playing === s.index ? styles.playing : undefined}
+                >
+                  <span>
+                    <Highlighted text={s.text} values={summary.values.map((v) => v.text)} className={styles.value} />
+                  </span>
+                </li>
+              ))}
+          </ol>
+        </>
+      ) : (
+        <Notice
+          k={summaryStage === "refused" ? "summaryRefused" : "summaryPreparing"}
+          patient={patient}
+          testId={summaryStage === "refused" ? "summary-refused" : "summary-preparing"}
+        />
+      )}
+    </section>
+  );
+}
+
+/**
+ * CDR-006: every turn in both languages, the patient's language on the left, with the patient's own turns to
+ * confirm or correct; IDR-005: the physician's manner beneath their translation; CDR-008: a companion labelled
+ * as such in the patient's language.
+ */
+export function TranscriptSection({ visit }: { visit: ReviewVisit }) {
+  const { captions, segments, names, patient, open, paused, consented, correction, refusedOn, recording, brokenTurn, send, toggleCorrection } = visit;
+  const repeats = repeatedBy(captions);
+  return (
+    <section className={styles.transcript}>
+      <h2 className={styles.heading}>
+        <Bi k="transcriptTitle" patient={patient} />
+      </h2>
+      <ol className={styles.turns}>
+        {captions.map((c, i) => {
+          const history = segments.find((h) => h.segmentId === c.turnId);
+          const now = effective(c, history);
+          const mine = c.speaker === "patient" && c.status === "final";
+          const spoken = c.status === "final" && now.translation !== null;
+          const confirmed = isConfirmed(history);
+          const checking = correction?.segmentId === c.turnId;
+          const refused = refusedOn === c.turnId;
+          const broken = brokenTurn === c.turnId;
+          const repeatedAs = repeats.get(c.turnId);
+          // The patient's language on the left for every turn: the original for the patient, the
+          // spoken translation for the physician.
+          const patientSide = c.sourceLanguage === patient ? now.sourceText : spoken ? now.translation : null;
+          const englishSide = c.sourceLanguage === patient ? (spoken ? now.translation : null) : now.sourceText;
+          const values = c.criticalValues;
+          const patientValues = values.map((v) => (c.sourceLanguage === patient ? v.source : v.translated));
+          const englishValues = values.map((v) => (c.sourceLanguage === patient ? v.translated : v.source));
+          const recordingThis = recording === c.turnId;
+          // IDR-005: only a final physician turn carries a manner; patient and companion turns never do.
+          const manner = c.speaker === "physician" && spoken ? mannerLabel(c.manner, patient) : null;
+          return (
+            <li
+              key={c.turnId}
+              id={`turn-${c.turnId}`}
+              className={`${styles.turn} ${broken ? styles.broken : ""}`}
+              data-testid="review-turn"
+              data-turn-id={c.turnId}
+              data-speaker={c.speaker}
+              data-status={c.status}
+              data-version={now.version}
+              data-confirmed={confirmed || undefined}
+              data-broken={broken || undefined}
+            >
+              <div className={styles.meta}>
+                <span className={styles.number}>{i + 1}</span>
+                <span className={`${styles.speaker} ${styles[c.speaker]}`}>
+                  <Bi k={SPEAKER_KEY[c.speaker]} patient={patient} className={styles.inline} />
+                </span>
+                {nameOf(c.speaker, names) && <span className={styles.name}>{nameOf(c.speaker, names)}</span>}
+                {!spoken && <span className={`${styles.tag} ${styles.stop}`}>Not spoken</span>}
+                {now.corrected && (
+                  <span className={styles.tag} data-testid="corrected">
+                    <Bi k="corrected" patient={patient} className={styles.inline} />
+                  </span>
+                )}
+                {confirmed && (
+                  <span className={styles.tag} data-testid="confirmed">
+                    <Bi k="confirmed" patient={patient} className={styles.inline} />
+                  </span>
+                )}
+                {broken && (
+                  <span className={`${styles.tag} ${styles.stop}`} data-testid="record-broken-here">
+                    Record broken here
+                  </span>
+                )}
+              </div>
+              <div className={styles.columns}>
+                <div className={styles.side} lang={patientSide !== null ? patient : undefined}>
+                  {patientSide !== null ? (
+                    <>
                       <p className={styles.text}>
                         <Highlighted text={patientSide} values={patientValues} className={styles.value} />
                       </p>
-                    ) : repeatedAs ? (
-                      // TDM-002: a blocked turn shows no translation and no reason; only that it was said again.
-                      <a className={styles.jump} href={`#turn-${repeatedAs}`} data-testid="repeated-link">
-                        <Notice k="repeatedBelow" patient={patient} testId="review-unspoken" />
-                      </a>
-                    ) : (
-                      <Notice
-                        k={c.status === "escalated" ? "interpreterOffered" : "pleaseRepeat"}
-                        patient={patient}
-                        testId="review-unspoken"
-                      />
-                    )}
-                  </div>
-                  <div className={styles.side} lang={englishSide !== null ? ENGLISH : undefined}>
-                    {englishSide !== null && (
-                      <p className={`${styles.text} ${styles.english}`}>
-                        <Highlighted text={englishSide} values={englishValues} className={styles.value} />
-                      </p>
-                    )}
-                  </div>
+                      {manner && (
+                        <p className={styles.manner} data-testid="turn-manner" data-manner={c.manner}>
+                          <span lang={patient}>{manner}</span>
+                          {patient !== ENGLISH && <span lang={ENGLISH}>{mannerLabel(c.manner, ENGLISH)}</span>}
+                        </p>
+                      )}
+                    </>
+                  ) : repeatedAs ? (
+                    // TDM-002: a blocked turn shows no translation and no reason; only that it was said again.
+                    <a className={styles.jump} href={`#turn-${repeatedAs}`} data-testid="repeated-link">
+                      <Notice k="repeatedBelow" patient={patient} testId="review-unspoken" />
+                    </a>
+                  ) : (
+                    <Notice
+                      k={c.status === "escalated" ? "interpreterOffered" : "pleaseRepeat"}
+                      patient={patient}
+                      testId="review-unspoken"
+                    />
+                  )}
                 </div>
-                {checking && (
-                  <p className={styles.checking} data-testid="correction-checking" data-stage={correction?.stage}>
-                    <Bi k="correctionChecking" patient={patient} />
-                  </p>
-                )}
-                {refused && (
-                  <Notice k="correctionRefused" patient={patient} testId="correction-refused" className={styles.refused} />
-                )}
-                {mine && consented && (
-                  <div className={styles.actions}>
-                    {!confirmed && (
-                      <button
-                        className={styles.secondary}
-                        data-testid="review-confirm"
-                        disabled={!open || checking || Boolean(recording)}
-                        onClick={() => send("segment.confirm", { segmentId: c.turnId, version: now.version })}
-                      >
-                        <Bi k="confirm" patient={patient} />
-                      </button>
-                    )}
+                <div className={styles.side} lang={englishSide !== null ? ENGLISH : undefined}>
+                  {englishSide !== null && (
+                    <p className={`${styles.text} ${styles.english}`}>
+                      <Highlighted text={englishSide} values={englishValues} className={styles.value} />
+                    </p>
+                  )}
+                </div>
+              </div>
+              {checking && (
+                <p className={styles.checking} data-testid="correction-checking" data-stage={correction?.stage}>
+                  <Bi k="correctionChecking" patient={patient} />
+                </p>
+              )}
+              {refused && (
+                <Notice k="correctionRefused" patient={patient} testId="correction-refused" className={styles.refused} />
+              )}
+              {mine && consented && (
+                <div className={styles.actions}>
+                  {!confirmed && (
                     <button
-                      className={recordingThis ? styles.recording : styles.secondary}
-                      data-testid="review-correct"
-                      data-recording={recordingThis || undefined}
-                      disabled={!open || paused || Boolean(correction) || (Boolean(recording) && !recordingThis)}
-                      onClick={() => void toggleCorrection(c.turnId)}
+                      className={styles.secondary}
+                      data-testid="review-confirm"
+                      disabled={!open || checking || Boolean(recording)}
+                      onClick={() => send("segment.confirm", { segmentId: c.turnId, version: now.version })}
                     >
-                      <Bi k={recordingThis ? "correctStop" : "correct"} patient={patient} />
+                      <Bi k="confirm" patient={patient} />
                     </button>
-                  </div>
-                )}
-                {history && history.amendments.length > 0 && (
-                  <details className={styles.history} data-testid="review-history">
-                    <summary>
-                      <Bi k="history" patient={patient} className={styles.inline} />
-                    </summary>
-                    <ol>
-                      {versions(c, history).map((v) => {
-                        const amendment = history.amendments.find((a) => a.amendmentId === v.version);
-                        return (
-                          <li
-                            key={v.version}
-                            data-testid="history-version"
-                            data-version={v.version}
-                            data-current={v.version === history.current || undefined}
-                          >
-                            <span className={styles.eyebrow}>
-                              <Bi k={v.corrected ? "correction" : "original"} patient={patient} className={styles.inline} />
-                              {amendment && ` · ${clock(amendment.at)}`}
-                              {history.confirmed?.version === v.version && (
-                                <>
-                                  {" · "}
-                                  <Bi k="confirmed" patient={patient} className={styles.inline} />
-                                </>
-                              )}
-                            </span>
-                            <p lang={c.sourceLanguage}>{v.sourceText}</p>
-                            {v.translation && (
-                              <p lang={c.targetLanguage} className={styles.muted}>
-                                {v.translation}
-                              </p>
+                  )}
+                  <button
+                    className={recordingThis ? styles.recording : styles.secondary}
+                    data-testid="review-correct"
+                    data-recording={recordingThis || undefined}
+                    disabled={!open || paused || Boolean(correction) || (Boolean(recording) && !recordingThis)}
+                    onClick={() => void toggleCorrection(c.turnId)}
+                  >
+                    <Bi k={recordingThis ? "correctStop" : "correct"} patient={patient} />
+                  </button>
+                </div>
+              )}
+              {history && history.amendments.length > 0 && (
+                <details className={styles.history} data-testid="review-history">
+                  <summary>
+                    <Bi k="history" patient={patient} className={styles.inline} />
+                  </summary>
+                  <ol>
+                    {versions(c, history).map((v) => {
+                      const amendment = history.amendments.find((a) => a.amendmentId === v.version);
+                      return (
+                        <li
+                          key={v.version}
+                          data-testid="history-version"
+                          data-version={v.version}
+                          data-current={v.version === history.current || undefined}
+                        >
+                          <span className={styles.eyebrow}>
+                            <Bi k={v.corrected ? "correction" : "original"} patient={patient} className={styles.inline} />
+                            {amendment && <span className={styles.when}>{clock(amendment.at)}</span>}
+                            {history.confirmed?.version === v.version && (
+                              <Bi k="confirmed" patient={patient} className={styles.inline} />
                             )}
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  </details>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-        {captions.length === 0 && consented && <Notice k="ready" patient={patient} testId="review-empty" />}
-      </section>
-    </main>
+                          </span>
+                          <p lang={c.sourceLanguage}>{v.sourceText}</p>
+                          {v.translation && (
+                            <p lang={c.targetLanguage} className={styles.muted}>
+                              {v.translation}
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </details>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {captions.length === 0 && consented && <Notice k="ready" patient={patient} testId="review-empty" />}
+    </section>
+  );
+}
+
+/** The page frame every review composition shares. */
+export function ReviewPage({ children }: { children: ReactNode }) {
+  return <main className={styles.page}>{children}</main>;
+}
+
+/** The plain review: every part, in the order the patient reads them. */
+export default function ReviewScreen() {
+  const visit = useReviewVisit();
+  return (
+    <ReviewPage>
+      <ReviewHeader visit={visit} />
+      <ReviewMessage visit={visit} />
+      <ConsentSection visit={visit} />
+      <PausedNotice visit={visit} />
+      <ExplainBackPrompt visit={visit} />
+      <SummarySection visit={visit} />
+      <TranscriptSection visit={visit} />
+    </ReviewPage>
   );
 }

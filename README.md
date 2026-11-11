@@ -10,6 +10,15 @@ An AI medical interpreter with a verified record, built first for Canada. A pati
 
 First-version languages: English, French, Mandarin, Cantonese, Punjabi, Urdu, Arabic, Farsi, Tagalog, Spanish, Portuguese, Sinhala, and Tamil.
 
+## Trust across the barrier
+
+Accurate words are not enough when two people share no language; what gets lost first is how something was said.
+The interpreter therefore carries the physician's manner (warm, reassuring, gentle, serious, urgent, apologetic, or encouraging) into its voice, into the reporting frame when words alone would lose it, and into a label the patient can read in their own language.
+The patient has their own controls during the visit, in their own language, so they can say they did not understand or ask for slower or repeated speech without needing permission or English.
+The physician privately sees how the visit is landing: the patient's emotion turn by turn, whether a reassurance landed, every patient signal, and a cue when a topic is sensitive in the patient's culture.
+A companion can speak as a labelled third speaker, and the interpreter can close the loop by asking the patient whether anything should be explained again.
+Decisions: MDD-005, CDR-008, IDR-005; interface: ADR-012 (`web/design/README.md`).
+
 ## Core capabilities
 
 | Capability | What it guarantees |
@@ -55,6 +64,8 @@ scripts/dev.sh --prod     # production build, for rehearsals and demo night
 
 - Physician laptop: `http://localhost:3000/control`
 - TV: `http://<laptop-ip>:3000/screen` (same network); `scripts/dev.sh` prints both URLs when it starts.
+- Patient's tablet or phone: `http://<laptop-ip>:3000/patient` (same network): consent, the latest translation in the patient's language, their own controls during the visit (I did not understand, please speak more slowly, say that again, pause, a human interpreter), and the transcript and summary afterwards.
+- Record view: `http://localhost:3000/record` (the physician's note with provenance).
 - The server's first log lines say which translator and speech service the run uses; check for `Translator: Claude` before a live run.
 
 ### First run on a Mac
@@ -76,7 +87,8 @@ Checks before every commit:
 (cd web && npm run lint && npm run check:contracts && npm run build)
 ```
 
-Browser checks against `scripts/dev.sh --prod` with `TRANSLATOR=fake`: `node web/e2e/week1.mjs` and `node web/e2e/week2.mjs [baseUrl] [screenshotDir]`.
+Browser checks against `scripts/dev.sh --prod` with `TRANSLATOR=fake`: `node web/e2e/week1.mjs` and `node web/e2e/week2.mjs [baseUrl] [screenshotDir]`, plus the scripts in `web/e2e/` for each later beat (read each script's header for its arguments).
+The scripts drive Chromium through Playwright; on a Mac without a Playwright browser, set `CHROMIUM_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"`.
 In typed turns the fake model treats `(test: mismatch)` as a dose it gets wrong twice (blocked) and `(test: tone)` as a failed tone check (escalated).
 
 ## OpenSpec commands

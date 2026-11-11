@@ -10,7 +10,7 @@ proposed_by: agent
 category: contract
 related_decisions: [cdr-001, cdr-002, mdd-004, adr-009, adr-007]
 related_specs: [visit-introduction, interpreter-voice]
-related_changes: [mediator-voice, orb-speaking-state]
+related_changes: [mediator-voice, orb-speaking-state, trust-across-the-barrier]
 ai_context:
   implementation_priorities:
     - "Additive to CDR-001: new commands and events only; no existing event changes shape except new optional fields"
@@ -102,3 +102,5 @@ The `mediator-voice` change, task groups 1 and 3.
 
 - 2026-11-03, Claude (agent): Drafted as a proposal for the `mediator-voice` change. Awaiting human review; do not implement until accepted.
 - 2026-11-03, rashodkorala: Accepted in session. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Additive amendment by CDR-008: `InterpreterLine.purpose` gains `signal_not_understood`, `signal_slower`, and `ask_if_clear`. Recorded by Claude (agent) under the blanket authorisation given in session (see MDD-005).

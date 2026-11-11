@@ -10,7 +10,7 @@ proposed_by: agent
 category: implementation
 related_decisions: [mdd-003]
 related_specs: []
-related_changes: [demo-night-mvp]
+related_changes: [demo-night-mvp, trust-across-the-barrier]
 ai_context:
   implementation_priorities:
     - "Each segment and amendment is hashed with the previous hash"
@@ -59,3 +59,4 @@ Each transcript segment and amendment is appended to a SHA-256 hash chain; the r
 
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.

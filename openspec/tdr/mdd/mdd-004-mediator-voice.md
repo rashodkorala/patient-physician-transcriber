@@ -10,7 +10,7 @@ proposed_by: agent
 category: strategy
 related_decisions: [mdd-001, adr-002, adr-003, adr-009]
 related_specs: [mediator-interpretation, visit-introduction]
-related_changes: [mediator-voice]
+related_changes: [mediator-voice, trust-across-the-barrier]
 ai_context:
   implementation_priorities:
     - "Interpret each turn in reported speech that names the speaker, for example 'Dr. Thomas is saying you should take this medicine 2 times a day after every meal'"
@@ -76,3 +76,4 @@ The `mediator-voice` OpenSpec change: translation instructions, tone check instr
 
 - 2026-11-03, Claude (agent): Drafted as a proposal from rashodkorala's direction in session. Awaiting human review; do not implement until accepted.
 - 2026-11-03, rashodkorala: Accepted in session. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.

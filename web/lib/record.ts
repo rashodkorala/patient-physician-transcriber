@@ -5,6 +5,7 @@
  *
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
  * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
+ * @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
  * @implements IDR-003: SHA-256 hash chain for the record-verified badge
  */
 
@@ -134,6 +135,8 @@ export interface OtherEntries {
   interpreter?: string[];
   explainBack?: string[];
   summary?: string[];
+  /** CDR-008: patient signals, chained as entries of kind signal whose entryId is the signalId. */
+  signals?: string[];
 }
 
 /**
@@ -159,6 +162,7 @@ export function brokenEntryLabel(
   if (other.interpreter?.includes(brokenAt)) return "interpreter entry";
   if (other.explainBack?.includes(brokenAt)) return "explain-back";
   if (other.summary?.includes(brokenAt)) return "summary";
+  if (other.signals?.includes(brokenAt)) return "a patient signal";
   return "an earlier entry";
 }
 

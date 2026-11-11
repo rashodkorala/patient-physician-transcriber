@@ -10,7 +10,7 @@ proposed_by: agent
 category: contract
 related_decisions: [cdr-001, cdr-003, adr-001, adr-007, adr-010]
 related_specs: [shared-screen-presence]
-related_changes: [orb-speaking-state]
+related_changes: [orb-speaking-state, trust-across-the-barrier]
 ai_context:
   implementation_priorities:
     - "Additive to CDR-001: two new controller commands, one new public event, and one new optional visit.state field; no existing message changes shape"
@@ -134,3 +134,4 @@ The controller side (sending the commands from the speaking signal) is built by 
 
 - 2026-11-06, Claude (agent): Drafted as a proposal for the `orb-speaking-state` change at rashodkorala's direction to add a voice speaking event to the channel (relayed by the supervising session). Awaiting human review; do not implement until accepted.
 - 2026-11-06, rashodkorala: Accepted. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.

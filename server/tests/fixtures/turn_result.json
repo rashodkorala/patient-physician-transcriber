@@ -13,5 +13,6 @@
   "criticalValues": [{"kind": "dose", "source": "81 milligrams", "translated": "81 ਮਿਲੀਗ੍ਰਾਮ", "matched": true}],
   "confidence": 0.93,
   "status": "readback_required",
-  "attempts": 1
+  "attempts": 1,
+  "manner": "plain"
 }

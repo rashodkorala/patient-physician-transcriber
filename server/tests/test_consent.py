@@ -349,7 +349,7 @@ class HeldModel(ScriptedModel):
 
 def test_withdrawal_during_a_turn_in_the_graph_discards_it_cdr_005(kb):  # noqa: F811
     model = HeldModel(
-        {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "empathy": fake_model.empathy}
+        {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "trust": fake_model.trust}
     )
     model.app = create_app(model=model, settings=SETTINGS, kb=kb, voice=FakeVoice())
     with ConsentedClient(model.app) as client:

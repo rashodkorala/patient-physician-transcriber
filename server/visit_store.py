@@ -12,13 +12,17 @@
 @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
 @implements TDM-005: Hidden record-tamper control for the demo
 @implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
+@implements MDD-005: Trust across the barrier
+@implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
 @contract ws:/ws/visit
 @see openspec/tdr/adr/adr-007-in-memory-state-websocket.md
 @see openspec/tdr/cdr/cdr-006-record-entries-review-corrections-and-tamper.md
 @see openspec/tdr/cdr/cdr-007-clinical-note-and-patient-summary.md
+@see openspec/tdr/cdr/cdr-008-patient-voice-manner-and-trust-events.md
 """
 
 import asyncio
+import bisect
 import copy
 import uuid
 from dataclasses import dataclass, field
@@ -44,6 +48,7 @@ from contracts import (
     InterpreterLine,
     IntroductionState,
     Names,
+    PatientSignalEntry,
     PatientSummary,
     RecordEntry,
     RecordIntegrity,
@@ -55,6 +60,7 @@ from contracts import (
     SegmentHistoryController,
     SummaryCheck,
     TamperState,
+    TrustUpdate,
     TurnEntryBody,
     TurnResult,
     VisitStateController,
@@ -112,6 +118,9 @@ class Connection:
     seq: int = 0
     # Graph nodes run in parallel, so sends are serialised to keep wire order equal to seq order.
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    # CDR-008: when this connection's last accepted patient signal arrived (monotonic seconds), for the two second
+    # hold per device; None before the first.
+    last_signal_at: float | None = None
 
 
 @dataclass(eq=False)
@@ -187,6 +196,14 @@ class Visit:
     summary_stale: bool = False
     summary_generating: bool = False
     summary_checks: list[SummaryCheck] = field(default_factory=list)
+    # CDR-008: the patient's accepted signals, oldest first, each also a chain entry; every role sees them. The
+    # trust timeline, one update per spoken turn and per signal, is for the controller only and is never chained.
+    signals: list[PatientSignalEntry] = field(default_factory=list)
+    trust: list[TrustUpdate] = field(default_factory=list)
+    # CDR-008: every settled turn's id in the order it settled, which is the order the room heard it (spoken) or
+    # saw it held back (blocked or escalated). A read-back-confirmed turn is spoken when confirmed, which may be
+    # after turns submitted later, so `turns` (submission order) is not the spoken order; this is.
+    settled_order: list[str] = field(default_factory=list)
 
     def names(self) -> Names:
         return Names(physician_name=self.physician_name, patient_name=self.patient_name)
@@ -218,6 +235,7 @@ class Visit:
             physician_name=self.physician_name,
             patient_name=self.patient_name,
         )
+        self.settled_order.append(turn_id)
         return self.append("turn", turn_id, body.wire())
 
     def spoken(self, turn_id: str) -> bool:
@@ -229,6 +247,46 @@ class Visit:
             and record.result
             and (record.result.status == "final" or record.readback_confirmed)
         )
+
+    def last_settled_turn_id(self) -> str | None:
+        """The most recently settled turn, or None before the first (CDR-008 `afterTurnId`)."""
+        return self.settled_order[-1] if self.settled_order else None
+
+    def spoken_in(self, language: str) -> bool:
+        """Whether any translation has yet been spoken in `language` (CDR-008: `repeat` needs one)."""
+        return any(
+            self.spoken(turn_id) and record.result is not None and record.result.target_language == language
+            for turn_id, record in self.turns.items()
+        )
+
+    def spoken_results_before(self, turn_id: str) -> list[TurnResult]:
+        """The results of every turn spoken before `turn_id`, in the order they were spoken (the reassurance rule's
+        history). A turn not yet settled has every spoken turn before it."""
+        results: list[TurnResult] = []
+        for other_id in self.settled_order:
+            if other_id == turn_id:
+                break
+            record = self.turns[other_id]
+            if self.spoken(other_id) and record.result is not None:
+                results.append(record.result)
+        return results
+
+    def add_trust(self, update: TrustUpdate) -> None:
+        """Insert a trust update at its place in the spoken order (CDR-008: `trust` is oldest first).
+
+        A turn's update can come back from the advisor long after later turns and signals were listed, so it is
+        not simply appended: a turn update sorts by its turn's place in `settled_order`, a signal sorts just after
+        the turn it followed (first when it followed none), and a turn's own update sorts before any signal after
+        that turn. Updates at the same place keep their arrival order.
+        """
+        position = {turn_id: index + 1 for index, turn_id in enumerate(self.settled_order)}
+        last = len(self.settled_order) + 1
+
+        def key(u: TrustUpdate) -> tuple[int, int]:
+            place = position.get(u.turn_id, last) if u.turn_id is not None else 0
+            return (place, 1 if u.signal is not None else 0)
+
+        self.trust.insert(bisect.bisect_right(self.trust, key(update), key=key), update)
 
     def freeze(self) -> sources.Snapshot:
         """ADR-011's frozen sources: the chain as stored now, and the interpreter's own lines."""
@@ -332,6 +390,8 @@ class Visit:
                 summary_checks=self.summary_checks,
                 summary=self.summary,
                 summary_stale=self.summary_stale,
+                signals=self.signals,
+                trust=self.trust,
             ).wire()
 
         current_public = None
@@ -367,6 +427,7 @@ class Visit:
             explain_back=self.explain_back,
             summary=self.summary,
             summary_stale=self.summary_stale,
+            signals=self.signals,
         ).wire()
 
 

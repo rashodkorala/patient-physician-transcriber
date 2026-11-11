@@ -1,6 +1,6 @@
 // Week 2 end-to-end check (tasks 2.4, 2.5, and 2.6): run against `scripts/dev.sh --prod` with
 // TRANSLATOR=fake. Drives typed turns on /control and checks what /control and /screen show:
-// tone labels and glossary explanations, empathy nudges on /control only, read-back confirm and
+// manner labels and glossary explanations, empathy nudges on /control only, read-back confirm and
 // reject, a blocked dose, and an escalated turn, with no private data ever reaching /screen.
 // Usage: node e2e/week2.mjs [baseUrl] [screenshotDir]
 import { chromium } from "playwright-core";
@@ -50,18 +50,22 @@ const waitForCaption = async (before) => {
   return lastCaption();
 };
 
-// 2.4: tone label and glossary explanation on a spoken caption.
+// 2.4: manner label and glossary explanation on a spoken caption.
 let n = await lastTurnId();
 await say("physician", "You did not have a heart attack.");
 let caption = await waitForCaption(n);
-await check((await caption.locator('[data-testid="tone-label"]').count()) === 1, "spoken caption carries one tone label");
-await check((await caption.locator('[data-testid="tone-label"]').textContent()) === "reassuring", "reassurance is labelled reassuring");
+// IDR-005: the manner label replaced the tone-register pill; a reassuring physician turn carries it.
+await check((await caption.locator('[data-testid="manner-label"]').count()) === 1, "spoken physician caption carries one manner label");
+await check((await caption.locator('[data-testid="manner-label"]').getAttribute("data-manner")) === "reassuring", "reassurance is labelled reassuring");
+await check((await caption.locator('[data-testid="tone-label"]').count()) === 0, "the old tone pill is gone");
 await check((await caption.locator('[data-testid="glossary"]').innerText()).includes("ਦਿਲ ਦਾ ਦੌਰਾ"), "approved term explained beside the translation");
 
 // 2.5: empathy nudge on /control only.
 n = await lastTurnId();
 await say("patient", "ਮੈਨੂੰ ਬਹੁਤ ਡਰ ਲੱਗਦਾ ਹੈ, I am scared about the cost.");
-await waitForCaption(n);
+caption = await waitForCaption(n);
+await check((await caption.locator('[data-testid="manner-label"]').count()) === 0, "a patient caption shows no manner label");
+await check((await caption.locator('[data-testid="tone-label"]').count()) === 0, "a patient caption shows no tone label");
 await control.waitForSelector('[data-testid="nudge"]', { timeout: 15000 });
 await check(true, "/control shows the empathy nudge");
 await check((await tv.locator("text=Empathy nudge").count()) === 0, "/screen shows no nudge");

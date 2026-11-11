@@ -10,9 +10,12 @@
 @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
 @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
 @implements TDM-005: Hidden record-tamper control for the demo
+@implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
+@implements IDR-005: Manner vocabulary and voice delivery
 @contract ws:/ws/visit
 @contract TurnResult
 @contract TurnCaption
+@see openspec/tdr/cdr/cdr-008-patient-voice-manner-and-trust-events.md
 @see openspec/tdr/cdr/cdr-001-visit-websocket-events.md
 @see openspec/tdr/cdr/cdr-002-turn-result-schema.md
 @see openspec/tdr/cdr/cdr-003-names-and-interpreter-lines.md
@@ -42,6 +45,11 @@ Speaker = Literal["patient", "physician", "companion"]
 ToneTag = Literal["reassuring", "respectful", "empathetic", "neutral", "urgent", "uncertain"]
 ToneLabel = Literal["respectful", "reassuring", "empathetic", "neutral"]
 Emotion = Literal["calm", "worried", "embarrassed", "in_pain", "relieved", "confused"]
+# IDR-005: how a turn was said, read from the words; plain is the default.
+Manner = Literal["plain", "warm", "reassuring", "gentle", "serious", "urgent", "apologetic", "encouraging"]
+# CDR-008: the patient's own signals during the visit.
+PatientSignal = Literal["not_understood", "slower", "repeat"]
+TrustCueKind = Literal["reassurance", "understanding", "culture"]
 Certainty = Literal["high", "medium", "low"]
 CriticalKind = Literal["dose", "unit", "frequency", "date", "number", "medication"]
 TurnStatusValue = Literal["final", "readback_required", "blocked", "escalated"]
@@ -49,7 +57,27 @@ CaptionStatus = Literal["final", "blocked", "escalated"]
 Role = Literal["controller", "screen", "review"]
 IntroductionState = Literal["pending", "asking_physician", "asking_patient", "done", "skipped"]
 NameRole = Literal["physician", "patient"]
-LinePurpose = Literal["introduction", "ask_physician_name", "ask_patient_name", "welcome"]
+LinePurpose = Literal[
+    "introduction",
+    "ask_physician_name",
+    "ask_patient_name",
+    "welcome",
+    # CDR-008: the interpreter relays a patient signal to the physician, and asks the patient if anything is unclear.
+    "signal_not_understood",
+    "signal_slower",
+    "ask_if_clear",
+]
+MANNERS: tuple[Manner, ...] = (
+    "plain",
+    "warm",
+    "reassuring",
+    "gentle",
+    "serious",
+    "urgent",
+    "apologetic",
+    "encouraging",
+)
+PATIENT_SIGNALS: tuple[PatientSignal, ...] = ("not_understood", "slower", "repeat")
 NAME_MAX = 60
 SPEECH_ID_MAX = 64
 
@@ -105,6 +133,8 @@ class TurnResult(Wire):
     confidence: float
     status: TurnStatusValue
     attempts: int
+    # IDR-005: how the speaker said it, read from the words. Every turn has one; plain when nothing is marked.
+    manner: Manner = "plain"
 
 
 class TurnCaption(Wire):
@@ -121,6 +151,14 @@ class TurnCaption(Wire):
     glossary_used: list[GlossaryEntry]
     critical_values: list[CaptionCriticalValue]
     readback_confirmed: bool
+    # CDR-008: the physician's manner on a final physician turn only; null for every patient or companion turn.
+    manner: Manner | None = None
+
+    @model_validator(mode="after")
+    def _manner_only_for_physician(self) -> "TurnCaption":
+        if self.manner is not None and (self.speaker != "physician" or self.status != "final"):
+            raise ValueError("manner is public only on a final physician turn (CDR-008)")
+        return self
 
 
 def to_caption(result: TurnResult, readback_confirmed: bool = False) -> TurnCaption:
@@ -158,6 +196,7 @@ def to_caption(result: TurnResult, readback_confirmed: bool = False) -> TurnCapt
             CaptionCriticalValue(kind=v.kind, source=v.source, translated=v.translated) for v in result.critical_values
         ],
         readback_confirmed=readback_confirmed,
+        manner=result.manner if result.speaker == "physician" else None,
     )
 
 
@@ -333,7 +372,7 @@ class CommandRefused(Wire):
 
 # ---------- CDR-006: record chain entries and interpreter dismissal ----------
 
-EntryKind = Literal["turn", "consent", "amendment", "confirmation", "explain_back", "interpreter", "summary"]
+EntryKind = Literal["turn", "consent", "amendment", "confirmation", "explain_back", "interpreter", "summary", "signal"]
 EscalationAction = Literal["offer", "request", "mark", "dismiss"]
 DismissReason = Literal["declined", "resolved", "simulated_call_ended"]
 EscalationEntryReason = Literal[
@@ -775,6 +814,61 @@ def wire_summary_check(check: "sm.SummaryCheck") -> SummaryCheck:
     )
 
 
+# ---------- CDR-008: patient signals and trust updates ----------
+
+
+class PatientSignalCommand(Wire):
+    """patient.signal, from the patient's device (review role) only."""
+
+    signal: PatientSignal
+
+
+class PatientSignalEntry(Wire):
+    """patient.signal to every role, and the body of a `signal` chain entry (its entryId is the signalId)."""
+
+    signal_id: str
+    signal: PatientSignal
+    after_turn_id: str | None
+    at: str
+
+
+TRUST_CUE_MAX = 200
+
+
+class TrustCue(Wire):
+    """A short English suggestion for the physician only; never chained, never sent to the note or summary."""
+
+    kind: TrustCueKind
+    text: str = Field(min_length=1, max_length=TRUST_CUE_MAX)
+
+
+class TrustUpdate(Wire):
+    """trust.update, controller only: one per settled final turn, and one per accepted patient signal."""
+
+    turn_id: str | None
+    speaker: Speaker | None
+    emotion: Emotion | None
+    manner: Manner | None
+    reassurance_landed: bool | None
+    signal: PatientSignal | None
+    cue: TrustCue | None
+    at: str
+
+    @model_validator(mode="after")
+    def _one_kind(self) -> "TrustUpdate":
+        if self.signal is not None:
+            if self.speaker is not None or self.emotion is not None or self.manner is not None:
+                raise ValueError("a signal update carries no speaker, emotion, or manner (CDR-008)")
+            if self.reassurance_landed is not None:
+                raise ValueError("a signal update carries no reassurance mark (CDR-008)")
+        else:
+            if self.turn_id is None or self.speaker is None or self.manner is None:
+                raise ValueError("a turn update names its turn, speaker, and manner (CDR-008)")
+            if (self.speaker == "physician") != (self.emotion is None):
+                raise ValueError("emotion is set for patient and companion turns only (CDR-008)")
+        return self
+
+
 class CurrentTurnPublic(Wire):
     turn_id: str
     speaker: Speaker
@@ -816,6 +910,9 @@ class VisitStateController(Wire):
     summary_checks: list[SummaryCheck] = Field(default_factory=list)
     summary: PatientSummary | None = None
     summary_stale: bool = False
+    # CDR-008: the patient's signals for every role; the trust timeline for the controller only.
+    signals: list[PatientSignalEntry] = Field(default_factory=list)
+    trust: list[TrustUpdate] = Field(default_factory=list)
 
 
 class VisitStatePublic(Wire):
@@ -843,6 +940,8 @@ class VisitStatePublic(Wire):
     # CDR-007: only a summary that passed its value check.
     summary: PatientSummary | None = None
     summary_stale: bool = False
+    # CDR-008: the patient's signals; never the trust timeline.
+    signals: list[PatientSignalEntry] = Field(default_factory=list)
 
 
 # ---------- CDR-001 commands ----------
@@ -952,6 +1051,8 @@ CONTROLLER_ONLY_EVENTS = frozenset(
         "note.ready",
         "summary.check",
         "summary.speak",
+        # CDR-008.
+        "trust.update",
     }
 )
 
@@ -980,6 +1081,8 @@ CONTROLLER_COMMANDS = frozenset(
         "demo.tamper_record",
         "note.generate",
         "summary.generate",
+        # CDR-008.
+        "visit.ask_if_clear",
     }
 )
 
@@ -991,7 +1094,7 @@ REVIEW_OR_CONTROLLER_COMMANDS = frozenset(
 
 # CDR-006: commands only the patient's review screen may send; a controller copy is refused with `error`,
 # and a screen copy is refused silently (a screen never receives `error` or `command.refused`).
-REVIEW_COMMANDS = frozenset({"segment.confirm", "segment.amend"})
+REVIEW_COMMANDS = frozenset({"segment.confirm", "segment.amend", "patient.signal"})
 
 # CDR-007: events whose payload differs by role. summary.status loses `detail`, and artefacts.stale always says
 # `note: false`, for screen and review connections.

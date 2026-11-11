@@ -70,7 +70,7 @@ def make_client(
         {
             "translate": translate or fake_model.translate,
             "tone_check": tone_check or fake_model.tone_check,
-            "empathy": fake_model.empathy,
+            "trust": fake_model.trust,
             "name_extract": fake_model.name_extract,
             # ADR-011 chains: the faithful stand-ins unless a test gives its own (EDR-002).
             "explain_back": fake_model.explain_back,
@@ -380,7 +380,7 @@ def test_screen_cannot_set_names(client):
 
 def test_visit_names_reach_the_translate_prompt_mdd_004(kb):
     model = ScriptedModel(
-        {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "empathy": fake_model.empathy}
+        {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "trust": fake_model.trust}
     )
     with (
         ConsentedClient(create_app(model=model, settings=SETTINGS, kb=kb)) as c,
@@ -549,7 +549,7 @@ def test_tamil_is_live_without_test_mode_tdm_004(kb):
 def test_test_mode_allows_sinhala_and_relays_it(kb):
     settings = Settings(translator="fake", azure_speech_key=None, azure_speech_region=None, test_languages=True)
     model = ScriptedModel(
-        {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "empathy": fake_model.empathy}
+        {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "trust": fake_model.trust}
     )
     with ConsentedClient(create_app(model=model, settings=settings, kb=kb), language="si-LK") as c:
         assert c.get("/api/health").json()["testLanguages"] is True
@@ -573,11 +573,12 @@ def play(ws, type_, speech_id, language):
 
 
 def spoken_turn(ctl, tv):
-    """A settled final physician turn, spoken in Punjabi; a physician turn sends no empathy nudge to interleave."""
+    """A settled final physician turn, spoken in Punjabi, through to its trust update on the controller, so nothing
+    of the turn is left to interleave with what the test sends next (CDR-008)."""
     submit(ctl, "physician", "en-CA", "Hello.")
     turn_id = drain_until(ctl, "turn.result")[-1]["payload"]["turnId"]
     # The settled turn is chained, so record.integrity follows it on every role (CDR-006).
-    drain_until(ctl, "record.integrity"), drain_until(tv, "record.integrity")
+    drain_until(ctl, "trust.update"), drain_until(tv, "record.integrity")
     return turn_id
 
 

@@ -10,7 +10,7 @@ proposed_by: agent
 category: engineering-practice
 related_decisions: [mdd-003, adr-004]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice, orb-speaking-state, continuous-listening]
+related_changes: [demo-night-mvp, mediator-voice, orb-speaking-state, continuous-listening, trust-across-the-barrier]
 ai_context:
   implementation_priorities:
     - "Unit tests never call real AI services"
@@ -64,3 +64,4 @@ pytest with a fake chat model for the turn graph (pass, retry, block, and escala
 - 2026-10-22, rashodkorala: Amended: turn graph tests cover the block branch. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-07, rashodkorala: Amended: web unit tests use Node's built-in `node:test` runner via `npm test` in `web/`, replacing the earlier Vitest hint. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.

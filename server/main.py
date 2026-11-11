@@ -19,12 +19,16 @@ Run with the app factory so nothing loads on import: uvicorn main:create_app --f
 @implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
 @implements ADR-006: LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary
 @implements TDM-005: Hidden record-tamper control for the demo
+@implements MDD-005: Trust across the barrier
+@implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
+@implements IDR-005: Manner vocabulary and voice delivery
 @contract ws:/ws/visit
 @contract http:GET /api/speech/{speech_id}
 @see openspec/tdr/adr/adr-001-system-architecture.md
 @see openspec/tdr/cdr/cdr-005-consent-and-explain-back-events.md
 @see openspec/tdr/cdr/cdr-006-record-entries-review-corrections-and-tamper.md
 @see openspec/tdr/cdr/cdr-007-clinical-note-and-patient-summary.md
+@see openspec/tdr/cdr/cdr-008-patient-voice-manner-and-trust-events.md
 @see openspec/tdr/tdm/tdm-005-hidden-record-tamper-control.md
 """
 
@@ -77,6 +81,8 @@ from contracts import (
     NameRef,
     NameReply,
     Names,
+    PatientSignalCommand,
+    PatientSignalEntry,
     RefusedReason,
     SegmentAmend,
     SegmentAmended,
@@ -90,6 +96,7 @@ from contracts import (
     SummarySpeak,
     TamperRecord,
     TamperState,
+    TrustUpdate,
     TurnRef,
     TurnStarted,
     TurnStatus,
@@ -101,13 +108,21 @@ from contracts import (
     wire_summary,
     wire_summary_check,
 )
-from empathy import EmpathyAdvisor
 from graph.turn_graph import TurnPipeline
-from introduction import ask_line, introduction_line, notice_sha256, read_name, welcome_line
+from introduction import (
+    ask_if_clear_line,
+    ask_line,
+    introduction_line,
+    notice_sha256,
+    read_name,
+    signal_line,
+    welcome_line,
+)
 from kb.embeddings import make_embedder
 from kb.store import KnowledgeBase
 from llm import ClaudeModel, Model
 from speech_token import SpeechNotConfigured, issue_token
+from trust import SpokenTurn, TrustAdvisor, nudge_cue, reassurance_landed, understanding_cue
 from visit_store import Connection, Hub, SegmentRecord, Speech, TurnRecord, Visit, new_entry_id, now
 from voice import (
     DEFAULT_MODEL,
@@ -117,7 +132,7 @@ from voice import (
     ElevenLabsVoice,
     Voice,
     VoiceUnavailable,
-    delivery_for,
+    delivery_for_turn,
 )
 
 # uvicorn prints this logger, so timing lines and errors show in the dev.sh output.
@@ -127,6 +142,8 @@ ROLES = ("controller", "screen", "review")
 CONSENT_NEEDED = "Consent is needed before the conversation starts"
 # CDR-004: a speech whose end never arrives stops showing as speaking after this long.
 VOICE_CEILING_S = 60.0
+# CDR-008: the same device may not send two patient signals within this many seconds.
+SIGNAL_HOLD_S = 2.0
 
 
 def make_model(settings: Settings) -> Model:
@@ -167,6 +184,7 @@ def create_app(
     kb: KnowledgeBase | None = None,
     voice: Voice | None = None,
     voice_ceiling_s: float = VOICE_CEILING_S,
+    signal_hold_s: float = SIGNAL_HOLD_S,
 ) -> FastAPI:
     settings = settings or load_settings()
     log.info(describe(settings))
@@ -174,7 +192,7 @@ def create_app(
     voice = voice or make_voice(settings)
     kb = kb or KnowledgeBase(make_embedder())
     pipeline = TurnPipeline(model, kb)
-    advisor = EmpathyAdvisor(model, kb)
+    advisor = TrustAdvisor(model, kb)
 
     app = FastAPI(title="Demo night server")
     # Screens load from the Next.js origin on the demo laptop or the local network.
@@ -227,11 +245,17 @@ def create_app(
         if record and record.result:
             result = record.result
             if (record.settled and result.status == "final") or record.readback_confirmed:
-                return result.translation, result.target_language, delivery_for(result.emotion, result.certainty)
+                # IDR-005: a physician turn is said in the physician's manner; a patient or companion turn conveys
+                # the speaker's emotion to the physician.
+                delivery = delivery_for_turn(result.speaker, result.manner, result.emotion, result.certainty)
+                return result.translation, result.target_language, delivery
             return None
         line = visit.interpreter_lines.get(speech_id)
         if line:
-            for part in line.lines:
+            # CDR-008: the closing check is asked of the patient in their language only; the physician's copy is
+            # shown, never spoken.
+            parts = line.lines[:1] if line.purpose == "ask_if_clear" else line.lines
+            for part in parts:
                 if part.language == language:
                     return part.text, part.language, LINE_DELIVERY
         return None
@@ -494,15 +518,53 @@ def create_app(
             visit.proposed_names.clear()
             await advance_introduction()
 
-    async def send_nudge(turn_id: str, emotion: str, text_en: str) -> None:
+    async def send_trust(turn_id: str, epoch: int) -> None:
+        """MDD-005 and CDR-008: one trust.update per spoken turn, to controllers only, after the trust advisor
+        returns, or at once without a cue if it fails. Never on the turn's critical path.
+
+        A patient turn gets the empathy nudge as before (emotion in the nudge set) and the reassurance mark, which
+        code decides from the visit's spoken history; a physician turn gets a culture cue when the patient
+        language's tone guide marks the topic sensitive; a companion turn gets neither.
+
+        `epoch` is the consent epoch the turn was spoken under (CDR-005 consent rule 3): once consent is withdrawn
+        no model call starts, and an advisor call that was running is dropped with its nudge and its update.
+        The update is placed in `visit.trust` by its turn's spoken position, however late it returns.
+        """
+        visit = hub.visit
+        record = visit.turns.get(turn_id)
+        if record is None or record.result is None or visit.consent_epoch != epoch:
+            return
+        result = record.result
+        history = [SpokenTurn(r.speaker, r.emotion, r.manner) for r in visit.spoken_results_before(turn_id)]
+        landed = reassurance_landed(history, result.speaker, result.emotion)
+        cue = None
+        nudge = None
         try:
-            nudge = await advisor.nudge(turn_id, emotion, text_en)  # type: ignore[arg-type]
+            if result.speaker == "physician":
+                cue = await advisor.culture_cue(result.source_text, visit.patient_language)
+            elif result.speaker == "patient":
+                nudge = await advisor.nudge(turn_id, result.emotion, result.translation)
         except Exception:
-            log.exception("empathy nudge failed")
+            log.exception("trust advisor failed")
+        if visit.consent_epoch != epoch:
+            # Consent was withdrawn while the advisor was running: nothing of this turn's trust reaches anyone.
             return
         if nudge:
-            hub.visit.nudges.append(nudge)
+            visit.nudges.append(nudge)
             await hub.publish("empathy.nudge", nudge.wire())
+            cue = nudge_cue(nudge)
+        update = TrustUpdate(
+            turn_id=turn_id,
+            speaker=result.speaker,
+            emotion=None if result.speaker == "physician" else result.emotion,
+            manner=result.manner,
+            reassurance_landed=landed,
+            signal=None,
+            cue=cue,
+            at=now(),
+        )
+        visit.add_trust(update)
+        await hub.publish("trust.update", update.wire())
 
     async def submit_turn(conn: Connection, payload: dict) -> None:
         cmd = TurnSubmit.model_validate(payload)
@@ -517,6 +579,10 @@ def create_app(
         patient, physician = visit.patient_language, visit.physician_language
         if cmd.language not in (patient, physician):
             await error(conn, f"{cmd.language} is not a language of this visit", "turn.submit")
+            return
+        if cmd.speaker == "companion" and cmd.language != patient:
+            # CDR-008: a companion is a third speaker in the patient's language, labelled companion everywhere.
+            await error(conn, "A companion speaks the patient's language", "turn.submit")
             return
         target = physician if cmd.language == patient else patient
         if visit.introduction in ("pending", "asking_physician", "asking_patient"):
@@ -604,10 +670,8 @@ def create_app(
             and eb.explain_back_id == listening_to
         ):
             await set_explain_back("listening", [*eb.explanation_turn_ids, turn_id])
-        if result.status == "final" and result.speaker == "patient":
-            task = asyncio.create_task(send_nudge(turn_id, result.emotion, result.translation))
-            background.add(task)
-            task.add_done_callback(background.discard)
+        if result.status == "final":
+            spawn(send_trust(turn_id, epoch))
 
     async def readback(conn: Connection, payload: dict, confirmed: bool) -> None:
         ref = TurnRef.model_validate(payload)
@@ -628,6 +692,8 @@ def create_app(
         visit.append_turn(ref.turn_id)
         await hub.publish("turn.result", to_caption(record.result, readback_confirmed=True).wire())  # type: ignore[arg-type]
         await publish_integrity()
+        # A confirmed read-back is a spoken turn, so it gets its trust update like every other (CDR-008).
+        spawn(send_trust(ref.turn_id, visit.consent_epoch))
 
     # ---------- ADR-003 and CDR-001: off-the-record pause, interpreter, and high-risk marks ----------
 
@@ -1091,6 +1157,72 @@ def create_app(
         ref = SummaryRef.model_validate(payload)
         await hub.publish("summary.speak", SummarySpeak(summary_id=ref.summary_id, action="stop", speech_ids=[]).wire())
 
+    # ---------- CDR-008: the patient's signals and the closing check (MDD-005) ----------
+
+    async def patient_signal(conn: Connection, payload: dict) -> None:
+        """A signal from the patient's own device (review role only; the receive loop refuses other roles).
+
+        Refused `invalid` before consent, while paused, and for `repeat` when nothing has yet been spoken in the
+        patient's language; `busy` within the hold of the same device's previous signal. Accepted: chained as a
+        `signal` entry, shown to every role, relayed to the physician for not_understood and slower, and listed
+        for the controller with an understanding cue. `repeat` says nothing new: the controller replays the last
+        spoken translation by id.
+        """
+        cmd = PatientSignalCommand.model_validate(payload)
+        visit = hub.visit
+        command = "patient.signal"
+        if visit.consent is None:
+            await error(conn, CONSENT_NEEDED, command, "invalid")
+            return
+        if visit.paused:
+            await error(conn, "Paused: nothing is recorded until you resume", command, "invalid")
+            return
+        if cmd.signal == "repeat" and not visit.spoken_in(visit.patient_language):
+            await error(conn, "Nothing has been spoken in the patient's language yet", command, "invalid")
+            return
+        held_since = conn.last_signal_at
+        if held_since is not None and time.monotonic() - held_since < signal_hold_s:
+            await error(conn, "A signal was just sent; wait a moment", command, "busy")
+            return
+        conn.last_signal_at = time.monotonic()
+        at, signal_id = now(), new_entry_id()
+        entry = PatientSignalEntry(
+            signal_id=signal_id, signal=cmd.signal, after_turn_id=visit.last_settled_turn_id(), at=at
+        )
+        visit.append("signal", signal_id, entry.wire(), at)
+        visit.signals.append(entry)
+        await hub.publish("patient.signal", entry.wire())
+        await publish_integrity()
+        if cmd.signal in ("not_understood", "slower"):
+            await say(signal_line(cmd.signal, visit.physician_language, visit.patient_name))
+        update = TrustUpdate(
+            turn_id=entry.after_turn_id,
+            speaker=None,
+            emotion=None,
+            manner=None,
+            reassurance_landed=None,
+            signal=cmd.signal,
+            cue=understanding_cue(cmd.signal),
+            at=at,
+        )
+        # Sorted just after the turn it followed, so a slow advisor's update for that turn still lands before it.
+        visit.add_trust(update)
+        await hub.publish("trust.update", update.wire())
+
+    async def ask_if_clear(conn: Connection, payload: dict) -> None:
+        """The closing check: the interpreter asks the patient, in their language, whether anything the doctor said
+        should be explained again, with the physician's language shown (controller only)."""
+        visit = hub.visit
+        command = "visit.ask_if_clear"
+        if await refuse_without_consent(conn, command):
+            return
+        if await refuse_while_paused(conn, command):
+            return
+        if visit.pending_readback:
+            await error(conn, "Confirm or reject the highlighted dose first", command, "busy")
+            return
+        await say(ask_if_clear_line(visit.physician_language, visit.patient_language, visit.patient_name))
+
     # ---------- CDR-004: interpreter voice playback ----------
 
     async def set_speech(speech: Speech | None) -> None:
@@ -1158,6 +1290,8 @@ def create_app(
         "summary.generate": generate_summary_cmd,
         "summary.read_aloud": read_summary_aloud,
         "summary.stop": stop_summary,
+        "patient.signal": patient_signal,
+        "visit.ask_if_clear": ask_if_clear,
     }
 
     @app.websocket("/ws/visit")

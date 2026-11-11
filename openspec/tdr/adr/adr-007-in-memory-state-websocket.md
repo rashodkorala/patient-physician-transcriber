@@ -10,7 +10,7 @@ proposed_by: agent
 category: architecture
 related_decisions: [adr-001, mdd-003]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice, orb-speaking-state]
+related_changes: [demo-night-mvp, mediator-voice, orb-speaking-state, trust-across-the-barrier]
 ai_context:
   implementation_priorities:
     - "One active visit at a time held in server memory"
@@ -62,3 +62,4 @@ Hold the demo visit in server memory and push updates to all screens over a WebS
 - 2026-10-22, Claude (agent): Drafted as a proposal. Awaiting human review; do not implement until accepted.
 - 2026-10-22, rashodkorala: Accepted in decision review. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.

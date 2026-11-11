@@ -8,3 +8,10 @@ lines:
   ask_patient_name_with_physician: இன்று உங்கள் வைத்தியர் {physician}. தயவுசெய்து உங்கள் பெயரைச் சொல்லுங்கள்.
   welcome: நன்றி. நீங்கள் தயாரானதும் பேசத் தொடங்கலாம்.
   welcome_with_patient: நன்றி {patient}. நீங்கள் தயாரானதும் பேசத் தொடங்கலாம்.
+  # CDR-008: the patient's signals relayed to the physician, and the closing check, in the respectful plural.
+  signal_not_understood: "{patient} அது தங்களுக்குப் புரியவில்லை என்று சொல்கிறார்கள். தயவுசெய்து அதை வேறு விதமாகச் சொல்ல முடியுமா?"
+  signal_not_understood_unnamed: "நோயாளி அது தங்களுக்குப் புரியவில்லை என்று சொல்கிறார்கள். தயவுசெய்து அதை வேறு விதமாகச் சொல்ல முடியுமா?"
+  signal_slower: "{patient} உங்களை மெதுவாகப் பேசக் கேட்கிறார்கள்."
+  signal_slower_unnamed: "நோயாளி உங்களை மெதுவாகப் பேசக் கேட்கிறார்கள்."
+  ask_if_clear: "{patient}, இன்று வைத்தியர் சொன்னவற்றில் மீண்டும் விளக்க வேண்டும் என்று நீங்கள் விரும்பும் ஏதேனும் உண்டா?"
+  ask_if_clear_unnamed: "இன்று வைத்தியர் சொன்னவற்றில் மீண்டும் விளக்க வேண்டும் என்று நீங்கள் விரும்பும் ஏதேனும் உண்டா?"

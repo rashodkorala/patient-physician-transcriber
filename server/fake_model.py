@@ -16,16 +16,27 @@ from chains.checks import DraftSource
 from chains.explain_back import CodeItemView, ExplainBackDraft
 from chains.note import DraftSection, DraftSentence, NoteDraft
 from chains.summary import DraftSummarySentence, SummaryDraft
-from empathy import NudgeDraft
 from graph.turn_graph import LANGUAGE_NAMES, Draft, ToneCheck
 from introduction import NameGuess
 from llm import ScriptedModel
+from trust import CultureCueDraft, NudgeDraft
 
 MEDICATIONS = ("aspirin", "nitroglycerin", "metformin", "amlodipine")
 # Markers that let the browser check (web/e2e/week2.mjs) drive blocked and escalated turns.
 MISMATCH_MARKER = "(test: mismatch)"  # first number times ten on every attempt, so the turn is blocked
 TONE_MARKER = "(test: tone)"  # tone check fails on every attempt, so the turn is escalated
 WORRY = re.compile(r"scared|worried|afraid|ਡਰ|ਫ਼ਿਕਰ|peur|inquiet", re.IGNORECASE)
+RELIEF = re.compile(r"relief|relieved|better now|thank you|ਸ਼ੁਕਰ|soulag", re.IGNORECASE)
+# IDR-005: the manner the fake reads from a physician's words; plain unless the words clearly carry one.
+REASSURING = re.compile(r"reassur|not have|unlikely|\bearly\b|nothing to worry", re.IGNORECASE)
+APOLOGETIC = re.compile(r"\bsorry\b|apologi", re.IGNORECASE)
+URGENT = re.compile(r"call 911|right away|immediately", re.IGNORECASE)
+# MDD-005: topics the tone guides mark as sensitive; the fake cues on the words, the live model on the guidance.
+SENSITIVE = re.compile(r"alcohol|drink|smok|sexual|mental health|depress|family conflict", re.IGNORECASE)
+CULTURE_CUE = (
+    "This question may carry shame in the patient's culture. Say why it matters for their care, "
+    "and ask without judgement."
+)
 
 
 def field(user: str, name: str) -> str:
@@ -54,14 +65,34 @@ def translate(user: str) -> Draft:
         )
     tone = "reassuring" if re.search(r"reassur|not have|unlikely", text, re.IGNORECASE) else "respectful"
     return Draft(
-        emotion="worried" if WORRY.search(text) else "calm",
+        emotion=emotion_of(text),
         certainty="high",
+        manner=manner_of(text) if field(user, "speaker") == "physician" else "plain",
         medications=[m for m in MEDICATIONS if m in text.lower()],
         translation=f"[{field(user, 'target_code')}] {translated}",
         back_translation=text,
         tone_tags=[tone],
         confidence=0.95,
     )
+
+
+def emotion_of(text: str) -> str:
+    if WORRY.search(text):
+        return "worried"
+    if RELIEF.search(text):
+        return "relieved"
+    return "calm"
+
+
+def manner_of(text: str) -> str:
+    """A physician's manner read from marked words only; everything else is plain (IDR-005)."""
+    if URGENT.search(text):
+        return "urgent"
+    if APOLOGETIC.search(text):
+        return "apologetic"
+    if REASSURING.search(text):
+        return "reassuring"
+    return "plain"
 
 
 def tone_check(user: str) -> ToneCheck:
@@ -75,7 +106,10 @@ def tone_check(user: str) -> ToneCheck:
     return ToneCheck(meaning_preserved=True, certainty_preserved=True, warmth_preserved=True, issue="")
 
 
-def empathy(user: str) -> NudgeDraft:
+def trust(user: str) -> NudgeDraft | CultureCueDraft:
+    """The trust advisor's two questions (MDD-005): a nudge for a patient turn, a culture cue for a physician's."""
+    if field(user, "speaker") == "physician":
+        return CultureCueDraft(cue=CULTURE_CUE if SENSITIVE.search(field(user, "physician_said")) else None)
     candidates = [c for c in field(user, "candidates").splitlines() if c.strip()]
     return NudgeDraft(
         suggestion="Acknowledge the patient's worry before moving on.",
@@ -153,7 +187,7 @@ def fake_model() -> ScriptedModel:
         {
             "translate": translate,
             "tone_check": tone_check,
-            "empathy": empathy,
+            "trust": trust,
             "name_extract": name_extract,
             "clinical_note": clinical_note,
             "patient_summary": patient_summary,
