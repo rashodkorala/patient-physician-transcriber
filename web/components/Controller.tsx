@@ -170,6 +170,61 @@ const ACTION_FOR: Record<EscalationReason, EscalationEntry["action"]> = {
 
 const SPEAKER_TEXT: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
 
+/** ADR-006, ADR-010: what the running server uses, from GET /api/health; every value is a string. */
+type Services = {
+  translator: string;
+  liveModel: string;
+  toneModel: string;
+  recordModel: string;
+  recognition: string;
+  voice: string;
+  voiceModel: string;
+  voiceId: string;
+  embeddings: string;
+};
+
+/** Display names for the model ids the server reports; an id not listed here is shown as it is. */
+const MODEL_NAMES: Record<string, string> = {
+  "claude-sonnet-5-5": "Claude Sonnet 5.5",
+  "claude-haiku-5-5": "Haiku 5.5",
+  "claude-opus-5-5": "Opus 5.5",
+  eleven_v4: "Eleven v4",
+};
+const modelName = (id: string) => MODEL_NAMES[id] ?? id;
+
+/**
+ * The header's services line, so the presenter can see at a glance whether this is a live run.
+ * @implements ADR-006: LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary
+ * @implements ADR-010: Voice output: ElevenLabs Eleven v4 replaces OpenAI text-to-speech; Azure stays fallback
+ */
+function ServicesLine({ services }: { services: Services }) {
+  const recognised = services.recognition === "azure";
+  const recognition = recognised ? "Azure recognition." : "No speech recognition key.";
+  let voice = "No voice.";
+  if (services.voice === "elevenlabs") {
+    voice = `ElevenLabs ${modelName(services.voiceModel)} voice${recognised ? ", Azure fallback" : ""}.`;
+  } else if (services.voice === "azure") voice = "Azure voice.";
+  return (
+    <p className={styles.services} data-testid="services">
+      {services.translator === "claude" ? (
+        `${modelName(services.liveModel)} for turns, ${modelName(services.toneModel)} for checks, ` +
+        `${modelName(services.recordModel)} for the note and summary.`
+      ) : (
+        <span className={styles.servicesWarn} data-state="fake">
+          Fake model, no AI calls. Not for a live visit.
+        </span>
+      )}{" "}
+      {recognition} {voice}
+      {services.embeddings === "hashing" && (
+        <>
+          {" "}
+          <span className={styles.servicesWarn}>Test embedder, not for rehearsal.</span>
+        </>
+      )}
+    </p>
+  );
+}
+
 /** CDR-008 trust view: the patient's or companion's emotion in plain words. */
 const EMOTION_TEXT: Record<Emotion, string> = {
   calm: "sounds calm",
@@ -288,6 +343,8 @@ export default function Controller() {
   const [introSkipped, setIntroSkipped] = useState(false);
   // TDM-003: chosen when the server starts and fixed until it restarts, so it is read once.
   const [testMode, setTestMode] = useState(false);
+  // ADR-006, ADR-010: null until the health call answers, so the services line never guesses.
+  const [services, setServices] = useState<Services | null>(null);
   const capture = useRef<Capture | null>(null);
   // IDR-004: hands-free listening, the side heard last, short replies waiting for the physician, and
   // whether the interpreter's voice (or its echo) is still in the room.
@@ -714,7 +771,10 @@ export default function Controller() {
   useEffect(() => {
     fetch(`${serverHttpUrl()}/api/health`)
       .then((response) => response.json())
-      .then((health: { testLanguages?: boolean }) => setTestMode(Boolean(health.testLanguages)))
+      .then((health: { testLanguages?: boolean; services?: Services }) => {
+        setTestMode(Boolean(health.testLanguages));
+        setServices(health.services ?? null);
+      })
       .catch(() => setTestMode(false)); // unreachable server: the safe answer is no test languages
   }, []);
 
@@ -1000,6 +1060,7 @@ export default function Controller() {
         <div>
           <p className={styles.eyebrow}>Demo night interpreter</p>
           <h1>Physician controller</h1>
+          {services && <ServicesLine services={services} />}
         </div>
         <div className={styles.headerStatus}>
           <RecordBadge integrity={integrity} where={brokenWhere} className={styles.badge} />

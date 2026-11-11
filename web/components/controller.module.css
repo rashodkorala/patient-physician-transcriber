@@ -35,6 +35,9 @@
   padding-bottom: 20px; border-bottom: 1px solid var(--line);
 }
 .header h1 { margin: 6px 0 0; font-size: var(--text-2xl); font-weight: 500; line-height: 1.15; }
+/* ADR-006, ADR-010: the services line, quiet unless the run is not fit for a live visit. */
+.services { margin: 8px 0 0; font-size: var(--text-sm); line-height: 1.4; color: var(--muted); }
+.servicesWarn { color: var(--stop); font-weight: 500; }
 .headerStatus { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; justify-content: flex-end; }
 /* IDR-003: the record badge at the size of the header's other labels. */
 .badge { font-size: var(--text-sm); }

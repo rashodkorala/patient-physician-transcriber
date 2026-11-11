@@ -59,6 +59,11 @@ class HashingEmbedder:
         return self._embed(text)
 
 
+def embedder_name(embedder: Embedder) -> str:
+    """The name /api/health reports: "hashing" for the test embedder, "e5" otherwise (the EMBEDDINGS values)."""
+    return "hashing" if isinstance(embedder, HashingEmbedder) else "e5"
+
+
 def make_embedder() -> Embedder:
     """EMBEDDINGS=hashing selects the test embedder; the demo always uses E5."""
     if os.environ.get("EMBEDDINGS", "e5") == "hashing":

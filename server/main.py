@@ -46,7 +46,7 @@ from chains.checks import GenerationFailed
 from chains.explain_back import check_explain_back
 from chains.note import generate_note
 from chains.summary import generate_summary
-from config import LIVE_MODEL, TONE_MODEL, Settings, load_settings
+from config import LIVE_MODEL, RECORD_MODEL, TONE_MODEL, Settings, load_settings
 from contracts import (
     CONTROLLER_COMMANDS,
     REVIEW_COMMANDS,
@@ -118,7 +118,7 @@ from introduction import (
     signal_line,
     welcome_line,
 )
-from kb.embeddings import make_embedder
+from kb.embeddings import Embedder, embedder_name, make_embedder
 from kb.store import KnowledgeBase
 from llm import ClaudeModel, Model
 from speech_token import SpeechNotConfigured, issue_token
@@ -164,18 +164,53 @@ def make_voice(settings: Settings) -> Voice | None:
     )
 
 
-def describe(settings: Settings) -> str:
+def services(settings: Settings, voice: Voice | None, embedder: Embedder) -> dict[str, str]:
+    """What this run uses: the API, its models, speech recognition, the voice, and the embedder.
+
+    The one source for both the start-up line (describe) and GET /api/health, so the two cannot drift.
+    Every value is a string; a service that is absent is "none" or "".
+
+    @implements ADR-006: LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary
+    @implements ADR-010: Voice output: ElevenLabs Eleven v4 replaces OpenAI text-to-speech; Azure stays fallback
+    """
+    claude = settings.translator == "claude"
+    recognition = "azure" if settings.azure_speech_key and settings.azure_speech_region else "none"
+    # ADR-010: the server voice when there is one; otherwise the browser speaks with Azure, if it has a key.
+    if voice:
+        spoken = "elevenlabs"
+        voice_model = getattr(voice, "model", None) or settings.elevenlabs_model or DEFAULT_MODEL
+        voice_id = getattr(voice, "voice_id", None) or settings.elevenlabs_voice_id or DEFAULT_VOICE
+    else:
+        spoken = "azure" if recognition == "azure" else "none"
+        voice_model = voice_id = ""
+    return {
+        "translator": settings.translator,
+        "liveModel": LIVE_MODEL if claude else "",
+        "toneModel": TONE_MODEL if claude else "",
+        "recordModel": RECORD_MODEL if claude else "",
+        "recognition": recognition,
+        "voice": spoken,
+        "voiceModel": voice_model,
+        "voiceId": voice_id,
+        "embeddings": embedder_name(embedder),
+    }
+
+
+def describe(used: dict[str, str], test_languages: bool) -> str:
     """One start-up line saying what this run will use, so a fake run is never mistaken for live."""
     translator = (
-        f"Claude ({LIVE_MODEL}, tone check {TONE_MODEL})"
-        if settings.translator == "claude"
+        f"Claude ({used['liveModel']}, tone check {used['toneModel']}, note and summary {used['recordModel']})"
+        if used["translator"] == "claude"
         else "fake model (no AI calls)"
     )
-    speech = "Azure" if settings.azure_speech_key and settings.azure_speech_region else "not configured"
-    if settings.elevenlabs_api_key:
-        speech += f", voice ElevenLabs ({settings.elevenlabs_model or DEFAULT_MODEL}) with Azure fallback"
-    mode = " TEST MODE: Sinhala selectable (TDM-003), never use on stage." if settings.test_languages else ""
-    return f"Translator: {translator}. Speech: {speech}.{mode}"
+    speech = "Azure" if used["recognition"] == "azure" else "not configured"
+    if used["voice"] == "elevenlabs":
+        speech += f", voice ElevenLabs ({used['voiceModel']}, {used['voiceId']}) with Azure fallback"
+    elif used["voice"] == "none":
+        speech += ", no voice"
+    embeddings = "E5" if used["embeddings"] == "e5" else "hashing (test only)"
+    mode = " TEST MODE: Sinhala selectable (TDM-003), never use on stage." if test_languages else ""
+    return f"Translator: {translator}. Speech: {speech}. Embeddings: {embeddings}.{mode}"
 
 
 def create_app(
@@ -187,10 +222,11 @@ def create_app(
     signal_hold_s: float = SIGNAL_HOLD_S,
 ) -> FastAPI:
     settings = settings or load_settings()
-    log.info(describe(settings))
     model = model or make_model(settings)
     voice = voice or make_voice(settings)
     kb = kb or KnowledgeBase(make_embedder())
+    used = services(settings, voice, kb.embedder)
+    log.info(describe(used, settings.test_languages))
     pipeline = TurnPipeline(model, kb)
     advisor = TrustAdvisor(model, kb)
 
@@ -212,6 +248,8 @@ def create_app(
             # TDM-003: the controller shows its banner and the test languages from this; screens never ask.
             "testLanguages": settings.test_languages,
             "voice": "elevenlabs" if voice else "azure",
+            # ADR-006, ADR-010: the controller's services line; the same dict the start-up line is made from.
+            "services": used,
         }
 
     @app.get("/api/speech-token")
