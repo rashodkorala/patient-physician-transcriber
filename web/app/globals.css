@@ -34,7 +34,8 @@
   /* States */
   --ok: #1e7b4f;
   --ok-soft: #e2f3e9;
-  --wait: #9c6400;
+  /* 8a5800 rather than ADR-012's 9c6400: that value is 4.38 on --wait-soft, below AA; this is 5.0 there and 5.3 on paper. */
+  --wait: #8a5800;
   --wait-soft: #fbf0d6;
   --stop: #b42318;
   --stop-soft: #fbe5e3;
@@ -55,13 +56,6 @@
   --text-2xl: 28px;
   --text-3xl: 36px;
 
-  /* Legacy names kept so every module stylesheet resolves while it is rewritten to the tokens above. */
-  --bg: var(--paper);
-  --text: var(--ink);
-  --signal: var(--stop);
-  --chip-bg: var(--ink);
-  --chip-text: var(--surface);
-  --serif: var(--sans);
   color-scheme: light;
 }
 
@@ -90,8 +84,6 @@
     --stop: #f28b82;
     --stop-soft: #4a1f1b;
     --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.5);
-    --chip-bg: var(--ink);
-    --chip-text: var(--paper);
     color-scheme: dark;
   }
 }

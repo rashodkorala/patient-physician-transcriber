@@ -56,5 +56,7 @@
   "latestTitle": "Ce que le médecin vient de dire",
   "speakerPhysician": "Médecin",
   "speakerPatient": "Vous",
-  "speakerCompanion": "Votre accompagnant"
+  "speakerCompanion": "Votre accompagnant",
+  "stageListening": "À l'écoute",
+  "stageTranslating": "Traduction en cours"
 }

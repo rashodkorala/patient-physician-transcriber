@@ -10,6 +10,7 @@
 //        CHROMIUM_PATH=... node e2e/hands-free.mjs azure <wav> [baseUrl]
 import { chromium } from "playwright-core";
 import { chooseLanguage, giveConsent } from "./consent-steps.mjs";
+import { fakeVoice } from "./visit-steps.mjs";
 
 const mode = process.argv[2];
 const wav = mode === "azure" ? process.argv[3] : null;
@@ -47,6 +48,8 @@ control.on("websocket", (ws) => {
   });
 });
 if (mode !== "azure") {
+  // The interpreter's voice is a silent clip from the speech endpoint, so the pause rule runs without vendor keys.
+  await fakeVoice(control);
   // The fake recogniser: the test says what was heard, and in which recognition locale.
   await control.addInitScript(() => {
     window.__fakeListening = (recognition, deliver) => {

@@ -56,5 +56,7 @@
   "latestTitle": "What the doctor just said",
   "speakerPhysician": "Doctor",
   "speakerPatient": "You",
-  "speakerCompanion": "Your companion"
+  "speakerCompanion": "Your companion",
+  "stageListening": "Listening",
+  "stageTranslating": "Translating"
 }

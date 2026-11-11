@@ -78,7 +78,10 @@ export type NoticeKey =
   | "latestTitle"
   | "speakerPhysician"
   | "speakerPatient"
-  | "speakerCompanion";
+  | "speakerCompanion"
+  // The quiet line on the patient's device while a turn is still being interpreted.
+  | "stageListening"
+  | "stageTranslating";
 
 /** IDR-005: the label key for each manner the screens show; plain shows nothing. */
 export const MANNER_KEY: Record<Exclude<Manner, "plain">, NoticeKey> = {

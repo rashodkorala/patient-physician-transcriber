@@ -12,6 +12,9 @@
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
  * @implements IDR-003: SHA-256 hash chain for the record-verified badge
  * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
+ * @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
+ * @implements IDR-005: Manner vocabulary and voice delivery
+ * @implements ADR-012: Clinic design system
  * @contract TurnCaption
  */
 
@@ -29,7 +32,9 @@ import type {
   InterpreterEscalation,
   InterpreterLine,
   Language,
+  LinePurpose,
   Names,
+  PatientSignalEntry,
   RecordIntegrity,
   Speaker,
   TurnCaption,
@@ -43,7 +48,9 @@ import {
   INTERPRETER_SIMULATED_MS,
   type InterpreterPhase,
   type NoticeKey,
+  SIGNAL_KEY,
   bilingual,
+  mannerLabel,
 } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
 import { applyAmended, brokenEntryLabel, summaryIndexOf, turnOfEntry } from "@/lib/record";
@@ -64,6 +71,10 @@ interface Pending {
 
 const SPEAKER_LABEL: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
 const STATE_LABEL: Record<ConnectionState, string> = { open: "Connected", connecting: "Connecting", closed: "Reconnecting" };
+/** CDR-008: how long the room sees a patient's signal; a late screen shows one still inside this window. */
+export const SIGNAL_SHOWN_MS = 8000;
+/** CDR-008: interpreter lines said during the visit; they stay until the next turn settles, unlike the introduction. */
+const MID_VISIT_LINES = new Set<LinePurpose>(["signal_not_understood", "signal_slower", "ask_if_clear"]);
 
 function Notice({ notice, first, second }: { notice: NoticeKey; first: Language; second: Language }) {
   return (
@@ -94,7 +105,7 @@ function Original({
   return (
     <div className={styles.side} lang={language}>
       <div className={styles.meta}>
-        <span className={`${styles.speaker} ${styles[speaker]}`}>{SPEAKER_LABEL[speaker]}</span>
+        <span className={styles.speaker}>{SPEAKER_LABEL[speaker]}</span>
         {name && (
           <span className={styles.name} data-testid="speaker-name">
             {name}
@@ -316,20 +327,74 @@ function SummaryRow({
   );
 }
 
+/**
+ * CDR-008: the patient's own signal, as a notice to the room in the patient's language and in English, in the
+ * patient's colour and under their name. Shown for a few seconds only; the interpreter's line to the physician follows.
+ */
+function SignalRow({
+  entry,
+  name,
+  patient,
+  physician,
+}: {
+  entry: PatientSignalEntry;
+  name: string | null;
+  patient: Language;
+  physician: Language;
+}) {
+  return (
+    <article
+      className={`${styles.turn} ${styles.patient} ${styles.signal}`}
+      data-testid="patient-signal"
+      data-signal={entry.signal}
+      data-signal-id={entry.signalId}
+      aria-live="polite"
+    >
+      {bilingual(SIGNAL_KEY[entry.signal].notice, patient, physician).map(({ lang, text }) => (
+        <div key={lang} className={styles.side} lang={lang}>
+          <div className={styles.meta}>
+            <span className={styles.speaker}>{SPEAKER_LABEL.patient}</span>
+            {name && <span className={styles.name}>{name}</span>}
+            <span className={styles.lang}>{LANGUAGE_LABELS[lang].own}</span>
+          </div>
+          <p className={styles.text}>{text}</p>
+        </div>
+      ))}
+    </article>
+  );
+}
+
+/**
+ * IDR-005: how the physician said it, beneath the translation: the patient's language first, English beside it
+ * for the physician. Plain renders nothing, and a patient or companion caption never carries a manner.
+ */
+function MannerLabel({ c, patient }: { c: TurnCaption; patient: Language }) {
+  if (c.speaker !== "physician" || c.status !== "final") return null;
+  const own = mannerLabel(c.manner, patient);
+  if (!own) return null;
+  return (
+    <p className={styles.manner} data-testid="manner-label" data-manner={c.manner}>
+      <span lang={patient}>{own}</span>
+      <span lang="en-CA">{mannerLabel(c.manner, "en-CA")}</span>
+    </p>
+  );
+}
+
 function nameOf(speaker: Speaker, names: Names): string | null {
   if (speaker === "physician") return names.physicianName ?? null;
   if (speaker === "patient") return names.patientName ?? null;
   return null;
 }
 
-function Caption({ c, names, broken }: { c: TurnCaption; names: Names; broken: boolean }) {
+function Caption({ c, names, broken, patient }: { c: TurnCaption; names: Names; broken: boolean; patient: Language }) {
   const spoken = c.status === "final" && c.translation !== null;
   return (
     <article
-      className={`${styles.turn} ${broken ? styles.broken : ""}`}
+      className={`${styles.turn} ${styles[c.speaker]} ${broken ? styles.broken : ""}`}
       data-testid="caption"
       data-turn-id={c.turnId}
       data-status={c.status}
+      data-speaker={c.speaker}
       data-broken={broken || undefined}
     >
       <Original
@@ -352,11 +417,6 @@ function Caption({ c, names, broken }: { c: TurnCaption; names: Names; broken: b
       <div className={styles.side} lang={spoken ? c.targetLanguage : undefined}>
         <div className={styles.meta}>
           <span className={styles.lang}>{LANGUAGE_LABELS[c.targetLanguage].own}</span>
-          {spoken && c.toneLabel && (
-            <span className={styles.tag} data-testid="tone-label">
-              {c.toneLabel}
-            </span>
-          )}
           {!spoken && <NotSpoken />}
         </div>
         {spoken ? (
@@ -368,6 +428,7 @@ function Caption({ c, names, broken }: { c: TurnCaption; names: Names; broken: b
                 className={styles.value}
               />
             </p>
+            <MannerLabel c={c} patient={patient} />
             {c.glossaryUsed.length > 0 && (
               <dl className={styles.glossary} data-testid="glossary">
                 {c.glossaryUsed.map((g) => (
@@ -431,7 +492,7 @@ function PendingTurn({ p, names, other }: { p: Pending; names: Names; other: (la
         ? "pleaseRepeat"
         : null;
   return (
-    <article className={`${styles.turn} ${styles.pending}`} data-testid="pending" data-stage={p.stage}>
+    <article className={`${styles.turn} ${styles.pending} ${styles[p.speaker]}`} data-testid="pending" data-stage={p.stage}>
       <Original speaker={p.speaker} name={nameOf(p.speaker, names)} language={source}>
         {p.sourceText ? (
           <p className={styles.text}>{p.sourceText}</p>
@@ -479,6 +540,27 @@ export default function SharedScreen() {
   const [summary, setSummary] = useState<PatientSummary | null>(null);
   const [summaryStage, setSummaryStage] = useState<ArtefactStatus["stage"] | null>(null);
   const [summaryStale, setSummaryStale] = useState(false);
+  // CDR-008: the patient's latest signal, for SIGNAL_SHOWN_MS from when it was made.
+  const [signal, setSignal] = useState<PatientSignalEntry | null>(null);
+  const signalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showSignal = useCallback((entry: PatientSignalEntry) => {
+    const left = SIGNAL_SHOWN_MS - (Date.now() - Date.parse(entry.at));
+    if (signalTimer.current) clearTimeout(signalTimer.current);
+    if (!(left > 0)) {
+      setSignal(null);
+      return;
+    }
+    setSignal(entry);
+    signalTimer.current = setTimeout(() => setSignal((s) => (s?.signalId === entry.signalId ? null : s)), left);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (signalTimer.current) clearTimeout(signalTimer.current);
+    },
+    [],
+  );
 
   const startCall = useCallback(() => {
     callTimers.current.forEach(clearTimeout);
@@ -514,6 +596,10 @@ export default function SharedScreen() {
         setNotice(state.consentNotice ?? null);
         setConsent(state.consentState ?? null);
         setIntegrity(state.integrity);
+        // CDR-008: a screen joining within a few seconds of a signal still shows it.
+        const latestSignal = state.signals?.at(-1);
+        if (latestSignal) showSignal(latestSignal);
+        else setSignal(null);
         // CDR-006: a TV joining mid-offer shows it, unless the newest caption already says it; after a dismissal, nothing.
         if (!state.interpreterOpen) closeInterpreter();
         else if (state.turns.at(-1)?.status !== "escalated") setInterpreter((phase) => phase ?? "offered");
@@ -545,11 +631,16 @@ export default function SharedScreen() {
         setSpeaking(event.payload as VoiceSpeaking);
         break;
       case "interpreter.line":
-        // Asking again replaces the question rather than stacking a copy of it.
+        // Asking again replaces the question rather than stacking a copy of it; a line said during the visit
+        // (CDR-008) replaces any earlier one, so the room reads one interpreter line at a time.
         setLines((prev) => {
           const line = event.payload as InterpreterLine;
-          return [...prev.filter((l) => l.purpose !== line.purpose), line];
+          const mid = MID_VISIT_LINES.has(line.purpose);
+          return [...prev.filter((l) => l.purpose !== line.purpose && !(mid && MID_VISIT_LINES.has(l.purpose))), line];
         });
+        break;
+      case "patient.signal":
+        showSignal(event.payload as PatientSignalEntry);
         break;
       case "turn.result": {
         const caption = event.payload as TurnCaption;
@@ -559,6 +650,8 @@ export default function SharedScreen() {
           return next;
         });
         setPending((p) => (p && p.turnId === caption.turnId ? null : p));
+        // The physician has answered the signal or the closing check with a turn, so the line has done its work.
+        setLines((prev) => prev.filter((l) => !MID_VISIT_LINES.has(l.purpose)));
         break;
       }
       case "visit.paused":
@@ -611,7 +704,7 @@ export default function SharedScreen() {
         setSummaryStale((event.payload as ArtefactsStale).summary);
         break;
     }
-  }, [startCall, closeInterpreter]);
+  }, [startCall, closeInterpreter, showSignal]);
 
   const { state } = useVisitSocket("screen", onEvent);
   const other = (lang: Language) => (lang === languages.physician ? languages.patient : languages.physician);
@@ -619,7 +712,7 @@ export default function SharedScreen() {
   // A block body: newer browsers return a Promise from scrollIntoView, which React would call as a cleanup.
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
-  }, [captions, pending, lines, speaking, interpreter, paused, consent, explainBack, summary, summaryStage]);
+  }, [captions, pending, lines, speaking, interpreter, paused, consent, explainBack, summary, summaryStage, signal]);
 
   // CDR-005: until consent is given, and again once it is withdrawn, the notice stands in for "ready".
   const consented = consent?.state === "given";
@@ -639,11 +732,14 @@ export default function SharedScreen() {
     summaryStage === "retrying" ||
     summaryStage === "refused";
   const playing = summary ? summaryIndexOf(summary.summaryId, speaking?.speaking ? speaking.speechId : null) : null;
+  // The introduction shows before the first caption; a line said during the visit shows after the captions.
+  const introductionLines = lines.filter((l) => !MID_VISIT_LINES.has(l.purpose));
+  const midVisitLines = lines.filter((l) => MID_VISIT_LINES.has(l.purpose));
 
   return (
     <main className={styles.screen}>
       <header className={styles.bar}>
-        <span className={styles.eyebrow}>Live interpretation</span>
+        <span className={styles.title}>Live interpretation</span>
         <span className={styles.visitPair}>
           {LANGUAGE_LABELS[languages.patient].own} / {LANGUAGE_LABELS[languages.physician].own}
         </span>
@@ -664,9 +760,26 @@ export default function SharedScreen() {
           <Resting notice="paused" testId="paused" languages={languages} />
         ) : (
           <>
-            {captions.length === 0 && lines.slice(-3).map((line) => <Line key={line.lineId} line={line} />)}
+            {captions.length === 0 && introductionLines.slice(-3).map((line) => <Line key={line.lineId} line={line} />)}
             {captions.slice(-6).map((c) => (
-              <Caption key={c.turnId} c={c} names={names} broken={c.turnId === brokenTurnId} />
+              <Caption
+                key={c.turnId}
+                c={c}
+                names={names}
+                broken={c.turnId === brokenTurnId}
+                patient={languages.patient}
+              />
+            ))}
+            {signal && (
+              <SignalRow
+                entry={signal}
+                name={names.patientName ?? null}
+                patient={languages.patient}
+                physician={languages.physician}
+              />
+            )}
+            {midVisitLines.map((line) => (
+              <Line key={line.lineId} line={line} />
             ))}
             {interpreter && (
               <InterpreterNotice phase={interpreter} patient={languages.patient} physician={languages.physician} />

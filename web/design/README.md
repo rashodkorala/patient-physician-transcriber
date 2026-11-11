@@ -26,7 +26,7 @@ Colour only where it means something.
 | `--patient` | `#9A5A14` | `#E2A85F` | The patient's speaker colour, warm |
 | `--companion` | `#6B4E8C` | `#C3A9E3` | The companion's speaker colour |
 | `--ok` | `#1E7B4F` | `#6FCF97` | Verified, matched, confirmed |
-| `--wait` | `#9C6400` | `#E8BC5A` | Checking, waiting, pending |
+| `--wait` | `#8A5800` | `#E8BC5A` | Checking, waiting, pending (darker than ADR-012's `#9C6400`, which fell below AA on its soft tint) |
 | `--stop` | `#B42318` | `#F28B82` | Blocked, not spoken, broken record |
 
 Each meaning colour has a `-soft` tint for backgrounds behind text in that colour.
@@ -65,9 +65,15 @@ Everything else changes state without animation.
 
 ## Each screen
 
-- **Room screen** (`/screen`): paper background, two columns per turn, original then translation, a thin rule in the speaker's colour down the left of each turn.
-  The physician's manner label sits beneath the translation in the patient's language, with English beside it.
-  The orb is the only moving thing.
+- **Home** (`/`): the product name, one sentence, and three device cards: clinician, room screen, and patient.
+  Each card carries a rule in the colour of the person who holds the device, so the colours mean here what they mean everywhere else.
+  A small link leads to the record view.
+- **Room screen** (`/screen`): paper background, two columns per turn, original then translation, a thin rule in the speaker's colour down the left of each turn and the speaker's name beside it.
+  Captions are `clamp(32px, 2.6vw, 52px)`: 50 pixels at 1920, 33 at 1280, never below 32 on a display.
+  The physician's manner label sits beneath the translation in the patient's language, with English beside it; patient and companion captions never carry one.
+  A patient's signal shows as a notice in both languages, in the patient's colour, for eight seconds; a screen joining inside that window still sees it.
+  The interpreter's own rows (introduction, consent, a signal relayed, the closing check, the summary) carry the care colour.
+  The orb is the only moving thing: a `--surface` ball with a `--line` ring, its blobs tinted from the speaker tokens, the care colour while translating, and the paper's greys at rest.
 - **Patient device** (`/patient`): the patient's language leads every label, English beneath in `--muted`.
   The five controls are the one bold element on the page: white on paper, 56 pixels tall, full width on a phone.
   Nothing on this screen shows an emotion, a manner of the patient's own words, or anything the physician sees privately.
@@ -76,6 +82,14 @@ Everything else changes state without animation.
   The read-back is the one inverted block.
   The trust view is a quiet list, not a dashboard.
 - **Record view** (`/record`): the note with one tag per sentence, tags in `--muted` with the speaker's colour as a small square, AI inference in `--wait`.
+  The source panel lists every turn with its speaker's rule, the physician's manner as a small muted label, and each patient signal after the turn it followed.
+- **Record badge** (every screen): "Record verified" in `--ok` on its soft tint with a filled check; "Record broken at turn 3" in `--stop` with a cross.
+  The word always goes with the colour.
+
+## Legacy aliases
+
+`globals.css` still defines `--bg`, `--text`, `--signal`, `--chip-bg`, `--chip-text`, and `--serif` as aliases of the tokens above.
+They exist only so `controller.module.css` and `review.module.css` resolve until those are rewritten; no other stylesheet may use them, and the block goes when the last user does.
 
 ## Writing
 

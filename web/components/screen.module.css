@@ -1,142 +1,155 @@
 /*
- * Shared TV screen: always black with crème type, read from about 3 metres on a 40-inch TV (task 1.6).
- * Turns are rows split by hairlines; the original and the translation sit in two columns.
+ * The room screen (ADR-012): paper, read from about three metres on a 40 inch display. Each turn is a row with a
+ * thin rule in the speaker's colour down its left and the speaker's name beside it, so colour never stands alone.
+ * The original and the translation sit in two columns at no less than 32 pixels at 1080p. Light by default; the
+ * device's dark preference switches the tokens, so there is no forced dark here.
+ *
+ * @implements ADR-012: Clinic design system
  */
 .screen {
-  --bg: #0e0e0c;
-  --text: #f3efe6;
-  --muted: #8f8a7e;
-  --line: rgba(243, 239, 230, 0.16);
-  --signal: #e08a78;
-  --chip-bg: #f3efe6;
-  --chip-text: #0f0f0d;
-  color-scheme: dark;
-  min-height: 100vh; padding: 0 5vw 6vh; background: var(--bg); color: var(--text);
+  min-height: 100vh; padding: 0 4vw 6vh; background: var(--paper); color: var(--ink);
+  /* The one caption size: 2.6vw is 50px at 1920 and 33px at 1280; never below 32px (clinic-interface spec). */
+  --caption: clamp(32px, 2.6vw, 52px);
+  --label: clamp(16px, 1.1vw, 22px);
+  --small: clamp(14px, 0.9vw, 18px);
 }
 
-/* Small uppercase labels, as on the dashboard reference. */
-.eyebrow, .speaker, .status, .tag {
-  font-family: var(--sans); font-weight: 500; text-transform: uppercase; letter-spacing: 0.16em;
-  font-size: clamp(12px, 0.8vw, 16px); line-height: 1;
-}
-
+/* ---------- header ---------- */
 .bar {
-  display: flex; align-items: center; gap: 2vw; padding: 3vh 0 2.4vh;
-  border-bottom: 1px solid var(--text);
+  position: sticky; top: 0; z-index: 2; background: var(--paper);
+  display: flex; align-items: center; gap: 1.6vw; padding: 2.4vh 0 2vh;
+  border-bottom: 1px solid var(--line); font-size: var(--label); line-height: 1.2;
 }
-.eyebrow { color: var(--muted); }
-.visitPair { font-family: var(--serif); font-style: italic; font-size: clamp(16px, 1.2vw, 24px); }
-.barEnd { margin-left: auto; display: flex; align-items: center; gap: 1.6vw; }
-/* IDR-003: the record badge at the bar's label size; the TV is always dark, so it uses the screen's own colours. */
-.badge { font-size: clamp(11px, 0.7vw, 14px); }
-.status { display: inline-flex; align-items: center; gap: 0.8em; color: var(--muted); }
-.status::before {
-  content: ""; width: 0.6em; height: 0.6em; border-radius: 50%; border: 1px solid currentColor;
-}
-.status[data-state="open"] { color: var(--text); }
+.title { font-weight: 500; }
+.visitPair { color: var(--muted); }
+.barEnd { margin-left: auto; display: flex; align-items: center; gap: 1.4vw; }
+/* IDR-003: the record badge at the bar's label size. */
+.badge { font-size: var(--small); }
+.status { display: inline-flex; align-items: center; gap: 0.6em; color: var(--muted); font-weight: 500; }
+.status::before { content: ""; width: 0.55em; height: 0.55em; border-radius: 50%; border: 1.5px solid currentColor; }
+.status[data-state="open"] { color: var(--ok); }
 .status[data-state="open"]::before { background: currentColor; }
-.status[data-state="closed"] { color: var(--signal); }
+.status[data-state="closed"] { color: var(--stop); }
 
+/* ---------- a turn ---------- */
+/* --who is the speaker's colour: set by the speaker class on the row, and by .interpreter for the interpreter's own words. */
 .turn {
-  display: grid; grid-template-columns: 1fr 1fr; padding: 3.4vh 0;
-  border-bottom: 1px solid var(--line);
+  --who: var(--care);
+  position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 0 3vw;
+  margin: 2.2vh 0; padding: 1.2vh 0 1.6vh 2.4vw; border-radius: var(--r-control);
 }
+.turn::before {
+  content: ""; position: absolute; left: 0; top: 0.6vh; bottom: 0.6vh; width: clamp(3px, 0.25vw, 5px);
+  border-radius: 999px; background: var(--who);
+}
+.turn + .turn { border-top: 1px solid var(--line); padding-top: 2.6vh; }
+.turn + .turn::before { top: 2vh; }
+.physician { --who: var(--physician); }
+.patient { --who: var(--patient); }
+.companion { --who: var(--companion); }
+.interpreter { --who: var(--care); }
 .side { min-width: 0; }
-.side:first-child { padding-right: 3vw; }
-.side + .side { padding-left: 3vw; border-left: 1px solid var(--line); }
 
 /* Fixed height so both columns start their text on the same line, with or without a tag. */
-.meta { display: flex; align-items: center; gap: 1.2em; height: 2.2em; font-size: clamp(14px, 1.1vw, 22px); }
-.speaker { display: inline-flex; align-items: center; gap: 0.8em; }
-.speaker::before {
-  content: ""; width: 0.6em; height: 0.6em; border-radius: 50%; border: 1.5px solid currentColor;
+.meta {
+  display: flex; align-items: center; gap: 0.9em; min-height: 2.2em; font-size: var(--label); line-height: 1.2;
 }
-.physician::before { background: currentColor; }
-/* A name is read as a name: normal case, and cut short rather than pushing the language off the line. */
-.name {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-family: var(--sans); font-weight: 400; letter-spacing: 0;
-}
-.speaker, .lang { flex: none; }
-/* The interpreter's own words: serif italic, so they never read as something the physician or patient said. */
-.interpreter .text { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--text); }
-.interpreter .speaker::before { border-style: dashed; }
-/* A line spoken in one language only (a question for one person) spans the row instead of leaving half empty. */
-.interpreter .side:only-child { grid-column: 1 / -1; padding-right: 0; }
-.interpreter .side:only-child .text { max-width: 32em; }
-/* ADR-003: an interpreter offered or (simulated) joining reads as the interpreter speaking, at the caption size. */
-.escalation .text { font-size: clamp(24px, 2.4vw, 44px); }
-/* CDR-005: the consent notice is long, so it reads a size below a caption, still at 3 metres. */
-.consent .text { font-size: clamp(22px, 1.9vw, 38px); line-height: 1.35; }
-.consent .side + .side .text { color: var(--muted); }
-/* CDR-007: the summary spans the row in the patient's language; the sentence being read aloud is inked in. */
-.summary .side:only-child .text, .summary .sentences { max-width: none; }
-.sentences {
-  display: grid; gap: 0.4vh; margin: 1.4vh 0 0; padding: 0; list-style: none; counter-reset: sentence;
-  font-size: clamp(22px, 2vw, 40px); font-weight: 300; line-height: 1.35;
-}
-.sentences li {
-  counter-increment: sentence; display: grid; grid-template-columns: 2em 1fr; gap: 0.4em;
-  padding: 0.25em 0.4em 0.25em 0; border-radius: 0.2em; transition: background 0.2s, color 0.2s;
-}
-.sentences li::before {
-  content: counter(sentence); padding-top: 0.5em; text-align: right; color: var(--muted);
-  font-size: 0.45em; font-weight: 500; letter-spacing: 0.1em; font-variant-numeric: tabular-nums;
-}
-.playing { background: var(--text); color: var(--bg); }
-.playing::before { color: inherit !important; opacity: 0.7; }
-.playing .value { background: var(--bg); color: var(--text); }
-/* CDR-006: the turn the record names as broken keeps its words and gains a signal rule down its side. */
-.broken { box-shadow: inset 3px 0 0 var(--signal); padding-left: 2vw; }
-.lang { font-family: var(--serif); font-style: italic; color: var(--muted); font-size: clamp(16px, 1.2vw, 24px); }
+.speaker { flex: none; color: var(--who); font-weight: 500; }
+/* A name is read as a name: cut short rather than pushing the language off the line. */
+.name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.lang { flex: none; color: var(--muted); }
 .tag {
-  padding: 0.45em 0.6em; border: 1px solid var(--line); border-radius: 4px; color: var(--muted);
-  font-size: clamp(11px, 0.7vw, 14px); letter-spacing: 0.12em;
+  flex: none; padding: 0.25em 0.7em; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--muted); font-size: var(--small); font-weight: 500; line-height: 1.3;
 }
-.stop { border-color: var(--signal); color: var(--signal); }
+.stop { border-color: transparent; background: var(--stop-soft); color: var(--stop); font-weight: 600; }
 
-.text {
-  margin: 1.4vh 0 0; font-size: clamp(26px, 3vw, 56px); font-weight: 300; line-height: 1.28;
-  letter-spacing: -0.015em; overflow-wrap: anywhere;
-}
+.text { margin: 0.6vh 0 0; font-size: var(--caption); font-weight: 400; line-height: 1.3; overflow-wrap: anywhere; }
+/* A critical value reads the same in both columns: a quiet tint and a heavier weight, never a colour of its own. */
 .value {
-  background: var(--chip-bg); color: var(--chip-text); border-radius: 0.12em; padding: 0 0.12em;
+  background: var(--care-soft); color: inherit; border-radius: 0.15em; padding: 0 0.15em; font-weight: 500;
   -webkit-box-decoration-break: clone; box-decoration-break: clone;
 }
 
+/* IDR-005: how the physician said it, beneath the translation, in the patient's language with English beside. */
+.manner {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3em 1em; margin: 1.2vh 0 0;
+  font-size: var(--label); line-height: 1.3; color: var(--muted); font-weight: 500;
+}
+.manner span:last-child { font-weight: 400; }
+
 .glossary {
-  margin: 2.4vh 0 0; padding-top: 1.6vh; border-top: 1px solid var(--line); max-width: 40em;
-  display: grid; gap: 1.6vh; font-size: clamp(16px, 1.25vw, 24px); line-height: 1.45;
+  margin: 2vh 0 0; padding-top: 1.4vh; border-top: 1px solid var(--line); max-width: 40em;
+  display: grid; gap: 1.2vh; font-size: var(--label); line-height: 1.4;
 }
 .glossary div { margin: 0; }
 .glossary dt { font-weight: 500; }
 .glossary dd { margin: 0; color: var(--muted); }
 
-.notice { margin-top: 1.4vh; display: grid; gap: 0.6vh; }
-.notice p {
-  margin: 0; font-family: var(--serif); font-style: italic; font-weight: 400; line-height: 1.3;
-  font-size: clamp(24px, 2.4vw, 44px);
+/* A notice inside a turn (checking the dose, please repeat, interpreter offered): the first language at caption
+   size, the second beneath in --muted. */
+.notice { margin-top: 0.6vh; display: grid; gap: 0.6vh; }
+.notice p { margin: 0; font-size: var(--caption); line-height: 1.3; }
+.notice p + p { color: var(--muted); font-size: clamp(22px, 1.8vw, 36px); }
+
+/* ---------- the interpreter's own rows ---------- */
+/* A line spoken in one language only (a question for one person) spans the row instead of leaving half empty. */
+.interpreter .side:only-child { grid-column: 1 / -1; }
+.interpreter .side:only-child .text { max-width: 36em; }
+/* CDR-005: the consent notice is long, so it reads a size below a caption, still at three metres. */
+.consent .text { font-size: clamp(26px, 2vw, 40px); line-height: 1.35; }
+.consent .side + .side .text { color: var(--muted); }
+/* CDR-008: the patient's signal, as a notice to the room in both languages, for a few seconds. */
+.signal { background: var(--patient-soft); padding-right: 2vw; }
+.signal .side + .side .text { color: var(--muted); }
+
+/* CDR-007: the summary spans the row in the patient's language; the sentence being read aloud is tinted. */
+.summary .side:only-child .text, .summary .sentences { max-width: none; }
+.sentences {
+  display: grid; gap: 0.4vh; margin: 1.2vh 0 0; padding: 0; list-style: none; counter-reset: sentence;
+  font-size: clamp(26px, 2vw, 40px); line-height: 1.35;
 }
-.notice p + p { color: var(--muted); font-size: clamp(18px, 1.7vw, 32px); }
+.sentences li {
+  counter-increment: sentence; display: grid; grid-template-columns: 1.6em 1fr; gap: 0.5em;
+  padding: 0.25em 0.5em 0.25em 0.4em; border-radius: var(--r-control);
+}
+.sentences li::before {
+  content: counter(sentence); color: var(--muted); font-size: 0.6em; font-weight: 500; padding-top: 0.45em;
+  font-variant-numeric: tabular-nums;
+}
+.playing { background: var(--care-soft); box-shadow: inset 4px 0 0 var(--care); }
+.playing .value { background: var(--surface); }
 
-.pending .speaker, .pending .lang { opacity: 0.7; }
+/* CDR-006: the turn the record names as broken keeps its words, its speaker's rule, and gains the stop tint. */
+.broken { background: var(--stop-soft); padding-right: 2vw; }
+
+/* ---------- waiting states ---------- */
+.pending .speaker, .pending .lang { opacity: 0.8; }
 /* The orb stands where the words will appear, sized to sit under the speaker label. */
-.pendingOrb { --s: clamp(64px, 6vw, 120px); margin-top: 3vh; }
+.pendingOrb { --s: clamp(64px, 5.5vw, 110px); margin-top: 2vh; }
 
-/* Before the first turn: the resting orb over a quiet line in both languages, so an empty TV does not look broken. */
-.ready { display: grid; justify-items: center; gap: 1.2vh; padding-top: 18vh; text-align: center; }
-.readyOrb { --s: clamp(140px, 14vw, 260px); margin-bottom: 5vh; }
-.ready p { margin: 0; font-family: var(--serif); font-style: italic; font-size: clamp(28px, 3vw, 56px); line-height: 1.25; }
-.ready p + p { color: var(--muted); font-size: clamp(20px, 2vw, 36px); }
+/* Before the first turn, and while off the record: the resting orb over a quiet line in both languages. */
+.ready { display: grid; justify-items: center; gap: 1vh; padding-top: 16vh; text-align: center; }
+.readyOrb { --s: clamp(140px, 13vw, 240px); margin-bottom: 4vh; }
+.ready p { margin: 0; font-size: clamp(30px, 2.6vw, 50px); line-height: 1.25; max-width: 28em; }
+.ready p + p { color: var(--muted); font-size: clamp(22px, 1.8vw, 36px); }
 
 @media (max-width: 720px) {
-  .screen { padding: 0 16px 32px; }
-  /* Each label stays on one line; the connection state moves to its own line rather than breaking words. */
-  .bar { flex-wrap: wrap; gap: 10px 16px; }
-  .eyebrow, .visitPair, .status { white-space: nowrap; }
-  .barEnd { gap: 12px 16px; flex-wrap: wrap; }
-  .broken { padding-left: 12px; }
-  .turn { grid-template-columns: 1fr; gap: 20px; }
-  .side:first-child { padding-right: 0; }
-  .side + .side { padding-left: 0; padding-top: 16px; border-left: none; border-top: 1px solid var(--line); }
+  .screen { padding: 0 16px 32px; --caption: 24px; --label: 15px; --small: 13px; }
+  .bar { flex-wrap: wrap; gap: 8px 16px; padding: 16px 0 12px; }
+  .title, .visitPair, .status { white-space: nowrap; }
+  .barEnd { margin-left: 0; width: 100%; gap: 8px 16px; flex-wrap: wrap; }
+  .turn { grid-template-columns: 1fr; gap: 14px; margin: 16px 0; padding: 6px 0 10px 14px; }
+  .turn::before { width: 3px; top: 4px; bottom: 4px; }
+  .turn + .turn { padding-top: 18px; }
+  .turn + .turn::before { top: 14px; }
+  .side + .side { padding-top: 12px; border-top: 1px solid var(--line); }
+  .interpreter .side:only-child .text { max-width: none; }
+  .meta { min-height: 0; flex-wrap: wrap; gap: 6px 10px; }
+  .notice p + p, .ready p + p, .sentences, .consent .text { font-size: 19px; }
+  .ready { padding-top: 10vh; }
+  .ready p { font-size: 26px; }
+  .readyOrb { --s: 120px; margin-bottom: 20px; }
+  .pendingOrb { --s: 56px; margin-top: 10px; }
+  .broken, .signal { padding-right: 12px; }
 }

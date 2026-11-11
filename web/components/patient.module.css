@@ -1,0 +1,45 @@
+/*
+ * The patient's device (ADR-012, CDR-008): the latest translation large and quiet, then the five controls as
+ * the one bold element on the page. White on paper with a two pixel --line border, 56px tall, full width on a
+ * phone and two columns on a tablet. The patient's language leads every label; English sits beneath in --muted.
+ */
+.latest { display: grid; gap: 16px; padding: 28px 0; border-bottom: 1px solid var(--line); }
+.said { display: grid; gap: 10px; }
+.saidText { margin: 0; font-size: var(--text-3xl); font-weight: 400; line-height: 1.3; overflow-wrap: anywhere; }
+/* IDR-005: how the doctor said it, read from their words, in the patient's language then English. */
+.manner { display: flex; gap: 4px 8px; flex-wrap: wrap; align-items: baseline; margin: 0; font-size: var(--text-md); font-weight: 500; color: var(--muted); }
+.manner span + span::before { content: "/"; margin-right: 8px; }
+.quiet { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; color: var(--muted); font-size: var(--text-md); }
+.stage { display: inline-flex; align-items: center; gap: 8px; }
+.stage::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--wait); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .stage::before { animation: none; } }
+
+.controls { display: grid; gap: 16px; padding: 28px 0; border-bottom: 1px solid var(--line); }
+.feedback { min-height: 0; }
+.feedback:empty { display: none; }
+.sent, .refused { display: flex; align-items: flex-start; gap: 10px; margin: 0; font-size: var(--text-lg); font-weight: 500; }
+.sent { color: var(--ok); }
+.sent::before { content: ""; flex: none; margin-top: 0.6em; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.refused { color: var(--stop); }
+.refused::before { content: ""; flex: none; margin-top: 0.6em; width: 8px; height: 8px; border-radius: 50%; border: 2px solid currentColor; box-sizing: border-box; }
+
+.grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.control {
+  display: grid; align-content: center; justify-items: start; gap: 2px; min-height: 64px; width: 100%;
+  padding: 12px 20px; text-align: left;
+  border: 2px solid var(--line-strong); border-radius: var(--r-card); background: var(--surface); color: var(--ink);
+  font-size: var(--text-xl); font-weight: 500; line-height: 1.25; cursor: pointer;
+  transition: border-color var(--ease), background var(--ease);
+}
+.control:hover { border-color: var(--care); }
+.control:active { background: var(--care-soft); }
+.control:disabled { color: var(--muted); border-color: var(--line); background: var(--paper); cursor: default; }
+/* Resume is the one control that stays live while paused, so it carries the accent. */
+.resume { border-color: var(--care); color: var(--care); }
+
+@media (min-width: 721px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+  /* Five controls in two columns: the interpreter spans the last row, so no control sits alone and narrow. */
+  .grid > :last-child { grid-column: 1 / -1; }
+}

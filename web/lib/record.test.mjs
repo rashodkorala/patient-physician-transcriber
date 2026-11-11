@@ -82,6 +82,8 @@ test("the broken badge names a turn, a correction, or another entry (cdr_006, id
   assert.equal(brokenEntryLabel("t1", ids, h), "turn 2");
   assert.equal(brokenEntryLabel("a1", ids, h), "turn 2, correction");
   assert.equal(brokenEntryLabel("c9", ids, h, { consent: ["c9"] }), "consent");
+  // CDR-008: a signal entry is named as the patient's, by its signalId.
+  assert.equal(brokenEntryLabel("s1", ids, h, { signals: ["s1"] }), "a patient signal");
   assert.equal(brokenEntryLabel("zz", ids, h), "an earlier entry");
   assert.equal(turnOfEntry("a1", h), "t1");
   assert.equal(turnOfEntry("t0", h), "t0");

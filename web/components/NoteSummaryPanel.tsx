@@ -75,7 +75,7 @@ export default function NoteSummaryPanel({
               : noteStatus?.stage === "failed"
                 ? `${STAGE_TEXT.failed}${noteStatus.detail ? `: ${noteStatus.detail}` : ""}`
                 : note
-                  ? `${noteCount} sentence${noteCount === 1 ? "" : "s"}, each tagged and sourced${noteStale ? " · stale" : ""}`
+                  ? `${noteCount} sentence${noteCount === 1 ? "" : "s"}, each tagged and sourced${noteStale ? ", stale" : ""}`
                   : "Not written yet"}
           </p>
         </div>
@@ -103,7 +103,7 @@ export default function NoteSummaryPanel({
               : refused
                 ? STAGE_TEXT.refused
                 : summary
-                  ? `Published in the patient's language${summaryStale ? " · stale" : ""}`
+                  ? `Published in the patient's language${summaryStale ? ", stale" : ""}`
                   : "Not written yet"}
           </p>
         </div>

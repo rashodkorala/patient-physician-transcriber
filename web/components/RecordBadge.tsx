@@ -5,6 +5,7 @@
  *
  * @implements IDR-003: SHA-256 hash chain for the record-verified badge
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
+ * @implements ADR-012: Clinic design system
  * @contract ws:/ws/visit record.integrity
  */
 
@@ -33,7 +34,7 @@ export default function RecordBadge({
       role="status"
     >
       {broken ? "Record broken" : "Record verified"}
-      {broken && where && <span className={styles.where}> · {where}</span>}
+      {broken && where && <span className={styles.where}> at {where}</span>}
     </span>
   );
 }

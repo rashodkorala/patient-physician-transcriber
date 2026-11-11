@@ -56,5 +56,7 @@
   "latestTitle": "ਡਾਕਟਰ ਨੇ ਹੁਣੇ ਜੋ ਕਿਹਾ",
   "speakerPhysician": "ਡਾਕਟਰ",
   "speakerPatient": "ਤੁਸੀਂ",
-  "speakerCompanion": "ਤੁਹਾਡੇ ਨਾਲ ਆਏ ਸਾਥੀ"
+  "speakerCompanion": "ਤੁਹਾਡੇ ਨਾਲ ਆਏ ਸਾਥੀ",
+  "stageListening": "ਸੁਣ ਰਿਹਾ ਹੈ",
+  "stageTranslating": "ਅਨੁਵਾਦ ਹੋ ਰਿਹਾ ਹੈ"
 }

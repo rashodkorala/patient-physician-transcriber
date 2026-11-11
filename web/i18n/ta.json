@@ -56,5 +56,7 @@
   "latestTitle": "மருத்துவர் இப்போது சொன்னது",
   "speakerPhysician": "மருத்துவர்",
   "speakerPatient": "நீங்கள்",
-  "speakerCompanion": "உங்கள் துணை"
+  "speakerCompanion": "உங்கள் துணை",
+  "stageListening": "கேட்கிறது",
+  "stageTranslating": "மொழிபெயர்க்கப்படுகிறது"
 }

@@ -4,12 +4,16 @@
  * The physician's record view (/record, controller role, never on the TV): the draft clinical note with one
  * provenance tag per sentence, each sentence linked to the turns and versions it was made from, the turns the
  * note could not use, the tags the check downgraded, and a stale mark once the record has grown. The source
- * transcript beside it marks the presenter's injected turns (TDM-002) and the entry the tamper control altered
+ * transcript beside it lists the patient's signals after the turns they followed, shows the physician's manner on
+ * each turn, and marks the presenter's injected turns (TDM-002) and the entry the tamper control altered
  * (TDM-005). It plays no audio and reports no voice: only /control speaks.
  *
  * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
+ * @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
+ * @implements IDR-005: Manner vocabulary and voice delivery
  * @implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
+ * @implements ADR-012: Clinic design system
  * @implements TDM-002: Presenter mismatch control for the blocked-dose beat
  * @implements TDM-005: Hidden record-tamper control for the demo
  * @implements IDR-003: SHA-256 hash chain for the record-verified badge
@@ -28,6 +32,8 @@ import type {
   EscalationEntry,
   Names,
   NoteSentence,
+  PatientSignal,
+  PatientSignalEntry,
   ProvenanceTag,
   RecordIntegrity,
   SegmentAmended,
@@ -38,6 +44,7 @@ import type {
   TurnStarted,
   VisitStateController,
 } from "@/lib/contracts";
+import { mannerLabel } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
 import { applyAmended, brokenEntryLabel, captionOf, effective, resolveSources, turnOfEntry, versionOf } from "@/lib/record";
 import { useVisitSocket } from "@/lib/socket";
@@ -47,10 +54,10 @@ import styles from "./recordView.module.css";
 type ControllerState = VisitStateController;
 
 const TAG_TEXT: Record<ProvenanceTag, string> = {
-  patient_stated: "Patient-stated",
-  physician_stated: "Physician-stated",
-  companion_stated: "Companion-stated",
-  interpreter_stated: "Interpreter-stated",
+  patient_stated: "Patient stated",
+  physician_stated: "Physician stated",
+  companion_stated: "Companion stated",
+  interpreter_stated: "Interpreter stated",
   ai_inference: "AI inference",
 };
 
@@ -65,6 +72,13 @@ const STAGE_TEXT: Record<ArtefactStatus["stage"], string> = {
 
 const SPEAKER_LABEL: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
 
+/** CDR-008: what the patient signalled, as the record reads it. */
+const SIGNAL_TEXT: Record<PatientSignal, string> = {
+  not_understood: "Patient signalled: did not understand",
+  slower: "Patient signalled: please speak more slowly",
+  repeat: "Patient signalled: say that again",
+};
+
 function clock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
@@ -73,6 +87,16 @@ function statusWords(turn: TurnResult): string | null {
   if (turn.status === "blocked") return "blocked, not spoken";
   if (turn.status === "escalated") return "escalated, not spoken";
   return null;
+}
+
+/** CDR-008: a signal in the timeline, after the turn it followed. */
+function SignalItem({ entry }: { entry: PatientSignalEntry }) {
+  return (
+    <li className={styles.signal} data-testid="source-signal" data-signal={entry.signal} data-signal-id={entry.signalId}>
+      <span className={styles.signalText}>{SIGNAL_TEXT[entry.signal]}</span>
+      <span className={styles.when}>{clock(entry.at)}</span>
+    </li>
+  );
 }
 
 export default function RecordView() {
@@ -87,6 +111,8 @@ export default function RecordView() {
   const [escalations, setEscalations] = useState<EscalationEntry[]>([]);
   const [injected, setInjected] = useState<Set<string>>(new Set());
   const [tamper, setTamper] = useState<TamperState | null>(null);
+  // CDR-008: the patient's signals, oldest first, from the snapshot and then live.
+  const [signals, setSignals] = useState<PatientSignalEntry[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const turnsRef = useRef<TurnResult[]>([]);
@@ -108,6 +134,7 @@ export default function RecordView() {
         setEscalations(state.escalations ?? []);
         setInjected(new Set(state.injection?.injectedTurnIds ?? []));
         setTamper(state.tamper ?? null);
+        setSignals(state.signals ?? []);
         break;
       }
       case "turn.started":
@@ -120,6 +147,11 @@ export default function RecordView() {
           turnsRef.current = next;
           return next;
         });
+        break;
+      }
+      case "patient.signal": {
+        const entry = event.payload as PatientSignalEntry;
+        setSignals((prev) => (prev.some((s) => s.signalId === entry.signalId) ? prev : [...prev, entry]));
         break;
       }
       case "demo.injection_state": {
@@ -199,6 +231,10 @@ export default function RecordView() {
     { consent: consent ? [consent.entryId] : [], interpreter: escalations.map((e) => e.entryId) },
   );
   const turnNumber = (turnId: string) => turns.findIndex((t) => t.turnId === turnId) + 1;
+  // CDR-008: each signal sits after the turn it followed; one made before any turn sits first.
+  const turnIds = new Set(turns.map((t) => t.turnId));
+  const signalsAfter = (turnId: string | null) =>
+    signals.filter((s) => (turnId === null ? s.afterTurnId === null || !turnIds.has(s.afterTurnId) : s.afterTurnId === turnId));
 
   // Bring the first source turn into view in the source panel when a sentence is chosen.
   useEffect(() => {
@@ -216,12 +252,15 @@ export default function RecordView() {
     return { v, history };
   };
 
+  const nameOf = (speaker: Speaker) =>
+    speaker === "patient" ? names.patientName : speaker === "physician" ? names.physicianName : null;
+
   return (
     <main className={styles.page}>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Physician record · never shown on the shared screen</p>
-          <h1>Clinical note</h1>
+          <p className={styles.label}>Physician record. Never shown on the shared screen.</p>
+          <h1 className={styles.title}>Clinical note</h1>
         </div>
         <div className={styles.headerStatus}>
           <RecordBadge integrity={integrity} where={where} className={styles.badge} />
@@ -235,8 +274,8 @@ export default function RecordView() {
         <div className={styles.meta}>
           {note ? (
             <p className={styles.aside} data-testid="note-meta">
-              Draft for the physician to review and sign · written {clock(note.generatedAt)} from record head{" "}
-              <code>{note.basedOnHead.slice(0, 10)}</code>
+              Draft for the physician to review and sign. Written {clock(note.generatedAt)} from record head{" "}
+              <code>{note.basedOnHead.slice(0, 10)}</code>.
             </p>
           ) : (
             <p className={styles.aside}>No note yet. It is written from the settled, spoken turns only.</p>
@@ -278,7 +317,7 @@ export default function RecordView() {
         <section className={styles.note} aria-label="Clinical note" data-testid="note">
           {note?.sections.map((section) => (
             <div key={section.heading} className={styles.noteSection}>
-              <h2 className={styles.eyebrow}>{section.heading}</h2>
+              <h2 className={styles.heading}>{section.heading}</h2>
               <ol className={styles.sentences}>
                 {section.sentences.map((s) => {
                   const isChosen = s.sentenceId === selected;
@@ -322,9 +361,9 @@ export default function RecordView() {
                         <div className={styles.inlineSources} data-testid="inline-sources">
                           {resolved.map((r) => (
                             <div key={`${r.ref.id}-${r.ref.version}`} className={styles.inlineSource}>
-                              <span className={styles.eyebrow}>
-                                Turn {r.index + 1} · {SPEAKER_LABEL[r.turn.speaker]}
-                                {r.version.corrected && " · corrected by the patient"}
+                              <span className={styles.label}>
+                                Turn {r.index + 1}, {SPEAKER_LABEL[r.turn.speaker].toLowerCase()}
+                                {r.version.corrected && ", corrected by the patient"}
                               </span>
                               <p lang={r.turn.sourceLanguage}>{r.version.sourceText}</p>
                               <p lang={r.turn.targetLanguage} className={styles.muted}>
@@ -342,15 +381,17 @@ export default function RecordView() {
           ))}
           {note && gaps.size > 0 && (
             <div className={styles.gaps} data-testid="note-gaps">
-              <h2 className={styles.eyebrow}>Not in the note · never translated</h2>
+              <h2 className={styles.heading}>Not in the note: never translated</h2>
               <ul>
                 {[...gaps].map((id) => {
                   const turn = turns.find((t) => t.turnId === id);
                   return (
                     <li key={id} data-testid="note-gap" data-turn-id={id}>
-                      Turn {turnNumber(id) || "?"}
-                      {turn && ` · ${SPEAKER_LABEL[turn.speaker]} · ${statusWords(turn) ?? turn.status}`}
-                      {turn && <span className={styles.gapText}> “{turn.sourceText}”</span>}
+                      <span>
+                        Turn {turnNumber(id) || "?"}
+                        {turn && `, ${SPEAKER_LABEL[turn.speaker].toLowerCase()}, ${statusWords(turn) ?? turn.status}`}
+                      </span>
+                      {turn && <span className={styles.gapText}>&ldquo;{turn.sourceText}&rdquo;</span>}
                     </li>
                   );
                 })}
@@ -363,9 +404,12 @@ export default function RecordView() {
         </section>
 
         <aside className={styles.panel} aria-label="Source turns">
-          <h2 className={styles.eyebrow}>Sources · the visit as recorded</h2>
-          {turns.length === 0 && <p className={styles.aside}>Nothing said yet.</p>}
+          <h2 className={styles.heading}>Sources: the visit as recorded</h2>
+          {turns.length === 0 && signals.length === 0 && <p className={styles.aside}>Nothing said yet.</p>}
           <ol className={styles.turns} ref={sourceList}>
+            {signalsAfter(null).map((entry) => (
+              <SignalItem key={entry.signalId} entry={entry} />
+            ))}
             {turns.map((t, i) => {
               const version = cited.get(t.turnId);
               const { v, history } = sourceLines(t, version ?? currentVersion(segments, t.turnId));
@@ -373,7 +417,10 @@ export default function RecordView() {
               const wasInjected = injected.has(t.turnId);
               const tampered = tamperedTurn === t.turnId;
               const broken = brokenTurn === t.turnId;
-              return (
+              // IDR-005: the physician's manner is shown; a patient's or companion's stays off the record view.
+              const manner = t.speaker === "physician" && t.status !== "blocked" && t.status !== "escalated" ? mannerLabel(t.manner, "en-CA") : null;
+              const name = nameOf(t.speaker);
+              return [
                 <li
                   key={t.turnId}
                   data-testid="source-turn"
@@ -382,15 +429,12 @@ export default function RecordView() {
                   data-injected={wasInjected || undefined}
                   data-tampered={tampered || undefined}
                   data-gap={gaps.has(t.turnId) || undefined}
-                  className={`${version !== undefined ? styles.selected : ""} ${broken ? styles.broken : ""}`}
+                  className={`${styles.turn} ${styles[t.speaker]} ${version !== undefined ? styles.selected : ""} ${broken ? styles.broken : ""}`}
                 >
                   <div className={styles.turnHead}>
                     <span className={styles.number}>{i + 1}</span>
-                    <span className={`${styles.speaker} ${styles[t.speaker]}`}>
-                      {SPEAKER_LABEL[t.speaker]}
-                      {t.speaker === "patient" && names.patientName && ` · ${names.patientName}`}
-                      {t.speaker === "physician" && names.physicianName && ` · ${names.physicianName}`}
-                    </span>
+                    <span className={styles.speaker}>{SPEAKER_LABEL[t.speaker]}</span>
+                    {name && <span className={styles.name}>{name}</span>}
                     {unspoken && <span className={`${styles.tag} ${styles.stop}`}>{statusWords(t)}</span>}
                     {v.corrected && <span className={styles.tag}>corrected by the patient</span>}
                     {wasInjected && (
@@ -415,9 +459,14 @@ export default function RecordView() {
                   <p className={`${styles.line} ${styles.translation} ${unspoken ? styles.unspoken : ""}`} lang={t.targetLanguage}>
                     {v.translation}
                   </p>
+                  {manner && (
+                    <p className={styles.manner} data-testid="source-manner" data-manner={t.manner}>
+                      {manner}
+                    </p>
+                  )}
                   {v.corrected && (
                     <p className={styles.original}>
-                      Original · <span lang={t.sourceLanguage}>{t.sourceText}</span>
+                      Original: <span lang={t.sourceLanguage}>{t.sourceText}</span>
                     </p>
                   )}
                   {!v.corrected && history && history.amendments.length > 0 && (
@@ -435,10 +484,11 @@ export default function RecordView() {
                     </p>
                   )}
                   <p className={styles.langs}>
-                    {LANGUAGE_LABELS[t.sourceLanguage].own} → {LANGUAGE_LABELS[t.targetLanguage].own}
+                    {LANGUAGE_LABELS[t.sourceLanguage].english} to {LANGUAGE_LABELS[t.targetLanguage].english}
                   </p>
-                </li>
-              );
+                </li>,
+                ...signalsAfter(t.turnId).map((entry) => <SignalItem key={entry.signalId} entry={entry} />),
+              ];
             })}
           </ol>
         </aside>
@@ -451,4 +501,3 @@ export default function RecordView() {
 function currentVersion(segments: SegmentHistory[], turnId: string): string {
   return segments.find((h) => h.segmentId === turnId)?.current ?? "original";
 }
-

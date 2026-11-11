@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import ReviewScreen from "@/components/ReviewScreen";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Your visit · Demo Night Interpreter" };
-
+/** The patient's device moved to /patient (MDD-005, CDR-008); the old route still reaches it. */
 export default function ReviewPage() {
-  return <ReviewScreen />;
+  redirect("/patient");
 }
