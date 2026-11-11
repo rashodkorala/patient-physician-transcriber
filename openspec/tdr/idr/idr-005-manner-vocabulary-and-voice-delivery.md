@@ -120,3 +120,4 @@ Code carries `@implements IDR-005: Manner vocabulary and voice delivery`.
 - 2026-11-10, Claude (agent): Drafted alongside MDD-005.
 - 2026-11-10, rashodkorala: Blanket authorisation given in session (see MDD-005). Recorded as accepted by Claude (agent) at rashodkorala's explicit request; rashodkorala reviews the built result.
 - 2026-11-11, rashodkorala: amended after the live run under the blanket authorisation (see MDD-005); recorded by Claude (agent). The frame adverb is now only for gentle, serious, urgent, and apologetic (reassuring's frame adverb is none, since the live model added "reassuringly" where the words already carried it), and the relay keeps indirect speech through every sentence.
+- 2026-11-11, rashodkorala: Accepted after reviewing the built result ("accept all four, record the verdicts"). Recorded by Claude (agent) at rashodkorala's explicit request.

@@ -5,7 +5,7 @@
 TDRs: MDD-005, ADR-012, CDR-008, IDR-005
 
 - [x] 0.1 Record rashodkorala's blanket authorisation of 2026-11-10 on MDD-005, ADR-012, CDR-008, and IDR-005, extend the existing records this change relies on, and verify `python3 scripts/check_tdr.py` passes (2026-11-10)
-- [ ] 0.2 rashodkorala reviews the built result and confirms, amends, or rejects each of the four records; verify every verdict is recorded in its Review Notes
+- [x] 0.2 rashodkorala reviews the built result and confirms, amends, or rejects each of the four records; verify every verdict is recorded in its Review Notes (2026-11-11: rashodkorala accepted all four in session, "accept all four, record the verdicts"; recorded in the Review Notes of MDD-005, ADR-012, CDR-008, and IDR-005; `python3 scripts/check_tdr.py` passes)
 
 ## 1. Contract spine
 

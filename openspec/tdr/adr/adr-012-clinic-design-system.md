@@ -129,3 +129,4 @@ Code carries `@implements ADR-012: Clinic design system`.
 
 - 2026-11-10, Claude (agent): Drafted from rashodkorala's direction in session.
 - 2026-11-10, rashodkorala: Blanket authorisation given in session ("choose a design system that fits the vibe for clinic or public health organization to use"; "if any decisions i have made are not good enough you are good to change them"). Recorded as accepted by Claude (agent) at rashodkorala's explicit request; rashodkorala reviews the built result.
+- 2026-11-11, rashodkorala: Accepted after reviewing the built result ("accept all four, record the verdicts"). Recorded by Claude (agent) at rashodkorala's explicit request.

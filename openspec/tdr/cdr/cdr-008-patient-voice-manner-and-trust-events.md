@@ -196,3 +196,4 @@ Code carries `@implements CDR-008: Patient signals, manner, trust updates, compa
 - 2026-11-10, rashodkorala: Blanket authorisation given in session (see MDD-005). Recorded as accepted by Claude (agent) at rashodkorala's explicit request; rashodkorala reviews the built result.
 - 2026-11-11, rashodkorala: amended under the blanket authorisation (see MDD-005); recorded by Claude (agent). `reassuranceLanded` resets once it has landed (Data Schemas).
 - 2026-11-11, rashodkorala: amended under the blanket authorisation (see MDD-005); recorded by Claude (agent). The `patient.signal` two second hold is per connection and a reload resets it, an accepted gap (Contract Specification).
+- 2026-11-11, rashodkorala: Accepted after reviewing the built result ("accept all four, record the verdicts"). Recorded by Claude (agent) at rashodkorala's explicit request.
