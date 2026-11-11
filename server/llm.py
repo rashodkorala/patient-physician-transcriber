@@ -6,9 +6,10 @@
 @see openspec/tdr/adr/adr-004-langgraph-turn-graph.md
 """
 
+import inspect
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, TypeVar
 
 import anthropic
@@ -100,7 +101,8 @@ class ClaudeModel:
         return response.parsed_output
 
 
-Handler = Callable[[str], BaseModel]
+# A handler may be async, so a test can hold one call open (a slow model) while the visit moves on.
+Handler = Callable[[str], BaseModel | Awaitable[BaseModel]]
 
 
 class ScriptedModel:
@@ -113,5 +115,7 @@ class ScriptedModel:
     async def parse(self, *, purpose: str, system: str, user: str, schema: type[T]) -> T:
         self.calls.append((purpose, user))
         result = self.handlers[purpose](user)
+        if inspect.isawaitable(result):
+            result = await result
         assert isinstance(result, schema), f"{purpose} handler returned {type(result).__name__}"
         return result

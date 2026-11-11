@@ -3,7 +3,7 @@
 // tall; "say that again" before anything was spoken is refused with "nothing to repeat"; a physician turn shows
 // large on /patient with its manner label; each signal reaches /screen in both languages, /control's trust view,
 // and the record (visit.state.signals on a fresh review socket), a second tap within two seconds is refused busy,
-// and "say that again" replays the same speech id with no new turn; pause from /patient shows the paused notice on
+// and "say that again" replays the same speech id with no new turn, also after /control reloads; pause from /patient shows the paused notice on
 // /screen and disables the other controls; the interpreter request from /patient reaches /screen; and no
 // trust.update or private field ever reaches /screen or /patient. Run against a freshly started fake-model stack
 // and a web build made with NEXT_PUBLIC_SPEECH_TEST_HOOKS=on.
@@ -135,6 +135,23 @@ await check((await asked.at(-1)?.language) === "pa-IN", "the replay is in the pa
 await tv.waitForSelector('[data-testid="speaking"][data-language="pa-IN"]', { timeout: 5000 }).catch(() => null);
 await check(true, "/screen could show the interpreter speaking during the replay");
 
+// ---------- say that again after the controller reloads (CDR-008) ----------
+// The reloaded controller learns the last translation spoken in Punjabi from visit.state, so the replay still
+// asks for the same speech id. The voice route set on the page survives the reload.
+await control.reload();
+await control.waitForSelector('[data-testid="connection"]:text("open")', { timeout: 15000 });
+await control.waitForSelector('[data-testid="trust-signal"][data-signal="repeat"]', { timeout: 10000 });
+await patient.waitForTimeout(2100); // the two second hold
+const replaysBeforeReload = asked.filter((a) => a.id === turnId).length;
+await patient.click('[data-testid="signal-repeat"]');
+await patient.locator('[data-testid="signal-sent"][data-signal="repeat"]').waitFor({ timeout: 10000 });
+// The route handler records requests in this process, so poll it.
+for (let i = 0; i < 50 && asked.filter((a) => a.id === turnId).length === replaysBeforeReload; i++) await control.waitForTimeout(100);
+await check(asked.filter((a) => a.id === turnId).length === replaysBeforeReload + 1, "after a controller reload, say that again replays the same speech id");
+await check(asked.at(-1)?.language === "pa-IN", "in the patient's language");
+await check((await control.locator('[data-testid="notice"]').count()) === 0 || !(await control.locator('[data-testid="notice"]').innerText()).includes("asked to hear it again"), "/control shows no nothing-known notice");
+await patient.locator('[data-testid="signal-sent"]').waitFor({ state: "detached", timeout: 8000 });
+
 // The interpreter relayed the first two signals to the physician in English only.
 const lines = tvFrames
   .map((f) => JSON.parse(f))
@@ -148,7 +165,10 @@ await check(asked.some((a) => a.id === relayed[0]?.lineId && a.language === "en-
 // The record: a fresh review socket sees every signal, oldest first, after the turn it followed.
 const phone = await socket(base, serverPort, "review");
 const recorded = phone.state.signals ?? [];
-await check(recorded.map((s) => s.signal).join(",") === "not_understood,slower,repeat", "visit.state.signals holds the three signals in order");
+await check(
+  recorded.map((s) => s.signal).join(",") === "not_understood,slower,repeat,repeat",
+  "visit.state.signals holds the four signals in order (the last after the reload)",
+);
 await check(recorded.every((s) => s.afterTurnId), "each signal names the turn it followed");
 await check(!("trust" in phone.state), "a review snapshot carries no trust timeline");
 const integrity = (await probe.next("record.integrity", 100).catch(() => null)) ?? null;

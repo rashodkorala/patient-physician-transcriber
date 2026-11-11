@@ -518,33 +518,41 @@ def create_app(
             visit.proposed_names.clear()
             await advance_introduction()
 
-    async def send_trust(turn_id: str) -> None:
+    async def send_trust(turn_id: str, epoch: int) -> None:
         """MDD-005 and CDR-008: one trust.update per spoken turn, to controllers only, after the trust advisor
         returns, or at once without a cue if it fails. Never on the turn's critical path.
 
         A patient turn gets the empathy nudge as before (emotion in the nudge set) and the reassurance mark, which
         code decides from the visit's spoken history; a physician turn gets a culture cue when the patient
         language's tone guide marks the topic sensitive; a companion turn gets neither.
+
+        `epoch` is the consent epoch the turn was spoken under (CDR-005 consent rule 3): once consent is withdrawn
+        no model call starts, and an advisor call that was running is dropped with its nudge and its update.
+        The update is placed in `visit.trust` by its turn's spoken position, however late it returns.
         """
         visit = hub.visit
         record = visit.turns.get(turn_id)
-        if record is None or record.result is None:
+        if record is None or record.result is None or visit.consent_epoch != epoch:
             return
         result = record.result
         history = [SpokenTurn(r.speaker, r.emotion, r.manner) for r in visit.spoken_results_before(turn_id)]
         landed = reassurance_landed(history, result.speaker, result.emotion)
         cue = None
+        nudge = None
         try:
             if result.speaker == "physician":
                 cue = await advisor.culture_cue(result.source_text, visit.patient_language)
             elif result.speaker == "patient":
                 nudge = await advisor.nudge(turn_id, result.emotion, result.translation)
-                if nudge:
-                    visit.nudges.append(nudge)
-                    await hub.publish("empathy.nudge", nudge.wire())
-                    cue = nudge_cue(nudge)
         except Exception:
             log.exception("trust advisor failed")
+        if visit.consent_epoch != epoch:
+            # Consent was withdrawn while the advisor was running: nothing of this turn's trust reaches anyone.
+            return
+        if nudge:
+            visit.nudges.append(nudge)
+            await hub.publish("empathy.nudge", nudge.wire())
+            cue = nudge_cue(nudge)
         update = TrustUpdate(
             turn_id=turn_id,
             speaker=result.speaker,
@@ -555,7 +563,7 @@ def create_app(
             cue=cue,
             at=now(),
         )
-        visit.trust.append(update)
+        visit.add_trust(update)
         await hub.publish("trust.update", update.wire())
 
     async def submit_turn(conn: Connection, payload: dict) -> None:
@@ -663,7 +671,7 @@ def create_app(
         ):
             await set_explain_back("listening", [*eb.explanation_turn_ids, turn_id])
         if result.status == "final":
-            spawn(send_trust(turn_id))
+            spawn(send_trust(turn_id, epoch))
 
     async def readback(conn: Connection, payload: dict, confirmed: bool) -> None:
         ref = TurnRef.model_validate(payload)
@@ -685,7 +693,7 @@ def create_app(
         await hub.publish("turn.result", to_caption(record.result, readback_confirmed=True).wire())  # type: ignore[arg-type]
         await publish_integrity()
         # A confirmed read-back is a spoken turn, so it gets its trust update like every other (CDR-008).
-        spawn(send_trust(ref.turn_id))
+        spawn(send_trust(ref.turn_id, visit.consent_epoch))
 
     # ---------- ADR-003 and CDR-001: off-the-record pause, interpreter, and high-risk marks ----------
 
@@ -1197,7 +1205,8 @@ def create_app(
             cue=understanding_cue(cmd.signal),
             at=at,
         )
-        visit.trust.append(update)
+        # Sorted just after the turn it followed, so a slow advisor's update for that turn still lands before it.
+        visit.add_trust(update)
         await hub.publish("trust.update", update.wire())
 
     async def ask_if_clear(conn: Connection, payload: dict) -> None:

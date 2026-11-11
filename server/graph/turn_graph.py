@@ -7,7 +7,8 @@
 translate also reads the speaker's emotion, certainty, manner, and medications, in the same call: the
 latency mitigation ADR-004 names, applied 2026-10-25. Retrieval is local, so it adds no model call.
 Manner (IDR-005) is read from the words alone, defaults to plain, and may enter the reporting frame as one
-adverb when the relayed words alone would lose it; the tone check is told to expect that adverb.
+adverb (gentle, serious, urgent, or apologetic only) when the relayed words alone would lose it; the tone check
+is told to expect that adverb.
 
 Outcome order when several apply: blocked, escalated, readback_required, final (CDR-002).
 
@@ -138,10 +139,14 @@ Rules:
   "your doctor is asking"), then speak to the listener as "you". Do not repeat the frame in every sentence.
   Write a name as it sounds, in the target language's script.
 - The frame may name the manner, once, as one adverb in the target language's natural form ("Dr. Thomas is
-  saying, gently, that ..."), only for gentle, reassuring, serious, urgent, or apologetic, and only when the
-  relayed words alone would lose it. Never for plain or warm, never anywhere but the opening frame, and never
-  in a way that changes an instruction, a certainty word, or a number.
-- Use indirect speech throughout: the speaker is never "I" in your relay, and never quote them after a colon.
+  saying, gently, that ..."), only for gentle, serious, urgent, or apologetic, and only when the relayed words
+  alone would lose it. Never for plain, warm, reassuring, or encouraging (the voice carries those), never
+  anywhere but the opening frame, and never in a way that changes an instruction, a certainty word, or a number.
+- Use indirect speech in every sentence, not only the first: the speaker is never "I" or "we" anywhere in your
+  relay; say "they", "the doctor", or the name instead, and never quote them after a colon. For example, "We
+  found it early. I will start you on a new medicine today." from the physician becomes "Dr. Thomas is saying
+  they found it early. They will start you on a new medicine today." and never "Dr. Thomas is saying we found
+  it early. I will start you on a new medicine today."
 - Never guess anyone's gender from their name. In English, use "they" for someone whose gender you were not
   told. In a language that needs a gender, repeat the name or role, or use a respectful form that avoids it.
 - Keep everything that was said: every instruction, warning, condition, and question, and every count,
@@ -163,8 +168,9 @@ TONE_SYSTEM = """You check an interpretation in a medical consultation.
 The interpreter relays each utterance in reported speech that names the speaker, for example "Dr. Thomas is
 saying you should rest". That reporting frame, the change from first to third person, and a plain instruction
 ("rest") reported as "you should rest" are expected: never count them as a problem.
-The frame may also carry one manner adverb (gently, reassuringly, seriously, urgently, or apologetically) naming
-how the speaker spoke, as in "Dr. Thomas is saying, gently, that ...": that adverb is expected and never a problem.
+The frame may also carry one manner adverb (gently, reassuringly, seriously, urgently, apologetically, warmly, or
+encouragingly) naming how the speaker spoke, as in "Dr. Thomas is saying, gently, that ...": any such adverb in
+the frame is expected and never a problem, whichever manner it names.
 It describes the speaker, not the news: a relay whose seriousness or certainty changed still fails
 certainty_preserved, whatever the frame says.
 Compare the original utterance with the back-translation of the interpretation.

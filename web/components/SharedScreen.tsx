@@ -55,6 +55,7 @@ import {
 import { LANGUAGE_LABELS } from "@/lib/languages";
 import { applyAmended, brokenEntryLabel, summaryIndexOf, turnOfEntry } from "@/lib/record";
 import { type ConnectionState, useVisitSocket } from "@/lib/socket";
+import { signalShownFor } from "@/lib/trust";
 import Highlighted from "./Highlighted";
 import Orb, { type OrbMode } from "./Orb";
 import RecordBadge from "./RecordBadge";
@@ -71,8 +72,6 @@ interface Pending {
 
 const SPEAKER_LABEL: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
 const STATE_LABEL: Record<ConnectionState, string> = { open: "Connected", connecting: "Connecting", closed: "Reconnecting" };
-/** CDR-008: how long the room sees a patient's signal; a late screen shows one still inside this window. */
-export const SIGNAL_SHOWN_MS = 8000;
 /** CDR-008: interpreter lines said during the visit; they stay until the next turn settles, unlike the introduction. */
 const MID_VISIT_LINES = new Set<LinePurpose>(["signal_not_understood", "signal_slower", "ask_if_clear"]);
 
@@ -540,12 +539,14 @@ export default function SharedScreen() {
   const [summary, setSummary] = useState<PatientSummary | null>(null);
   const [summaryStage, setSummaryStage] = useState<ArtefactStatus["stage"] | null>(null);
   const [summaryStale, setSummaryStale] = useState(false);
-  // CDR-008: the patient's latest signal, for SIGNAL_SHOWN_MS from when it was made.
+  // CDR-008: the patient's latest signal, for SIGNAL_SHOWN_MS. A live signal shows for the full time from when it
+  // arrives, so a TV whose clock is ahead of the laptop's still shows it; only a snapshot's signal is timed from
+  // when it was made, so a TV joining late does not show a stale one.
   const [signal, setSignal] = useState<PatientSignalEntry | null>(null);
   const signalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showSignal = useCallback((entry: PatientSignalEntry) => {
-    const left = SIGNAL_SHOWN_MS - (Date.now() - Date.parse(entry.at));
+  const showSignal = useCallback((entry: PatientSignalEntry, live: boolean) => {
+    const left = signalShownFor(entry, live, Date.now());
     if (signalTimer.current) clearTimeout(signalTimer.current);
     if (!(left > 0)) {
       setSignal(null);
@@ -598,7 +599,7 @@ export default function SharedScreen() {
         setIntegrity(state.integrity);
         // CDR-008: a screen joining within a few seconds of a signal still shows it.
         const latestSignal = state.signals?.at(-1);
-        if (latestSignal) showSignal(latestSignal);
+        if (latestSignal) showSignal(latestSignal, false);
         else setSignal(null);
         // CDR-006: a TV joining mid-offer shows it, unless the newest caption already says it; after a dismissal, nothing.
         if (!state.interpreterOpen) closeInterpreter();
@@ -640,7 +641,7 @@ export default function SharedScreen() {
         });
         break;
       case "patient.signal":
-        showSignal(event.payload as PatientSignalEntry);
+        showSignal(event.payload as PatientSignalEntry, true);
         break;
       case "turn.result": {
         const caption = event.payload as TurnCaption;

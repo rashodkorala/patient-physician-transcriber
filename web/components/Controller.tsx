@@ -79,6 +79,7 @@ import { type LatencyRow, median, segments as latencySegments, toCsv } from "@/l
 import { serverHttpUrl, useVisitSocket } from "@/lib/socket";
 import { applyAmended, brokenEntryLabel, captionOf, effective, isConfirmed, summaryIndexOf, summaryReading, turnOfEntry } from "@/lib/record";
 import { playbackMessages } from "@/lib/speaking";
+import { insertTrust, lastSpokenIn, settledOrder } from "@/lib/trust";
 import {
   type Capture,
   type Heard,
@@ -340,6 +341,8 @@ export default function Controller() {
   // so "say that again" can play it once more through the speak gate without a new turn.
   const [trust, setTrust] = useState<TrustUpdate[]>([]);
   const lastSpoken = useRef<{ text: string; language: Language; speechId: string } | null>(null);
+  // CDR-008: settled turns in the order they settled, so a late trust update is listed at its turn's place.
+  const settled = useRef<string[]>([]);
 
   const physicianLanguage: Language = "en-CA";
   const languageOf = (speaker: Speaker): Language => (speaker === "physician" ? physicianLanguage : patientLanguage);
@@ -432,23 +435,33 @@ export default function Controller() {
         setSummary(state.summary ?? null);
         setSummaryStale(Boolean(state.summaryStale));
         setSummaryChecks(state.summaryChecks ?? []);
-        setTrust(state.trust ?? []);
+        const trustList = state.trust ?? [];
+        setTrust(trustList);
+        // CDR-008: a reloaded controller still knows the turn order and what was last said to the patient.
+        settled.current = settledOrder(state.turns, trustList, state.pendingReadback ?? null);
+        lastSpoken.current = lastSpokenIn(state.turns, trustList, settled.current, state.patientLanguage);
         break;
       }
-      case "trust.update":
+      case "trust.update": {
         // CDR-008: controller only; one per settled turn and one per patient signal, never shown anywhere else.
-        setTrust((all) => [...all, event.payload as TrustUpdate]);
+        // A turn's update arrives when its advisor returns, so it is placed by spoken order, as the server keeps it.
+        const update = event.payload as TrustUpdate;
+        setTrust((all) => insertTrust(all, update, settled.current));
         break;
+      }
       case "patient.signal": {
         // CDR-008: "say that again" replays the last spoken translation by its id, so the speak gate serves it
-        // again and voice.started and voice.ended fire as for a normal relay. Nothing spoken yet: nothing to do.
+        // again and voice.started and voice.ended fire as for a normal relay.
         const entry = event.payload as PatientSignalEntry;
+        if (entry.signal !== "repeat") break;
         const last = lastSpoken.current;
-        if (entry.signal === "repeat" && last) {
-          speak(last.text, last.language, last.speechId).catch((error: Error) => {
-            if (!(error instanceof SpeechStopped)) setNotice(`Not repeated: ${error.message}`);
-          });
+        if (!last) {
+          setNotice("The patient asked to hear it again, but nothing spoken to them is known here. Say it again.");
+          break;
         }
+        speak(last.text, last.language, last.speechId).catch((error: Error) => {
+          if (!(error instanceof SpeechStopped)) setNotice(`Not repeated: ${error.message}`);
+        });
         break;
       }
       case "explainback.state":
@@ -628,6 +641,8 @@ export default function Controller() {
         break;
       case "turn.result": {
         const caption = event.payload as TurnCaption;
+        // Every turn.result is a turn settling (spoken, blocked, or escalated), in the order the server settled it.
+        if (!settled.current.includes(caption.turnId)) settled.current = [...settled.current, caption.turnId];
         updateLatency(caption.turnId, { resultAt: Date.now(), spoken: caption.status === "final" });
         // The public caption is the signal to speak (CDR-002: shown only once spoken).
         if (caption.status === "final" && caption.translation) {
@@ -1632,7 +1647,8 @@ export default function Controller() {
                     )}
                     {u.cue && (
                       <p className={styles.cue} data-testid="cue" data-kind={u.cue.kind}>
-                        {u.cue.text}
+                        {/* The Empathy nudge panel already shows the suggestion with its phrase; this only points to it. */}
+                        {u.cue.kind === "reassurance" ? "Empathy nudge shown" : u.cue.text}
                       </p>
                     )}
                   </li>

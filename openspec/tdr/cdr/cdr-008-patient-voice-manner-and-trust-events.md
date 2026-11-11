@@ -39,6 +39,7 @@ implementation_refs:
   - web/lib/contracts.ts
   - web/lib/i18n.ts
   - web/lib/record.ts
+  - web/lib/trust.ts
   - web/components/PatientScreen.tsx
   - web/components/ReviewScreen.tsx
   - web/components/SharedScreen.tsx
@@ -52,6 +53,12 @@ test_refs:
   - server/tests/test_contracts.py::test_public_visit_state_carries_signals_but_never_trust_cdr_008
   - server/tests/test_contracts.py::test_trust_update_is_a_turn_update_or_a_signal_update_cdr_008
   - server/tests/test_trust.py::test_reassurance_landed_rule_cdr_008
+  - server/tests/test_trust.py::test_reassurance_landed_resets_once_it_has_landed_cdr_008
+  - server/tests/test_trust.py::test_spoken_history_follows_confirmation_order_not_submission_order_cdr_008
+  - server/tests/test_trust.py::test_trust_timeline_is_kept_in_spoken_order_however_late_an_update_arrives_cdr_008
+  - server/tests/test_trust_channel.py::test_a_slow_turn_update_is_listed_before_later_turns_and_the_signal_after_it_cdr_008
+  - server/tests/test_trust_channel.py::test_consent_withdrawn_while_the_advisor_runs_drops_the_trust_update_cdr_008
+  - web/lib/trust.test.mjs
   - server/tests/test_trust.py::test_understanding_cues_are_fixed_english_within_bounds_cdr_008
   - server/tests/test_trust.py::test_culture_cue_is_clipped_to_the_contract_and_null_means_none_cdr_008
   - server/tests/test_trust_channel.py::test_signal_reaches_every_role_is_chained_and_relayed_to_the_physician_cdr_008
@@ -120,7 +127,7 @@ Changes to existing shapes (all additive):
 
 | Command (client to server) | Sender | Rules |
 |---|---|---|
-| `patient.signal` (`signal`) | Review (the patient's device) only | Refused with `command.refused` `invalid` before consent, while paused, and for `repeat` when no translation has yet been spoken in the patient's language; refused `busy` within two seconds of the same device's previous signal. A controller copy is refused with `error`; a screen copy is dropped |
+| `patient.signal` (`signal`) | Review (the patient's device) only | Refused with `command.refused` `invalid` before consent, while paused, and for `repeat` when no translation has yet been spoken in the patient's language; refused `busy` within two seconds of the same device's previous signal. The two second hold is per connection, so a reload of the patient's device resets it (an accepted gap). A controller copy is refused with `error`; a screen copy is dropped |
 | `visit.ask_if_clear` | Controller only | Refused with `error` before consent, while paused, and while a read-back is pending |
 | `turn.submit` with `speaker: "companion"` | Controller | As a patient turn, labelled companion; never produces an empathy nudge |
 
@@ -154,6 +161,7 @@ TrustUpdate: {
 - `afterTurnId` is the most recent settled turn when the signal arrived, or `null` before the first.
 - For a turn update: `turnId`, `speaker`, and `manner` are set; `emotion` is set for patient and companion turns and `null` for physician turns; `signal` is `null`.
 - `reassuranceLanded` is set only on a patient turn that follows (a) an earlier patient turn whose emotion was `worried`, `embarrassed`, `in_pain`, or `confused` and (b) a physician turn between them whose manner was `reassuring`, `warm`, `gentle`, or `encouraging`: `true` when this turn's emotion is `calm` or `relieved`, otherwise `false`; `null` in every other case.
+  The mark resets once it has landed: after a `true`, later patient turns carry `null` until a new worried turn and a new reassuring physician turn after it.
 - For a signal update: `signal`, `turnId` (the `afterTurnId`), and `cue` of kind `understanding` are set; `speaker`, `emotion`, `manner`, and `reassuranceLanded` are `null`.
 - The `signal` chain entry body is the `PatientSignalEntry`; its `entryId` is the `signalId`.
 - Nothing in `TrustUpdate` is ever written into the note, the summary, or the record chain.
@@ -186,3 +194,5 @@ Code carries `@implements CDR-008: Patient signals, manner, trust updates, compa
 
 - 2026-11-10, Claude (agent): Drafted alongside MDD-005 and IDR-005.
 - 2026-11-10, rashodkorala: Blanket authorisation given in session (see MDD-005). Recorded as accepted by Claude (agent) at rashodkorala's explicit request; rashodkorala reviews the built result.
+- 2026-11-11, rashodkorala: amended under the blanket authorisation (see MDD-005); recorded by Claude (agent). `reassuranceLanded` resets once it has landed (Data Schemas).
+- 2026-11-11, rashodkorala: amended under the blanket authorisation (see MDD-005); recorded by Claude (agent). The `patient.signal` two second hold is per connection and a reload resets it, an accepted gap (Contract Specification).

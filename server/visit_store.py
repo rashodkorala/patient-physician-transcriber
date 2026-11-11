@@ -22,6 +22,7 @@
 """
 
 import asyncio
+import bisect
 import copy
 import uuid
 from dataclasses import dataclass, field
@@ -199,6 +200,10 @@ class Visit:
     # trust timeline, one update per spoken turn and per signal, is for the controller only and is never chained.
     signals: list[PatientSignalEntry] = field(default_factory=list)
     trust: list[TrustUpdate] = field(default_factory=list)
+    # CDR-008: every settled turn's id in the order it settled, which is the order the room heard it (spoken) or
+    # saw it held back (blocked or escalated). A read-back-confirmed turn is spoken when confirmed, which may be
+    # after turns submitted later, so `turns` (submission order) is not the spoken order; this is.
+    settled_order: list[str] = field(default_factory=list)
 
     def names(self) -> Names:
         return Names(physician_name=self.physician_name, patient_name=self.patient_name)
@@ -230,6 +235,7 @@ class Visit:
             physician_name=self.physician_name,
             patient_name=self.patient_name,
         )
+        self.settled_order.append(turn_id)
         return self.append("turn", turn_id, body.wire())
 
     def spoken(self, turn_id: str) -> bool:
@@ -243,8 +249,8 @@ class Visit:
         )
 
     def last_settled_turn_id(self) -> str | None:
-        """The most recent settled turn, or None before the first (CDR-008 `afterTurnId`)."""
-        return next((turn_id for turn_id, record in reversed(self.turns.items()) if record.settled), None)
+        """The most recently settled turn, or None before the first (CDR-008 `afterTurnId`)."""
+        return self.settled_order[-1] if self.settled_order else None
 
     def spoken_in(self, language: str) -> bool:
         """Whether any translation has yet been spoken in `language` (CDR-008: `repeat` needs one)."""
@@ -254,14 +260,33 @@ class Visit:
         )
 
     def spoken_results_before(self, turn_id: str) -> list[TurnResult]:
-        """The results of every spoken turn before `turn_id`, oldest first (the reassurance rule's history)."""
+        """The results of every turn spoken before `turn_id`, in the order they were spoken (the reassurance rule's
+        history). A turn not yet settled has every spoken turn before it."""
         results: list[TurnResult] = []
-        for other_id, record in self.turns.items():
+        for other_id in self.settled_order:
             if other_id == turn_id:
                 break
+            record = self.turns[other_id]
             if self.spoken(other_id) and record.result is not None:
                 results.append(record.result)
         return results
+
+    def add_trust(self, update: TrustUpdate) -> None:
+        """Insert a trust update at its place in the spoken order (CDR-008: `trust` is oldest first).
+
+        A turn's update can come back from the advisor long after later turns and signals were listed, so it is
+        not simply appended: a turn update sorts by its turn's place in `settled_order`, a signal sorts just after
+        the turn it followed (first when it followed none), and a turn's own update sorts before any signal after
+        that turn. Updates at the same place keep their arrival order.
+        """
+        position = {turn_id: index + 1 for index, turn_id in enumerate(self.settled_order)}
+        last = len(self.settled_order) + 1
+
+        def key(u: TrustUpdate) -> tuple[int, int]:
+            place = position.get(u.turn_id, last) if u.turn_id is not None else 0
+            return (place, 1 if u.signal is not None else 0)
+
+        self.trust.insert(bisect.bisect_right(self.trust, key(update), key=key), update)
 
     def freeze(self) -> sources.Snapshot:
         """ADR-011's frozen sources: the chain as stored now, and the interpreter's own lines."""

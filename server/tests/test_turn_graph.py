@@ -295,10 +295,20 @@ def test_prompts_define_manner_the_frame_rule_and_the_tone_check_allowance_idr_0
     for manner in ("plain", "warm", "reassuring", "gentle", "serious", "urgent", "apologetic", "encouraging"):
         assert manner in translate
     assert "plain is the default" in translate
-    assert "only for gentle, reassuring, serious, urgent, or apologetic" in translate
-    assert "Never for plain or warm" in translate and "never anywhere but the opening frame" in translate
+    # 2026-11-11 amendment: no frame adverb for reassuring (the voice and the label carry it).
+    assert "only for gentle, serious, urgent, or apologetic" in translate
+    assert "Never for plain, warm, reassuring, or encouraging" in translate
+    assert "never anywhere but the opening frame" in translate
+    # Indirect speech in every sentence, shown with a two-sentence example.
+    assert "in every sentence, not only the first" in translate and 'never "I" or "we" anywhere' in translate
+    assert "They will start you on a new medicine today." in translate
     tone = " ".join(TONE_SYSTEM.split())
-    assert "one manner adverb" in tone and "expected and never a problem" in tone
+    assert "one manner adverb" in tone and "any such adverb in the frame is expected and never a problem" in tone
+    # The tone check stays lenient: it accepts every manner adverb, so a faithful relay is never escalated for
+    # one manner word, even one the translate prompt asks the model not to add.
+    for adverb in ("gently", "reassuringly", "seriously", "urgently", "apologetically", "warmly", "encouragingly"):
+        assert adverb in tone
+    assert "reassuringly" not in translate
     assert "seriousness or certainty changed still fails certainty_preserved" in tone
 
 

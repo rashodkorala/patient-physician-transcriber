@@ -1,7 +1,9 @@
 // Trust view end-to-end check (trust-across-the-barrier task 4.2; MDD-005, CDR-008, IDR-005). A worried patient
-// turn, a reassuring physician turn, and a calm patient turn mark reassurance as landed on /control; worried again
-// marks it as not yet landed; a physician question about alcohol shows a culture cue; a companion's typed turn is
-// labelled Companion on /screen and in the turn log and produces no nudge; "Ask if anything is unclear" has the
+// turn, a reassuring physician turn, and a calm patient turn mark reassurance as landed on /control; calm again
+// and a new worry carry no mark (it resets once landed); after a new reassurance, still worried marks it as not
+// yet landed;
+// the worried turn's cue points to the empathy nudge; a physician question about alcohol shows a culture cue; a
+// companion's typed turn is labelled Companion on /screen and in the turn log and produces no nudge; "Ask if anything is unclear" has the
 // interpreter ask the patient in Punjabi with the English shown; and no trust data reaches /screen or /patient, live
 // or in a late snapshot. Run against a freshly started fake-model stack.
 // Usage: node e2e/trust-view.mjs [baseUrl] [serverPort] [screenshotDir]
@@ -42,6 +44,9 @@ await worried.waitFor({ timeout: 15000 });
 await check((await worried.getAttribute("data-emotion")) === "worried", "the trust view reads the patient as worried");
 await check((await worried.innerText()).includes("sounds worried"), "in plain words");
 await check((await worried.locator('[data-testid="landed"]').count()) === 0, "no landed mark before any reassurance");
+const nudgeCue = worried.locator('[data-testid="cue"][data-kind="reassurance"]');
+await nudgeCue.waitFor({ timeout: 15000 });
+await check((await nudgeCue.innerText()).trim() === "Empathy nudge shown", "the worried turn points to the empathy nudge instead of repeating it");
 
 await saySettled(control, "physician", REASSURE);
 const reassuring = trust.locator('[data-testid="trust-turn"][data-speaker="physician"]').first();
@@ -57,7 +62,17 @@ await check((await landed.getAttribute("data-landed")) === "true", "a calm turn 
 await check((await landed.innerText()).includes("Reassurance landed"), "in words");
 await capture(shots, "trust-landed", [{ page: control, which: "control", widths: [1440], height: 900 }]);
 
-// ---------- worried again: not yet ----------
+// ---------- landed resets: calm or worried again has no mark; a new reassurance, then still worried: not yet ----------
+const patientTrustTurns = (n) =>
+  control.waitForFunction((count) => document.querySelectorAll('[data-testid="trust-turn"][data-speaker="patient"]').length >= count, n, { timeout: 15000 });
+await saySettled(control, "patient", CALM);
+await patientTrustTurns(3);
+await check((await trust.locator('[data-testid="landed"]').count()) === 1, "a calm turn after reassurance has landed carries no new mark");
+await saySettled(control, "patient", WORRIED_AGAIN);
+await patientTrustTurns(4);
+await check((await trust.locator('[data-testid="landed"]').count()) === 1, "a new worry with no new reassurance carries no mark");
+await saySettled(control, "physician", REASSURE);
+await control.waitForFunction(() => document.querySelectorAll('[data-testid="trust-turn"][data-speaker="physician"]').length >= 2, null, { timeout: 15000 });
 await saySettled(control, "patient", WORRIED_AGAIN);
 await control.waitForFunction(() => document.querySelectorAll('[data-testid="landed"]').length >= 2, null, { timeout: 15000 });
 const notYet = trust.locator('[data-testid="landed"]').nth(1);

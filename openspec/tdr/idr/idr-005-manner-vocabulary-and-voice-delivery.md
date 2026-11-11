@@ -16,7 +16,7 @@ ai_context:
     - "The translate call reads manner alongside emotion and certainty; no extra model call"
     - "Manner defaults to plain; the model is told to pick another value only when the words clearly carry it"
     - "Physician turns are voiced by manner; patient and companion turns by emotion, conveying the speaker's affect to the physician"
-    - "The frame carries a manner adverb only for gentle, reassuring, serious, urgent, and apologetic, and only when the relayed words alone would lose it"
+    - "The frame carries a manner adverb only for gentle, serious, urgent, and apologetic (never reassuring, warm, or encouraging), and only when the relayed words alone would lose it"
   framework_hints:
     - "Vocabulary and delivery tables live in server/voice.py; the Manner Literal in server/contracts.py"
     - "Caption labels are i18n keys mannerWarm, mannerReassuring, mannerGentle, mannerSerious, mannerUrgent, mannerApologetic, mannerEncouraging; plain has no label"
@@ -76,7 +76,7 @@ Vocabulary, what each means, and how it is delivered:
 |---|---|---|---|---|---|
 | `plain` | inform or ask without marked feeling (the default) | `[calm]` | 0.55 | none | none |
 | `warm` | are friendly and personal | `[warmly]` | 0.45 | none | Said warmly |
-| `reassuring` | lower the listener's concern | `[reassuringly]` | 0.5 | "reassuringly" | Said with reassurance |
+| `reassuring` | lower the listener's concern | `[reassuringly]` | 0.5 | none | Said with reassurance |
 | `gentle` | handle difficult content with care | `[gently]` | 0.6 | "gently" | Said gently |
 | `serious` | mark the content as grave | `[seriously]` | 0.65 | "seriously" | Said seriously |
 | `urgent` | call for action now | `[urgently]` | 0.35 | "urgently" | Said urgently |
@@ -87,7 +87,9 @@ Patient and companion turns are voiced to the physician by the speaker's emotion
 Certainty steadiness (ADR-010) still adds to stability.
 Interpreter lines keep `[warmly]`.
 
-Frame: the relay opens as today ("Dr Patel is saying ..."); when the manner is one of the five with a frame adverb and the model judges the relayed words alone would not carry it, the adverb goes inside the frame, once, in the target language's natural form.
+Frame: the relay opens as today ("Dr Patel is saying ..."); when the manner is one of the four with a frame adverb (gentle, serious, urgent, and apologetic) and the model judges the relayed words alone would not carry it, the adverb goes inside the frame, once, in the target language's natural form.
+Reassuring, warm, and encouraging never get a frame adverb: the voice and the label carry them, and the words usually do too.
+Indirect speech holds through every sentence of the relay, not only the first: the speaker is never "I" or "we", and is "they" or named instead.
 The tone check is told the frame may carry such an adverb.
 
 Label: the caption of a `final` physician turn carries `manner`; screens render the i18n label for the patient's language beneath the translation, and English beside it for the physician.
@@ -117,3 +119,4 @@ Code carries `@implements IDR-005: Manner vocabulary and voice delivery`.
 
 - 2026-11-10, Claude (agent): Drafted alongside MDD-005.
 - 2026-11-10, rashodkorala: Blanket authorisation given in session (see MDD-005). Recorded as accepted by Claude (agent) at rashodkorala's explicit request; rashodkorala reviews the built result.
+- 2026-11-11, rashodkorala: amended after the live run under the blanket authorisation (see MDD-005); recorded by Claude (agent). The frame adverb is now only for gentle, serious, urgent, and apologetic (reassuring's frame adverb is none, since the live model added "reassuringly" where the words already carried it), and the relay keeps indirect speech through every sentence.

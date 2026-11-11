@@ -2,6 +2,9 @@
 for the controller only, the reassurance rule and culture cues through the channel, companion turns, the closing
 check, and a model that fails, all against the full turn graph with the scripted model (EDR-002)."""
 
+import asyncio
+import threading
+
 from test_visit_channel import (
     SETTINGS,
     ConsentedClient,
@@ -13,6 +16,7 @@ from test_visit_channel import (
     set_names,
     submit,
     types,
+    withdraw_consent,
 )
 from test_voice import FakeVoice
 from visit_helpers import assert_public, close, command, connect, entries, kinds, marker, visit
@@ -255,17 +259,33 @@ def test_reassurance_landed_true_false_and_null_through_the_channel_cdr_008(kb):
             spoken(ctl, "physician", "en-CA", REASSURING_EN)
             landed = spoken(ctl, "patient", "pa-IN", CALM_PA)
             assert landed["reassuranceLanded"] is True and landed["emotion"] == "calm"
+            # Landed resets the pair: a later calm turn has no mark, and a new worry has none until reassured.
+            assert spoken(ctl, "patient", "pa-IN", CALM_PA)["reassuranceLanded"] is None
+            assert spoken(ctl, "patient", "pa-IN", WORRIED_PA)["reassuranceLanded"] is None
+            # A new reassurance, then still worried: not yet.
             spoken(ctl, "physician", "en-CA", REASSURING_EN)
             assert spoken(ctl, "patient", "pa-IN", WORRIED_PA)["reassuranceLanded"] is False
         finally:
             close(sockets)
         with client.websocket_connect("/ws/visit?role=controller") as late:
             state = late.receive_json()["payload"]
-            assert [t["reassuranceLanded"] for t in state["trust"]] == [None, None, None, None, True, None, False]
+            assert [t["reassuranceLanded"] for t in state["trust"]] == [
+                None,
+                None,
+                None,
+                None,
+                True,
+                None,
+                None,
+                None,
+                False,
+            ]
             assert [t["emotion"] for t in state["trust"] if t["speaker"] == "patient"] == [
                 "calm",
                 "worried",
                 "calm",
+                "calm",
+                "worried",
                 "worried",
             ]
 
@@ -310,6 +330,86 @@ def test_a_failing_advisor_still_yields_a_trust_update_without_a_cue_cdr_008(kb)
             submit(ctl, "patient", "pa-IN", WORRIED_PA)
             events = drain_until(ctl, "trust.update")
             assert "empathy.nudge" not in types(events) and events[-1]["payload"]["emotion"] == "worried"
+        finally:
+            close(sockets)
+
+
+def held_advisor():
+    """A trust handler whose first call waits until the returned gate is set (a slow model), then answers as the
+    faithful fake; every later call answers at once. Also returns the calls it has seen."""
+    gate, seen = threading.Event(), []
+
+    async def handler(user):
+        seen.append(user)
+        if len(seen) == 1:
+            while not gate.is_set():
+                await asyncio.sleep(0.01)
+        return fake_model.trust(user)
+
+    return handler, gate, seen
+
+
+def test_a_slow_turn_update_is_listed_before_later_turns_and_the_signal_after_it_cdr_008(kb):  # noqa: F811
+    handler, gate, _ = held_advisor()
+    with make_client(kb, handlers={"trust": handler}) as client:
+        sockets, (ctl, review) = connect(client, "controller", "review")
+        try:
+            # Turn 1's advisor is slow; turn 2's update and a signal after turn 2 arrive before turn 1's.
+            submit(ctl, "physician", "en-CA", PLAIN_EN)
+            first = drain_until(ctl, "turn.result")[-1]["payload"]["turnId"]
+            second = spoken(ctl, "physician", "en-CA", SENSITIVE_EN)["turnId"]
+            signal(review, "not_understood")
+            live = drain_until(ctl, "trust.update")[-1]["payload"]
+            assert live["signal"] == "not_understood" and live["turnId"] == second
+            gate.set()
+            late = drain_until(ctl, "trust.update")[-1]["payload"]
+            assert late["turnId"] == first and late["signal"] is None
+        finally:
+            close(sockets)
+        # The visit keeps the timeline in spoken order, so a fresh controller lists turn 1 first.
+        with client.websocket_connect("/ws/visit?role=controller") as fresh:
+            trust = fresh.receive_json()["payload"]["trust"]
+            assert [(t["turnId"], t["signal"]) for t in trust] == [
+                (first, None),
+                (second, None),
+                (second, "not_understood"),
+            ]
+
+
+def test_a_signal_after_a_slow_turn_is_listed_after_that_turns_update_cdr_008(kb):  # noqa: F811
+    handler, gate, _ = held_advisor()
+    with make_client(kb, handlers={"trust": handler}) as client:
+        sockets, (ctl, review) = connect(client, "controller", "review")
+        try:
+            submit(ctl, "physician", "en-CA", PLAIN_EN)
+            turn_id = drain_until(ctl, "turn.result")[-1]["payload"]["turnId"]
+            drain_until(review, "turn.result")
+            signal(review, "slower")
+            assert drain_until(ctl, "trust.update")[-1]["payload"]["signal"] == "slower"
+            gate.set()
+            assert drain_until(ctl, "trust.update")[-1]["payload"]["turnId"] == turn_id
+        finally:
+            close(sockets)
+        with client.websocket_connect("/ws/visit?role=controller") as fresh:
+            trust = fresh.receive_json()["payload"]["trust"]
+            assert [(t["turnId"], t["signal"]) for t in trust] == [(turn_id, None), (turn_id, "slower")]
+
+
+def test_consent_withdrawn_while_the_advisor_runs_drops_the_trust_update_cdr_008(kb):  # noqa: F811
+    handler, gate, seen = held_advisor()
+    with make_client(kb, handlers={"trust": handler}) as client:
+        sockets, (ctl,) = connect(client, "controller")
+        try:
+            submit(ctl, "patient", "pa-IN", WORRIED_PA)
+            drain_until(ctl, "turn.result")
+            withdraw_consent(ctl)
+            drain_until(ctl, "consent.changed")
+            gate.set()
+            events, _ = marker(ctl)
+            # Dropped: no nudge and no trust update, and no further model call for this turn.
+            assert "trust.update" not in types(events) and "empathy.nudge" not in types(events)
+            assert len(seen) == 1
+            assert visit(client).trust == [] and visit(client).nudges == []
         finally:
             close(sockets)
 
