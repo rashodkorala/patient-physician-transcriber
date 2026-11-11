@@ -27,8 +27,24 @@ ai_context:
     - "A patient signal is never silently dropped: it reaches the physician's controller, the shared screen in both languages, and the record"
     - "Nothing in this layer is spoken aloud unless it passed the speak gate like every other line"
 affects: [server/, web/]
-implementation_refs: []
-test_refs: []
+implementation_refs:
+  - server/trust.py
+  - server/main.py
+  - server/visit_store.py
+  - server/graph/turn_graph.py
+  - server/voice.py
+  - server/introduction.py
+  - web/components/PatientScreen.tsx
+  - web/components/Controller.tsx
+  - web/app/patient/page.tsx
+test_refs:
+  - server/tests/test_trust.py
+  - server/tests/test_trust_channel.py
+  - server/tests/test_turn_graph.py::test_manner_is_read_in_the_translate_call_and_labels_a_physician_turn_idr_005
+  - server/tests/test_voice.py::test_every_manner_has_a_delivery_and_physician_turns_follow_it_idr_005
+  - web/e2e/patient-voice.mjs
+  - web/e2e/trust-view.mjs
+  - web/e2e/screen-manner.mjs
 ---
 
 # MDD-005: Trust across the barrier: the patient has a voice, the physician's manner is carried, and the physician sees how it is landing

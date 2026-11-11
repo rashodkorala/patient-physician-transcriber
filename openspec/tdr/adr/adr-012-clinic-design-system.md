@@ -27,8 +27,33 @@ ai_context:
     - "No speaker or state is told apart by colour alone: a label or shape always accompanies it"
     - "prefers-reduced-motion stops every non-essential animation"
 affects: [web/app/globals.css, web/components/, web/design/README.md]
-implementation_refs: []
-test_refs: []
+implementation_refs:
+  - web/app/globals.css
+  - web/app/layout.tsx
+  - web/package.json
+  - web/design/README.md
+  - web/app/page.tsx
+  - web/app/home.module.css
+  - web/components/screen.module.css
+  - web/components/SharedScreen.tsx
+  - web/components/patient.module.css
+  - web/components/PatientScreen.tsx
+  - web/components/review.module.css
+  - web/components/ReviewScreen.tsx
+  - web/components/controller.module.css
+  - web/components/Controller.tsx
+  - web/components/record.module.css
+  - web/components/RecordBadge.tsx
+  - web/components/recordView.module.css
+  - web/components/RecordView.tsx
+  - web/components/orb.module.css
+  - web/components/Orb.tsx
+test_refs:
+  - web/lib/contrast.test.mjs
+  - web/e2e/visit-steps.mjs
+  - web/e2e/patient-voice.mjs
+  - web/e2e/trust-view.mjs
+  - web/e2e/week2.mjs
 ---
 
 # ADR-012: Interface: a clinic design system, light, legible at three metres, one hyperlegible typeface, meaning-only colour

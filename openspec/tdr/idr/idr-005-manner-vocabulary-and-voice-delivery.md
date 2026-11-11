@@ -25,8 +25,30 @@ ai_context:
     - "The tone check treats a manner adverb in the frame as expected and still fails a relay whose seriousness or certainty changed"
     - "Every manner has a delivery; every emotion has a delivery; a unit test checks both tables are complete"
 affects: [server/graph/turn_graph.py, server/voice.py, server/contracts.py, web/lib/i18n.ts]
-implementation_refs: []
-test_refs: []
+implementation_refs:
+  - server/graph/turn_graph.py
+  - server/contracts.py
+  - server/voice.py
+  - server/fake_model.py
+  - server/main.py
+  - web/lib/contracts.ts
+  - web/lib/i18n.ts
+  - web/components/SharedScreen.tsx
+  - web/components/PatientScreen.tsx
+  - web/components/ReviewScreen.tsx
+  - web/components/RecordView.tsx
+  - web/components/Controller.tsx
+test_refs:
+  - server/tests/test_turn_graph.py::test_manner_is_read_in_the_translate_call_and_labels_a_physician_turn_idr_005
+  - server/tests/test_turn_graph.py::test_patient_turn_has_a_private_manner_and_no_caption_label_idr_005
+  - server/tests/test_turn_graph.py::test_prompts_define_manner_the_frame_rule_and_the_tone_check_allowance_idr_005
+  - server/tests/test_voice.py::test_every_manner_has_a_delivery_and_physician_turns_follow_it_idr_005
+  - server/tests/test_voice.py::test_patient_and_companion_turns_convey_the_speakers_emotion_idr_005
+  - server/tests/test_trust_channel.py::test_physician_caption_carries_manner_and_patient_caption_never_does_cdr_008
+  - web/lib/i18n.test.mjs
+  - web/e2e/screen-manner.mjs
+  - web/e2e/week2.mjs
+  - web/e2e/patient-voice.mjs
 ---
 
 # IDR-005: Manner: an eight-word vocabulary read from the words, carried into the voice, the frame, and the caption label

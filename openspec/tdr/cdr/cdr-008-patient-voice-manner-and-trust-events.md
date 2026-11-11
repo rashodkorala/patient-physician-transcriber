@@ -25,8 +25,50 @@ ai_context:
     - "A patient.signal from a controller is refused with error; from a screen it is dropped"
     - "The same device may not send two signals within two seconds; the second is refused with command.refused busy"
 affects: [server/contracts.py, server/main.py, server/visit_store.py, web/lib/contracts.ts]
-implementation_refs: []
-test_refs: []
+implementation_refs:
+  - server/contracts.py
+  - server/trust.py
+  - server/main.py
+  - server/visit_store.py
+  - server/introduction.py
+  - server/kb/content/interpreter/en.yaml
+  - server/kb/content/interpreter/fr.yaml
+  - server/kb/content/interpreter/pa.yaml
+  - server/kb/content/interpreter/ta.yaml
+  - server/kb/content/interpreter/si.yaml
+  - web/lib/contracts.ts
+  - web/lib/i18n.ts
+  - web/lib/record.ts
+  - web/components/PatientScreen.tsx
+  - web/components/ReviewScreen.tsx
+  - web/components/SharedScreen.tsx
+  - web/components/Controller.tsx
+  - web/components/RecordView.tsx
+  - web/app/patient/page.tsx
+  - web/app/review/page.tsx
+test_refs:
+  - server/tests/test_contracts.py::test_trust_payload_fixtures_validate_cdr_008
+  - server/tests/test_contracts.py::test_signal_and_trust_role_rules_cdr_008
+  - server/tests/test_contracts.py::test_public_visit_state_carries_signals_but_never_trust_cdr_008
+  - server/tests/test_contracts.py::test_trust_update_is_a_turn_update_or_a_signal_update_cdr_008
+  - server/tests/test_trust.py::test_reassurance_landed_rule_cdr_008
+  - server/tests/test_trust.py::test_understanding_cues_are_fixed_english_within_bounds_cdr_008
+  - server/tests/test_trust.py::test_culture_cue_is_clipped_to_the_contract_and_null_means_none_cdr_008
+  - server/tests/test_trust_channel.py::test_signal_reaches_every_role_is_chained_and_relayed_to_the_physician_cdr_008
+  - server/tests/test_trust_channel.py::test_second_signal_within_two_seconds_is_busy_per_device_cdr_008
+  - server/tests/test_trust_channel.py::test_repeat_before_any_spoken_translation_is_invalid_cdr_008
+  - server/tests/test_trust_channel.py::test_signals_are_refused_before_consent_and_while_paused_cdr_008
+  - server/tests/test_trust_channel.py::test_trust_update_per_spoken_turn_reaches_the_controller_only_cdr_008
+  - server/tests/test_trust_channel.py::test_reassurance_landed_true_false_and_null_through_the_channel_cdr_008
+  - server/tests/test_trust_channel.py::test_companion_turn_is_accepted_in_the_patients_language_and_labelled_everywhere_cdr_008
+  - server/tests/test_trust_channel.py::test_companion_turn_in_the_physicians_language_is_refused_cdr_008
+  - server/tests/test_trust_channel.py::test_ask_if_clear_says_one_line_in_two_languages_spoken_in_the_patients_only_cdr_008
+  - server/tests/test_trust_channel.py::test_ask_if_clear_is_refused_before_consent_while_paused_and_during_a_readback_cdr_008
+  - server/tests/test_introduction.py::test_signal_line_names_the_patient_in_every_language_cdr_008
+  - web/lib/i18n.test.mjs
+  - web/e2e/patient-voice.mjs
+  - web/e2e/trust-view.mjs
+  - web/e2e/screen-manner.mjs
 ---
 
 # CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
