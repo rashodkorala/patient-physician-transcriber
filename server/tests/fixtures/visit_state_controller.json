@@ -28,7 +28,8 @@
       ],
       "confidence": 0.93,
       "status": "readback_required",
-      "attempts": 1
+      "attempts": 1,
+      "manner": "plain"
     }
   ],
   "currentTurn": {
@@ -55,7 +56,8 @@
     ],
     "confidence": 0.93,
     "status": "readback_required",
-    "attempts": 1
+    "attempts": 1,
+    "manner": "plain"
   },
   "pendingReadback": "t1",
   "nudges": [
@@ -136,7 +138,8 @@
         "toneLabel": "respectful",
         "glossaryUsed": [],
         "criticalValues": [],
-        "readbackConfirmed": false
+        "readbackConfirmed": false,
+        "manner": null
       },
       "amendments": [
         {
@@ -164,7 +167,8 @@
             "criticalValues": [],
             "confidence": 0.93,
             "status": "final",
-            "attempts": 1
+            "attempts": 1,
+            "manner": "plain"
           }
         }
       ],
@@ -365,5 +369,54 @@
     ],
     "check": "passed"
   },
-  "summaryStale": false
+  "summaryStale": false,
+  "signals": [
+    {
+      "signalId": "5a7e0f1c2b3d",
+      "signal": "not_understood",
+      "afterTurnId": "t1",
+      "at": "2026-11-19T19:06:30.120000+00:00"
+    }
+  ],
+  "trust": [
+    {
+      "turnId": "t0",
+      "speaker": "physician",
+      "emotion": null,
+      "manner": "gentle",
+      "reassuranceLanded": null,
+      "signal": null,
+      "cue": {
+        "kind": "culture",
+        "text": "Questions about alcohol can carry shame for this patient. Say why it matters for their care, and ask without judgement."
+      },
+      "at": "2026-11-19T19:03:10.004000+00:00"
+    },
+    {
+      "turnId": "t3",
+      "speaker": "patient",
+      "emotion": "worried",
+      "manner": "plain",
+      "reassuranceLanded": false,
+      "signal": null,
+      "cue": {
+        "kind": "reassurance",
+        "text": "Acknowledge the worry about cost before moving on."
+      },
+      "at": "2026-11-19T19:05:40.310000+00:00"
+    },
+    {
+      "turnId": "t1",
+      "speaker": null,
+      "emotion": null,
+      "manner": null,
+      "reassuranceLanded": null,
+      "signal": "not_understood",
+      "cue": {
+        "kind": "understanding",
+        "text": "Say it another way, in shorter sentences, one instruction at a time."
+      },
+      "at": "2026-11-19T19:06:30.120000+00:00"
+    }
+  ]
 }

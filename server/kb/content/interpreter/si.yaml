@@ -7,3 +7,10 @@ lines:
   ask_patient_name_with_physician: අද ඔබේ වෛද්‍යවරයා {physician}. කරුණාකර ඔබේ නම කියන්න.
   welcome: ස්තූතියි. ඔබ සූදානම් වූ විට කතා කරන්න පුළුවන්.
   welcome_with_patient: ස්තූතියි {patient}. ඔබ සූදානම් වූ විට කතා කරන්න පුළුවන්.
+  # CDR-008: the patient's signals relayed to the physician, and the closing check asked of the patient.
+  signal_not_understood: "{patient} කියන්නේ එය තේරුම් ගන්න බැරි වුණා කියලා. කරුණාකර එය වෙනත් ආකාරයකින් කියන්න පුළුවන්ද?"
+  signal_not_understood_unnamed: "රෝගියා කියන්නේ එය තේරුම් ගන්න බැරි වුණා කියලා. කරුණාකර එය වෙනත් ආකාරයකින් කියන්න පුළුවන්ද?"
+  signal_slower: "{patient} ඔබෙන් ඉල්ලන්නේ ටිකක් හෙමින් කතා කරන්න කියලා."
+  signal_slower_unnamed: "රෝගියා ඔබෙන් ඉල්ලන්නේ ටිකක් හෙමින් කතා කරන්න කියලා."
+  ask_if_clear: "{patient}, අද වෛද්‍යවරයා කියපු දේවල් අතරින් නැවත පැහැදිලි කර ගන්න කැමති කිසිවක් තියෙනවද?"
+  ask_if_clear_unnamed: "අද වෛද්‍යවරයා කියපු දේවල් අතරින් නැවත පැහැදිලි කර ගන්න කැමති කිසිවක් තියෙනවද?"

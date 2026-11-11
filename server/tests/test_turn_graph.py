@@ -1,12 +1,14 @@
-"""Turn graph tests with a scripted model (task 2.3, ADR-004, CDR-002, EDR-002)."""
+"""Turn graph tests with a scripted model (task 2.3, ADR-004, CDR-002, EDR-002), and manner in the same call
+(IDR-005, trust-across-the-barrier 2.1)."""
 
 import asyncio
 
 import pytest
 
 import fake_model
+from contracts import to_caption
 from fake_model import field
-from graph.turn_graph import Draft, ToneCheck, TurnPipeline
+from graph.turn_graph import TONE_SYSTEM, TRANSLATE_SYSTEM, Draft, ToneCheck, TurnPipeline
 from kb.embeddings import HashingEmbedder
 from kb.store import KnowledgeBase
 from llm import ScriptedModel
@@ -23,7 +25,7 @@ def model(translate=None, tone_check=None):
     handlers = {
         "translate": translate or fake_model.translate,
         "tone_check": tone_check or fake_model.tone_check,
-        "empathy": fake_model.empathy,
+        "trust": fake_model.trust,
     }
     return ScriptedModel(handlers)
 
@@ -245,6 +247,59 @@ def test_dropped_instruction_fails_the_tone_check_and_escalates_mdd_004(kb):
 
     result, reason, _ = run(kb, model(tone_check=dropped), text="Stop the medicine at once if you get a rash.")
     assert result.status == "escalated" and reason == "tone_failure" and result.attempts == 2
+
+
+# ---------- manner (IDR-005) ----------
+
+
+def test_manner_is_read_in_the_translate_call_and_labels_a_physician_turn_idr_005(kb):
+    m = model()
+    result, _, _ = run(kb, m, text="The tests were reassuring. You did not have a heart attack.")
+    assert [purpose for purpose, _ in m.calls] == ["translate", "tone_check"]  # no extra call
+    assert result.status == "final" and result.manner == "reassuring"
+    assert to_caption(result).manner == "reassuring"
+    plain, _, _ = run(kb, model(), text="How long have you had the pain?")
+    assert plain.manner == "plain" and to_caption(plain).manner == "plain"
+
+
+def test_patient_turn_has_a_private_manner_and_no_caption_label_idr_005(kb):
+    result, _, _ = run(kb, model(), text="ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਡਾਕਟਰ ਜੀ।", speaker="patient", source="pa-IN", target="en-CA")
+    assert result.manner == "plain" and to_caption(result).manner is None
+    companion, _, _ = run(kb, model(), text="ਉਹ ਸੋਮਵਾਰ ਤੋਂ ਬਿਮਾਰ ਹੈ।", speaker="companion", source="pa-IN", target="en-CA")
+    assert to_caption(companion).manner is None
+
+
+def test_frame_adverb_passes_the_tone_check_and_keeps_the_dose_idr_005(kb):
+    def gentle_relay(user):
+        draft = fake_model.translate(user)
+        back = f"Dr. Thomas is saying, gently, that {draft.back_translation}"
+        return Draft(
+            **{
+                **draft.model_dump(),
+                "manner": "gentle",
+                "translation": f"ਡਾ. ਥਾਮਸ ਨਰਮੀ ਨਾਲ ਕਹਿ ਰਹੇ ਹਨ ਕਿ {draft.translation}",
+                "back_translation": back,
+            }
+        )
+
+    result, reason, _ = run(kb, model(translate=gentle_relay), physician_name="Dr. Thomas")
+    assert result.status == "readback_required" and reason is None and result.attempts == 1
+    assert result.manner == "gentle" and all(v.matched for v in result.critical_values)
+    assert "0.4" in result.translation
+    hello, reason, _ = run(kb, model(translate=gentle_relay), text="Hello, how are you?", physician_name="Dr. Thomas")
+    assert hello.status == "final" and reason is None
+
+
+def test_prompts_define_manner_the_frame_rule_and_the_tone_check_allowance_idr_005():
+    translate = " ".join(TRANSLATE_SYSTEM.split())
+    for manner in ("plain", "warm", "reassuring", "gentle", "serious", "urgent", "apologetic", "encouraging"):
+        assert manner in translate
+    assert "plain is the default" in translate
+    assert "only for gentle, reassuring, serious, urgent, or apologetic" in translate
+    assert "Never for plain or warm" in translate and "never anywhere but the opening frame" in translate
+    tone = " ".join(TONE_SYSTEM.split())
+    assert "one manner adverb" in tone and "expected and never a problem" in tone
+    assert "seriousness or certainty changed still fails certainty_preserved" in tone
 
 
 # ---------- presenter mismatch control (TDM-002, task 5.1) ----------

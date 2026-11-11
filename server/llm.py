@@ -20,14 +20,20 @@ T = TypeVar("T", bound=BaseModel)
 log = logging.getLogger("uvicorn.error")
 
 # ADR-006: the note and summary run on Opus 5.5 and favour quality over speed. ADR-011: explain-back runs on the
-# live model, Sonnet 5.5, because the patient and physician wait for it.
+# live model, Sonnet 5.5, because the patient and physician wait for it. MDD-005: the trust advisor (nudges and
+# culture cues) runs in the background on the tone model, never on the turn's critical path.
 RECORD_PURPOSES = frozenset({"clinical_note", "patient_summary"})
 DEFAULT_MODELS_BY_PURPOSE: dict[str, str] = {
     "tone_check": TONE_MODEL,
     "name_extract": TONE_MODEL,
+    "trust": TONE_MODEL,
     "explain_back": LIVE_MODEL,
     **{purpose: RECORD_MODEL for purpose in RECORD_PURPOSES},
 }
+# A live call that hangs would hold the visit: after this long the SDK gives up, and the turn ends as `failed`
+# (CDR-001) instead of leaving everyone waiting. Two retries cover a transient error or an overloaded response.
+LIVE_TIMEOUT_S = 25.0
+MAX_RETRIES = 2
 # Record calls think harder and write longer than a live turn; live calls keep the low-latency settings.
 RECORD_EFFORT = "high"
 RECORD_MAX_TOKENS = 16000
@@ -54,7 +60,7 @@ class ClaudeModel:
         models_by_purpose: dict[str, str] | None = None,
     ) -> None:
         self.model_id = model_id
-        self.client = client or anthropic.AsyncAnthropic()
+        self.client = client or anthropic.AsyncAnthropic(timeout=LIVE_TIMEOUT_S, max_retries=MAX_RETRIES)
         # Live turns favour latency (under 3 seconds); tune with the tone set (EDR-002).
         self.effort = effort
         # ADR-006 amended 2026-10-25: the tone check runs on Haiku; the note and summary on Opus (ADR-006);

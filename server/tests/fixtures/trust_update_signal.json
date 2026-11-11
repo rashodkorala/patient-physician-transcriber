@@ -1,0 +1,13 @@
+{
+  "turnId": "t1",
+  "speaker": null,
+  "emotion": null,
+  "manner": null,
+  "reassuranceLanded": null,
+  "signal": "not_understood",
+  "cue": {
+    "kind": "understanding",
+    "text": "Say it another way, in shorter sentences, one instruction at a time."
+  },
+  "at": "2026-11-19T19:06:30.120000+00:00"
+}

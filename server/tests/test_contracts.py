@@ -1,4 +1,4 @@
-"""Contract tests for CDR-001, CDR-002, CDR-003, CDR-004, CDR-005, CDR-006, CDR-007, and TDM-005."""
+"""Contract tests for CDR-001, CDR-002, CDR-003, CDR-004, CDR-005, CDR-006, CDR-007, CDR-008, and TDM-005."""
 
 import json
 from pathlib import Path
@@ -36,6 +36,7 @@ from contracts import (
     NameProposed,
     Names,
     NoteSentence,
+    PatientSignalEntry,
     PatientSummary,
     RecordIntegrity,
     SegmentAmend,
@@ -51,6 +52,8 @@ from contracts import (
     TagDowngrade,
     TamperRecord,
     TamperState,
+    TrustCue,
+    TrustUpdate,
     TurnCaption,
     TurnRef,
     TurnResult,
@@ -341,7 +344,7 @@ def test_note_and_summary_payload_fixtures_validate_cdr_007(name, model):
 def test_new_command_and_event_role_rules_cdr_005_cdr_006_cdr_007():
     assert {"explainback.start", "explainback.check", "explainback.cancel"} <= CONTROLLER_COMMANDS
     assert {"note.generate", "summary.generate", "demo.tamper_record"} <= CONTROLLER_COMMANDS
-    assert {"segment.confirm", "segment.amend"} == REVIEW_COMMANDS
+    assert {"segment.confirm", "segment.amend"} <= REVIEW_COMMANDS
     assert {"summary.read_aloud", "summary.stop"} <= REVIEW_OR_CONTROLLER_COMMANDS
     assert not REVIEW_COMMANDS & (CONTROLLER_COMMANDS | REVIEW_OR_CONTROLLER_COMMANDS)
     private = {
@@ -407,6 +410,81 @@ def test_visit_state_without_the_new_fields_still_validates_cdr_005_cdr_006_cdr_
         state.pop(key)
     parsed = VisitStatePublic.model_validate(state)
     assert parsed.segments == [] and parsed.summary is None
+
+
+# ---------- CDR-008: patient signals, manner, trust updates, companion turns, and the closing check ----------
+
+
+@pytest.mark.parametrize(
+    ("name", "model"),
+    [
+        ("patient_signal_entry.json", PatientSignalEntry),
+        ("trust_update_turn.json", TrustUpdate),
+        ("trust_update_signal.json", TrustUpdate),
+        ("turn_caption_physician_manner.json", TurnCaption),
+    ],
+)
+def test_trust_payload_fixtures_validate_cdr_008(name, model):
+    assert model.model_validate(load(name)).wire() == load(name)
+
+
+def test_signal_and_trust_role_rules_cdr_008():
+    assert "patient.signal" in REVIEW_COMMANDS and "visit.ask_if_clear" in CONTROLLER_COMMANDS
+    assert "trust.update" in CONTROLLER_ONLY_EVENTS
+    assert not {"patient.signal", "interpreter.line", "turn.result"} & CONTROLLER_ONLY_EVENTS
+    assert not REVIEW_COMMANDS & (CONTROLLER_COMMANDS | REVIEW_OR_CONTROLLER_COMMANDS)
+
+
+def test_public_visit_state_carries_signals_but_never_trust_cdr_008():
+    state = load("visit_state_public.json")
+    assert state["signals"] and "trust" not in state
+    with pytest.raises(ValidationError):
+        VisitStatePublic.model_validate({**state, "trust": []})
+    state.pop("signals")
+    assert VisitStatePublic.model_validate(state).signals == []
+    controller = load("visit_state_controller.json")
+    assert {t["cue"]["kind"] for t in controller["trust"]} == {"culture", "reassurance", "understanding"}
+    for key in ("signals", "trust"):
+        controller.pop(key)
+    assert VisitStateController.model_validate(controller).trust == []
+
+
+@pytest.mark.parametrize("speaker", ["patient", "companion"])
+def test_caption_manner_only_on_a_final_physician_turn_cdr_008(speaker):
+    with pytest.raises(ValidationError):
+        TurnCaption.model_validate({**load("turn_caption_physician_manner.json"), "speaker": speaker})
+    with pytest.raises(ValidationError):
+        TurnCaption.model_validate({**load("turn_caption_blocked.json"), "manner": "gentle"})
+    result = TurnResult.model_validate(load("turn_result.json"))
+    assert (
+        to_caption(result.model_copy(update={"status": "final", "speaker": speaker, "manner": "gentle"})).manner is None
+    )
+    assert to_caption(result.model_copy(update={"status": "final", "manner": "gentle"})).manner == "gentle"
+    assert to_caption(result.model_copy(update={"status": "blocked", "manner": "gentle"})).manner is None
+
+
+def test_turn_result_manner_defaults_to_plain_cdr_008():
+    result = load("turn_result.json")
+    result.pop("manner")
+    assert TurnResult.model_validate(result).manner == "plain"
+    with pytest.raises(ValidationError):
+        TurnResult.model_validate({**result, "manner": "kind"})
+
+
+def test_trust_update_is_a_turn_update_or_a_signal_update_cdr_008():
+    signal, turn = load("trust_update_signal.json"), load("trust_update_turn.json")
+    for bad in ({"speaker": "patient"}, {"emotion": "calm"}, {"manner": "plain"}, {"reassuranceLanded": True}):
+        with pytest.raises(ValidationError):
+            TrustUpdate.model_validate({**signal, **bad})
+    for bad in ({"turnId": None}, {"speaker": None}, {"manner": None}, {"speaker": "physician"}, {"emotion": None}):
+        with pytest.raises(ValidationError):
+            TrustUpdate.model_validate({**turn, **bad})
+    physician = TrustUpdate.model_validate({**turn, "speaker": "physician", "emotion": None, "reassuranceLanded": None})
+    assert physician.emotion is None
+    TrustCue.model_validate({"kind": "culture", "text": "x" * 200})
+    for text in ("", "x" * 201):
+        with pytest.raises(ValidationError):
+            TrustCue.model_validate({"kind": "culture", "text": text})
 
 
 def test_chain_results_map_to_wire_one_to_one_adr_011_cdr_005_cdr_007():

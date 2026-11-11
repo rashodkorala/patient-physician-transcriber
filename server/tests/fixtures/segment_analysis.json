@@ -18,6 +18,7 @@
     "criticalValues": [],
     "confidence": 0.93,
     "status": "final",
-    "attempts": 1
+    "attempts": 1,
+    "manner": "plain"
   }
 }

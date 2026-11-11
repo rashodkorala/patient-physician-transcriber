@@ -8,3 +8,11 @@ lines:
   ask_patient_name_with_physician: "{physician} est votre médecin aujourd'hui. Puis-je avoir votre nom, s'il vous plaît ?"
   welcome: Merci. Vous pouvez commencer quand vous le souhaitez.
   welcome_with_patient: Merci, {patient}. Vous pouvez commencer quand vous le souhaitez.
+  # CDR-008: the patient's signals relayed to the physician, and the closing check. "La personne que vous soignez"
+  # keeps the patient's gender out of the unnamed lines, as the lines above keep the interpreter's.
+  signal_not_understood: "{patient} dit ne pas avoir compris. Pourriez-vous le dire autrement ?"
+  signal_not_understood_unnamed: "La personne que vous soignez dit ne pas avoir compris. Pourriez-vous le dire autrement ?"
+  signal_slower: "{patient} vous demande de parler plus lentement."
+  signal_slower_unnamed: "La personne que vous soignez vous demande de parler plus lentement."
+  ask_if_clear: "{patient}, y a-t-il quelque chose que le médecin a dit aujourd'hui que vous aimeriez qu'on vous explique de nouveau ?"
+  ask_if_clear_unnamed: "Y a-t-il quelque chose que le médecin a dit aujourd'hui que vous aimeriez qu'on vous explique de nouveau ?"

@@ -10,3 +10,10 @@ lines:
   ask_patient_name_with_physician: ਅੱਜ {physician} ਤੁਹਾਡੇ ਡਾਕਟਰ ਹਨ। ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਨਾਮ ਦੱਸੋ ਜੀ।
   welcome: ਧੰਨਵਾਦ ਜੀ। ਜਦੋਂ ਤੁਸੀਂ ਤਿਆਰ ਹੋਵੋ, ਗੱਲ ਸ਼ੁਰੂ ਕਰ ਸਕਦੇ ਹੋ।
   welcome_with_patient: ਧੰਨਵਾਦ {patient} ਜੀ। ਜਦੋਂ ਤੁਸੀਂ ਤਿਆਰ ਹੋਵੋ, ਗੱਲ ਸ਼ੁਰੂ ਕਰ ਸਕਦੇ ਹੋ।
+  # CDR-008: the patient's signals relayed to the physician, and the closing check asked of the patient (tusi, ji).
+  signal_not_understood: "{patient} ਜੀ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਉਹ ਇਹ ਗੱਲ ਸਮਝ ਨਹੀਂ ਸਕੇ। ਕੀ ਤੁਸੀਂ ਇਸਨੂੰ ਕਿਸੇ ਹੋਰ ਤਰੀਕੇ ਨਾਲ ਕਹਿ ਸਕਦੇ ਹੋ?"
+  signal_not_understood_unnamed: "ਮਰੀਜ਼ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਉਹ ਇਹ ਗੱਲ ਸਮਝ ਨਹੀਂ ਸਕੇ। ਕੀ ਤੁਸੀਂ ਇਸਨੂੰ ਕਿਸੇ ਹੋਰ ਤਰੀਕੇ ਨਾਲ ਕਹਿ ਸਕਦੇ ਹੋ?"
+  signal_slower: "{patient} ਜੀ ਤੁਹਾਨੂੰ ਥੋੜ੍ਹਾ ਧੀਮੇ ਬੋਲਣ ਲਈ ਕਹਿ ਰਹੇ ਹਨ।"
+  signal_slower_unnamed: "ਮਰੀਜ਼ ਤੁਹਾਨੂੰ ਥੋੜ੍ਹਾ ਧੀਮੇ ਬੋਲਣ ਲਈ ਕਹਿ ਰਹੇ ਹਨ।"
+  ask_if_clear: "{patient} ਜੀ, ਕੀ ਅੱਜ ਡਾਕਟਰ ਜੀ ਨੇ ਕੋਈ ਅਜਿਹੀ ਗੱਲ ਕਹੀ ਹੈ ਜੋ ਤੁਸੀਂ ਦੁਬਾਰਾ ਸਮਝਣਾ ਚਾਹੋਗੇ?"
+  ask_if_clear_unnamed: "ਕੀ ਅੱਜ ਡਾਕਟਰ ਜੀ ਨੇ ਕੋਈ ਅਜਿਹੀ ਗੱਲ ਕਹੀ ਹੈ ਜੋ ਤੁਸੀਂ ਦੁਬਾਰਾ ਸਮਝਣਾ ਚਾਹੋਗੇ?"

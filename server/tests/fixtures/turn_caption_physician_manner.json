@@ -1,0 +1,14 @@
+{
+  "turnId": "t4",
+  "speaker": "physician",
+  "sourceLanguage": "en-CA",
+  "targetLanguage": "pa-IN",
+  "sourceText": "The tests were reassuring. You did not have a heart attack.",
+  "status": "final",
+  "translation": "ਡਾ. ਥਾਮਸ ਤਸੱਲੀ ਨਾਲ ਕਹਿ ਰਹੇ ਹਨ ਕਿ ਟੈਸਟ ਠੀਕ ਆਏ ਹਨ ਅਤੇ ਤੁਹਾਨੂੰ ਦਿਲ ਦਾ ਦੌਰਾ ਨਹੀਂ ਪਿਆ।",
+  "toneLabel": "reassuring",
+  "glossaryUsed": [],
+  "criticalValues": [],
+  "readbackConfirmed": false,
+  "manner": "reassuring"
+}

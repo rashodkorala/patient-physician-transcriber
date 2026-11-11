@@ -1,5 +1,6 @@
-"""Server voice tests: what /api/speech/{id} will and will not speak, the delivery table, and the
-ElevenLabs adapter's fallback signal (ADR-010, CDR-003, mediator-voice tasks 3.1, 3.2, and 3.4)."""
+"""Server voice tests: what /api/speech/{id} will and will not speak, the delivery tables (by manner for the
+physician, by emotion for the patient and a companion), and the ElevenLabs adapter's fallback signal (ADR-010,
+IDR-005, CDR-003, mediator-voice tasks 3.1, 3.2, and 3.4)."""
 
 import asyncio
 from typing import get_args
@@ -8,7 +9,7 @@ import pytest
 from test_visit_channel import DOSE, SETTINGS, ConsentedClient, drain_until, drain_until_stage, submit
 
 import fake_model
-from contracts import Certainty, Emotion
+from contracts import Certainty, Emotion, Manner
 from graph.turn_graph import Draft, ToneCheck
 from kb.embeddings import HashingEmbedder
 from kb.store import KnowledgeBase
@@ -17,9 +18,11 @@ from main import create_app
 from voice import (
     EMOTION_DELIVERY,
     LINE_DELIVERY,
+    MANNER_DELIVERY,
     ElevenLabsVoice,
     VoiceUnavailable,
     delivery_for,
+    delivery_for_turn,
     describe_error,
     spoken_text,
 )
@@ -59,7 +62,7 @@ def make_client(kb, voice=None, translate=None, tone_check=None, settings=SETTIN
         {
             "translate": translate or fake_model.translate,
             "tone_check": tone_check or fake_model.tone_check,
-            "empathy": fake_model.empathy,
+            "trust": fake_model.trust,
             "name_extract": fake_model.name_extract,
         }
     )
@@ -85,7 +88,23 @@ def test_final_turn_streams_its_translation_with_its_delivery(kb):
         assert response.headers["content-type"] == "audio/mpeg" and response.content == b"ID3audio"
         text, language, delivery = voice.said[0]
         assert text == caption["translation"] and language == "pa-IN"
-        assert delivery in {delivery_for(e, c) for e in get_args(Emotion) for c in get_args(Certainty)}
+        # A physician turn is said in the physician's manner, read from the words (IDR-005).
+        assert delivery == delivery_for_turn("physician", caption["manner"], "calm", "high")
+        assert delivery in {
+            delivery_for_turn("physician", m, "calm", c) for m in get_args(Manner) for c in get_args(Certainty)
+        }
+
+
+def test_patient_turn_is_spoken_conveying_the_patients_emotion_idr_005(kb):
+    voice = FakeVoice()
+    with make_client(kb, voice) as client, client.websocket_connect("/ws/visit?role=controller") as ctl:
+        ctl.receive_json()
+        submit(ctl, "patient", "pa-IN", "I am scared, ਮੈਨੂੰ ਬਹੁਤ ਡਰ ਲੱਗਦਾ ਹੈ।")
+        caption = drain_until(ctl, "turn.result")[-1]["payload"]
+        assert client.get(f"/api/speech/{caption['turnId']}").status_code == 200
+    _, language, delivery = voice.said[0]
+    assert language == "en-CA" and delivery.tag == "[concerned]"
+    assert delivery == delivery_for_turn("patient", "plain", "worried", "high") == delivery_for("worried", "high")
 
 
 def test_confirmed_readback_is_spoken_and_unsettled_or_rejected_is_not(kb):
@@ -197,11 +216,52 @@ def test_every_emotion_and_certainty_has_a_delivery():
 def test_certain_content_is_said_more_steadily_never_less():
     for emotion in get_args(Emotion):
         assert delivery_for(emotion, "high").stability >= delivery_for(emotion, "low").stability
+    for manner in get_args(Manner):
+        high = delivery_for_turn("physician", manner, "calm", "high").stability
+        assert high >= delivery_for_turn("physician", manner, "calm", "low").stability
+
+
+def test_every_manner_has_a_delivery_and_physician_turns_follow_it_idr_005():
+    assert set(MANNER_DELIVERY) == set(get_args(Manner))
+    expected = {
+        "plain": ("[calm]", 0.55),
+        "warm": ("[warmly]", 0.45),
+        "reassuring": ("[reassuringly]", 0.5),
+        "gentle": ("[gently]", 0.6),
+        "serious": ("[seriously]", 0.65),
+        "urgent": ("[urgently]", 0.35),
+        "apologetic": ("[apologetically]", 0.5),
+        "encouraging": ("[encouragingly]", 0.45),
+    }
+    assert {m: (d.tag, d.stability) for m, d in MANNER_DELIVERY.items()} == expected
+    for manner in get_args(Manner):
+        for emotion in get_args(Emotion):
+            # The physician's own emotion never changes how their turn is said; the manner does.
+            assert delivery_for_turn("physician", manner, emotion, "low") == MANNER_DELIVERY[manner]
+    assert delivery_for_turn("physician", "urgent", "calm", "high").stability == pytest.approx(0.45)
+
+
+def test_patient_and_companion_turns_convey_the_speakers_emotion_idr_005():
+    expected = {
+        "calm": ("[calm]", 0.5),
+        "worried": ("[concerned]", 0.6),
+        "embarrassed": ("[softly]", 0.6),
+        "in_pain": ("[gently]", 0.65),
+        "relieved": ("[warmly]", 0.45),
+        "confused": ("[hesitantly]", 0.6),
+    }
+    assert {e: (d.tag, d.stability) for e, d in EMOTION_DELIVERY.items()} == expected
+    for speaker in ("patient", "companion"):
+        for emotion in get_args(Emotion):
+            for manner in get_args(Manner):
+                # Manner is private for the patient; only their emotion reaches the voice.
+                assert delivery_for_turn(speaker, manner, emotion, "low") == EMOTION_DELIVERY[emotion]
 
 
 def test_tag_leads_and_text_brackets_cannot_act_as_tags():
     said = spoken_text("Take [two] tablets", delivery_for("worried", "high"))
-    assert said == "[gently] Take (two) tablets"
+    assert said == "[concerned] Take (two) tablets"
+    assert spoken_text("Rest [now]", delivery_for_turn("physician", "gentle", "calm", "high")) == "[gently] Rest (now)"
 
 
 # ---------- ElevenLabs adapter ----------
