@@ -7,7 +7,7 @@ interpreter's own lines (CDR-003), which are not chain entries. It holds:
 - every turn that settled as spoken (`final`, which includes read-back confirmed turns), at its effective version:
   the latest applied amendment, else the original (CDR-006);
 - the interpreter's own lines, citable only as `interpreter_stated`;
-- the ids of blocked and escalated turns, as gaps, without any text.
+- the ids of blocked, unclear, and escalated turns, as gaps, without any text.
 
 Only the fields named here are copied out of an entry, so nothing private can reach a model even if an entry
 carried it: no emotion, certainty, back-translation, confidence, nudge, injection or tamper state, and no
@@ -138,7 +138,8 @@ def freeze(
             turn_id = str(body.get("turnId") or entry.get("entryId"))
             settled = body.get("settledAs") or body.get("status")
             if settled != "final" or body.get("translation") is None:
-                if settled in ("blocked", "escalated"):
+                # ADR-003: an unclear turn is never spoken, so it is a gap like a blocked one.
+                if settled in ("blocked", "escalated", "unclear"):
                     gaps.append(turn_id)
                 continue
             speaker = str(body.get("speaker"))

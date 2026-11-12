@@ -33,7 +33,7 @@ Constraints: one demo laptop plus a TV and optionally a phone on the same networ
                     ^                  |
                     +-- retry once ----+--> block (critical value mismatch)
                                        |
-                                       +--> escalate (confidence or tone, ADR-003)
+                                       +--> escalate (tone, or third unclear in a row, ADR-003) / unclear
                          |
       knowledge base (ADR-002; retrieval per IDR-002)
       glossary | tone and culture | empathy phrases | condition explainers
@@ -54,12 +54,13 @@ The controller has "Physician speaking" and "Patient speaking" buttons. The brow
   | All critical values match, physician turn has critical values | `readback_required` | After physician confirms | Values highlighted in both languages; confirm or reject |
   | All checks pass, no critical values needing read-back | `final` | Yes | Caption and speech |
   | Critical value still mismatched after one re-translation | `blocked` | Never | Controller shows mismatched values; speaker asked to repeat or rephrase |
-  | Confidence or tone check still failing after one retry | `escalated` | No | Marked uncertain; human interpreter offered (ADR-003) with reason `low_confidence` or `tone_failure` (CDR-001) |
+  | Confidence still below threshold after one retry, fewer than two consecutive unclear turns from this speaker | `unclear` | Never | Original and a say-it-again notice in both languages; the interpreter asks aloud in the speaker's language |
+  | Third consecutive unclear turn from the same speaker, or a tone failure after one retry | `escalated` | No | Marked uncertain; human interpreter offered (ADR-003) with reason `low_confidence` or `tone_failure` (CDR-001) |
   | Physician rejects highlighted values at read-back | (turn discarded) | No | Speaker asked to repeat (covers recognition errors) |
 
-  When more than one row applies, the first in this order wins: `blocked`, then `escalated`, then `readback_required`, then `final`. A turn whose critical values match but whose confidence or tone check still fails is `escalated`: it is never read back or spoken. A critical value mismatch never escalates on its own; the interpreter button stays available throughout.
+  When more than one row applies, the first in this order wins: `blocked`, then `escalated`, then `unclear`, then `readback_required`, then `final`. A turn whose critical values match but whose confidence or tone check still fails is `escalated` or `unclear`: it is never read back or spoken. The server keeps an unclear streak per speaker: the first and second consecutive unclear turns are `unclear`, the third is `escalated` with reason `low_confidence`, a `final` or read-back-confirmed turn from that speaker resets it, and blocked turns do not change it (ADR-003, amended 2026-11-12). A critical value mismatch never escalates on its own; the interpreter button stays available throughout.
 
-  Shared screens (`/screen`, `/review`) only ever render a translation after it has been spoken. A `blocked` or `escalated` turn shows the original text and a notice, never its translation or translated values. Emotion, certainty, and back-translations go to the controller only (CDR-001 `turn.analysis`); the shared screen gets the public `TurnCaption` (CDR-002) with a translation-register tone label.
+  Shared screens (`/screen`, `/review`) only ever render a translation after it has been spoken. A `blocked`, `unclear`, or `escalated` turn shows the original text and a notice, never its translation or translated values. Emotion, certainty, and back-translations go to the controller only (CDR-001 `turn.analysis`); the shared screen gets the public `TurnCaption` (CDR-002) with a translation-register tone label.
 - **presenter mismatch control** (TDM-002): once armed by the presenter, the next physician turn containing a critical value has its first dose number multiplied by 10 in the translation on both attempts, so the normal verify node blocks it for beat 5 of `docs/demo-script.md`. Cancellable before it fires. Marked on the controller and in the record view only; the review screen shows the turn as blocked, then repeated.
 - **test languages** (TDM-003): a server start-up setting (off by default, restart to change, controller banner when on) makes Sinhala and Tamil selectable for the test scripts `docs/test-script-tamil.md` and `docs/test-script-sinhala.md`; never on stage. Knowledge base adds en-si and en-ta content.
 - **mark high risk**: a controller button sends `visit.mark_high_risk`; the server records it and offers a human interpreter with reason `high_risk` (ADR-003, CDR-001).

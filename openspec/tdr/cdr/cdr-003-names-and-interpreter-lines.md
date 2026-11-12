@@ -56,7 +56,7 @@ Events (server to clients):
 
 | Event | When |
 |---|---|
-| `interpreter.line` (`lineId`, `purpose`: `introduction`, `ask_physician_name`, `ask_patient_name`, `welcome`; `text` and `language` per language) | The interpreter says something of its own; every role |
+| `interpreter.line` (`lineId`, `purpose`: `introduction`, `ask_physician_name`, `ask_patient_name`, `welcome`, `ask_to_repeat`; `text` and `language` per language) | The interpreter says something of its own; every role |
 | `visit.name_proposed` (`role`, `name`) | *Controller only.* A name heard in a reply, waiting for confirmation |
 | `visit.names` (`physicianName`, `patientName`, both nullable) | Names changed; every role |
 
@@ -68,7 +68,7 @@ Tone instructions are built on the server from the turn's emotion and certainty,
 ## Data Schemas
 
 - `Names`: `{ physicianName: string | null, patientName: string | null }`, each trimmed, 1 to 60 characters, no digits.
-- `InterpreterLine`: `{ lineId: string, purpose: "introduction" | "ask_physician_name" | "ask_patient_name" | "welcome", lines: { language: Language, text: string }[] }`.
+- `InterpreterLine`: `{ lineId: string, purpose: "introduction" | "ask_physician_name" | "ask_patient_name" | "welcome" | "ask_to_repeat", lines: { language: Language, text: string }[] }`.
 - `NameProposed`: `{ role: "physician" | "patient", name: string }`.
 - `IntroductionState`: `"pending" | "asking_physician" | "asking_patient" | "done" | "skipped"`.
 
@@ -104,3 +104,4 @@ The `mediator-voice` change, task groups 1 and 3.
 - 2026-11-03, rashodkorala: Accepted in session. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-10, rashodkorala: Additive amendment by CDR-008: `InterpreterLine.purpose` gains `signal_not_understood`, `signal_slower`, and `ask_if_clear`. Recorded by Claude (agent) under the blanket authorisation given in session (see MDD-005).
+- 2026-11-12, rashodkorala: Additive amendment by ADR-003 and CDR-002: `InterpreterLine.purpose` gains `ask_to_repeat`, the interpreter's spoken say-it-again request after an unclear turn. Recorded by Claude (agent) under the blanket authorisation given in session (see MDD-005).

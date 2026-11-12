@@ -87,7 +87,14 @@ function clock(iso: string): string {
 function statusWords(turn: TurnResult): string | null {
   if (turn.status === "blocked") return "blocked, not spoken";
   if (turn.status === "escalated") return "escalated, not spoken";
+  // ADR-003: a confidence failure before the speaker's third in a row; a gap in the note like a blocked turn.
+  if (turn.status === "unclear") return "unclear, not spoken";
   return null;
+}
+
+/** CDR-002: settled turns that were never spoken. */
+function heldBack(turn: TurnResult): boolean {
+  return turn.status === "blocked" || turn.status === "escalated" || turn.status === "unclear";
 }
 
 /** CDR-008: a signal in the timeline, after the turn it followed. */
@@ -422,12 +429,12 @@ export default function RecordView() {
             {turns.map((t, i) => {
               const version = cited.get(t.turnId);
               const { v, history } = sourceLines(t, version ?? currentVersion(segments, t.turnId));
-              const unspoken = t.status === "blocked" || t.status === "escalated";
+              const unspoken = heldBack(t);
               const wasInjected = injected.has(t.turnId);
               const tampered = tamperedTurn === t.turnId;
               const broken = brokenTurn === t.turnId;
               // IDR-005: the physician's manner is shown; a patient's or companion's stays off the record view.
-              const manner = t.speaker === "physician" && t.status !== "blocked" && t.status !== "escalated" ? mannerLabel(t.manner, "en-CA") : null;
+              const manner = t.speaker === "physician" && !unspoken ? mannerLabel(t.manner, "en-CA") : null;
               const name = nameOf(t.speaker);
               return [
                 <li

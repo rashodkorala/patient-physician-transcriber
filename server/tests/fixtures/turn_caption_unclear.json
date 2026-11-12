@@ -1,0 +1,14 @@
+{
+  "turnId": "t4",
+  "speaker": "patient",
+  "sourceLanguage": "pa-IN",
+  "targetLanguage": "en-CA",
+  "sourceText": "ਮੈਨੂੰ ਕੱਲ੍ਹ ਤੋਂ ਚੱਕਰ ਆ ਰਹੇ ਹਨ।",
+  "status": "unclear",
+  "translation": null,
+  "toneLabel": null,
+  "glossaryUsed": [],
+  "criticalValues": [],
+  "readbackConfirmed": false,
+  "manner": null
+}

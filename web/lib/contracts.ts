@@ -41,8 +41,9 @@ export const PATIENT_SIGNALS: PatientSignal[] = ["not_understood", "slower", "re
 export type TrustCueKind = "reassurance" | "understanding" | "culture";
 export type Certainty = "high" | "medium" | "low";
 export type CriticalKind = "dose" | "unit" | "frequency" | "date" | "number" | "medication";
-export type TurnStatusValue = "final" | "readback_required" | "blocked" | "escalated";
-export type CaptionStatus = "final" | "blocked" | "escalated";
+// ADR-003 (amended 2026-11-12): unclear is a confidence failure that survived the retry, before the third in a row.
+export type TurnStatusValue = "final" | "readback_required" | "blocked" | "escalated" | "unclear";
+export type CaptionStatus = "final" | "blocked" | "escalated" | "unclear";
 export type Role = "controller" | "screen" | "review";
 export type IntroductionState = "pending" | "asking_physician" | "asking_patient" | "done" | "skipped";
 export type NameRole = "physician" | "patient";
@@ -54,7 +55,9 @@ export type LinePurpose =
   // CDR-008: the interpreter relays a patient signal to the physician, and asks the patient if anything is unclear.
   | "signal_not_understood"
   | "signal_slower"
-  | "ask_if_clear";
+  | "ask_if_clear"
+  // ADR-003 and CDR-003: the interpreter asks the speaker of an unclear turn to say it again, in their language.
+  | "ask_to_repeat";
 
 export interface GlossaryEntry {
   term: string;
@@ -88,6 +91,8 @@ export interface TurnResult {
   attempts: number;
   /** IDR-005: how the speaker said it, read from the words. Optional so an older server still satisfies the type. */
   manner?: Manner;
+  /** ADR-003 and CDR-002: the speaker's unclear streak after this turn; controller only, never in TurnCaption. */
+  unclearStreak?: number;
 }
 
 /** Public projection: every screen (turn.result). */
@@ -191,6 +196,8 @@ export interface VisitStateController {
   // CDR-008: the patient's signals for every role, and the trust timeline for the controller only.
   signals?: PatientSignalEntry[];
   trust?: TrustUpdate[];
+  // ADR-003 and CDR-002: each speaker's unclear streak, controller only.
+  unclearStreak?: Partial<Record<Speaker, number>>;
 }
 
 export interface VisitStatePublic {

@@ -50,6 +50,7 @@ import {
   type NoticeKey,
   SIGNAL_KEY,
   bilingual,
+  heldBackNotice,
   mannerLabel,
 } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
@@ -72,8 +73,11 @@ interface Pending {
 
 const SPEAKER_LABEL: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
 const STATE_LABEL: Record<ConnectionState, string> = { open: "Connected", connecting: "Connecting", closed: "Reconnecting" };
-/** CDR-008: interpreter lines said during the visit; they stay until the next turn settles, unlike the introduction. */
-const MID_VISIT_LINES = new Set<LinePurpose>(["signal_not_understood", "signal_slower", "ask_if_clear"]);
+/**
+ * CDR-008: interpreter lines said during the visit; they stay until the next turn settles, unlike the introduction.
+ * ADR-003: the say-it-again request after an unclear turn is one of them.
+ */
+const MID_VISIT_LINES = new Set<LinePurpose>(["signal_not_understood", "signal_slower", "ask_if_clear", "ask_to_repeat"]);
 
 function Notice({ notice, first, second }: { notice: NoticeKey; first: Language; second: Language }) {
   return (
@@ -440,11 +444,7 @@ function Caption({ c, names, broken, patient }: { c: TurnCaption; names: Names; 
             )}
           </>
         ) : (
-          <Notice
-            notice={c.status === "escalated" ? "interpreterOffered" : "pleaseRepeat"}
-            first={c.targetLanguage}
-            second={c.sourceLanguage}
-          />
+          <Notice notice={heldBackNotice(c.status)} first={c.targetLanguage} second={c.sourceLanguage} />
         )}
       </div>
     </article>

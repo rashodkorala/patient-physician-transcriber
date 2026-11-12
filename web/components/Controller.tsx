@@ -139,7 +139,8 @@ const LISTENING_TEXT: Record<ListeningState, string> = {
 };
 
 const REASON_TEXT: Record<EscalationReason, string> = {
-  low_confidence: "the translation stayed uncertain after a retry",
+  // ADR-003: low confidence escalates only on the same speaker's third unclear turn in a row.
+  low_confidence: "the speaker was not caught three times in a row",
   tone_failure: "the tone check failed after a retry",
   high_risk: "this moment was marked high risk",
   requested: "an interpreter was requested",
@@ -179,6 +180,7 @@ const ACTION_FOR: Record<EscalationReason, EscalationEntry["action"]> = {
 };
 
 const SPEAKER_TEXT: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
+const SPEAKERS: Speaker[] = ["patient", "physician", "companion"];
 
 /** ADR-006, ADR-010: what the running server uses, from GET /api/health; every value is a string. */
 type Services = {
@@ -312,6 +314,18 @@ function ValuesTable({ turn, only }: { turn: TurnResult; only?: "mismatched" }) 
   );
 }
 
+/** ADR-003: a speaker's unclear turns before the next one escalates and a human interpreter is offered. */
+const UNCLEAR_LIMIT = 2;
+
+/** ADR-003: one speaker's live unclear streak, for the Privacy and interpreter section; nothing when it is 0. */
+function streakText(speaker: Speaker, count: number): string | null {
+  if (count <= 0) return null;
+  if (count < UNCLEAR_LIMIT) {
+    return `${SPEAKER_TEXT[speaker]}: not caught once; a human interpreter is offered on the third in a row`;
+  }
+  return `${SPEAKER_TEXT[speaker]}: not caught twice in a row; a human interpreter is offered on the next`;
+}
+
 function statusText(turn: TurnResult, outcome: Outcome, pending: boolean): string {
   switch (turn.status) {
     case "final":
@@ -320,6 +334,9 @@ function statusText(turn: TurnResult, outcome: Outcome, pending: boolean): strin
       return "blocked, not spoken";
     case "escalated":
       return "escalated, not spoken";
+    case "unclear":
+      // ADR-003: the speaker's first or second in a row; the third escalates.
+      return `unclear, not spoken (attempt ${turn.unclearStreak ?? 1} of ${UNCLEAR_LIMIT})`;
     case "readback_required":
       if (pending) return "waiting for your read-back";
       if (outcome.spoken) return outcome.voiceFailed ? "confirmed, voice failed" : "confirmed and spoken";
@@ -387,6 +404,8 @@ export default function Controller() {
   const [integrity, setIntegrity] = useState<RecordIntegrity | null>(null);
   const [escalations, setEscalations] = useState<EscalationEntry[]>([]);
   const interpreterOpen = useRef(false);
+  // ADR-003: each speaker's unclear streak, from visit.state and every turn.analysis, so a reload still shows it.
+  const [unclearStreak, setUnclearStreak] = useState<Partial<Record<Speaker, number>>>({});
   // CDR-005: the latest explain-back's state, and every result (private to the physician).
   const [explainBack, setExplainBack] = useState<ExplainBackState | null>(null);
   const [explainBackResults, setExplainBackResults] = useState<ExplainBackResult[]>([]);
@@ -513,6 +532,7 @@ export default function Controller() {
         // CDR-006: a reload keeps the recorded interpreter events, the open offer, and the injection marks.
         const recorded = state.escalations ?? [];
         setEscalations(recorded);
+        setUnclearStreak(state.unclearStreak ?? {});
         interpreterOpen.current = Boolean(state.interpreterOpen);
         if (!state.interpreterOpen) closeInterpreter();
         else {
@@ -742,6 +762,11 @@ export default function Controller() {
           return next;
         });
         lastTurn.current = result.turnId;
+        // ADR-003: the speaker's streak after this turn (a read-back resets it only when confirmed, below).
+        if (result.unclearStreak !== undefined) {
+          const count = result.unclearStreak;
+          setUnclearStreak((all) => ({ ...all, [result.speaker]: count }));
+        }
         if (result.status === "blocked") {
           setNotice("Blocked: a value changed in translation. Ask the speaker to repeat or rephrase.");
         }
@@ -752,8 +777,11 @@ export default function Controller() {
         break;
       case "turn.result": {
         const caption = event.payload as TurnCaption;
-        // Every turn.result is a turn settling (spoken, blocked, or escalated), in the order the server settled it.
+        // Every turn.result is a turn settling (spoken, blocked, unclear, or escalated), in the order the server
+        // settled it.
         if (!settled.current.includes(caption.turnId)) settled.current = [...settled.current, caption.turnId];
+        // ADR-003: a confirmed read-back is spoken, so it resets its speaker's unclear streak, as on the server.
+        if (caption.readbackConfirmed) setUnclearStreak((all) => ({ ...all, [caption.speaker]: 0 }));
         updateLatency(caption.turnId, { resultAt: Date.now(), spoken: caption.status === "final" });
         // The public caption is the signal to speak (CDR-002: shown only once spoken).
         if (caption.status === "final" && caption.translation) {
@@ -1485,6 +1513,16 @@ export default function Controller() {
                 Mark high risk
               </button>
             </div>
+            {/* ADR-003: a speaker's live unclear streak, only while it is not 0. */}
+            {SPEAKERS.some((s) => (unclearStreak[s] ?? 0) > 0) && (
+              <ul className={styles.recorded} data-testid="unclear-streak" aria-label="Turns not caught">
+                {SPEAKERS.filter((s) => (unclearStreak[s] ?? 0) > 0).map((s) => (
+                  <li key={s} data-speaker={s} data-count={unclearStreak[s]}>
+                    {streakText(s, unclearStreak[s] ?? 0)}
+                  </li>
+                ))}
+              </ul>
+            )}
             {interpreter && (
               <div
                 className={styles.interpreter}
@@ -1819,7 +1857,11 @@ export default function Controller() {
               {turns.flatMap((t) => {
                 const outcome = outcomes[t.turnId] ?? {};
                 const unspoken =
-                  t.status === "blocked" || t.status === "escalated" || outcome.discarded || outcome.voiceFailed;
+                  t.status === "blocked" ||
+                  t.status === "escalated" ||
+                  t.status === "unclear" ||
+                  outcome.discarded ||
+                  outcome.voiceFailed;
                 const wasInjected = injected.has(t.turnId);
                 const altered = t.turnId === brokenTurnId;
                 const tampered = t.turnId === tamperedTurnId;
@@ -1893,6 +1935,11 @@ export default function Controller() {
                           </p>
                         )}
                       </>
+                    )}
+                    {t.status === "unclear" && (
+                      <p className={styles.instruction}>
+                        Not caught. The interpreter asked the speaker to say it again.
+                      </p>
                     )}
                     {t.status === "escalated" && (
                       <p className={styles.instruction}>

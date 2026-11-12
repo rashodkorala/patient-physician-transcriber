@@ -210,13 +210,14 @@ export function resolveSources<T extends TurnLike>(
 
 /**
  * Blocked turns and the turn that repeated each one: the next turn by the same speaker that was not itself
- * blocked or escalated. A blocked turn not yet repeated is left out.
+ * blocked, unclear, or escalated. A blocked turn not yet repeated is left out.
  */
 export function repeatedBy(turns: TurnLike[]): Map<string, string> {
   const repeated = new Map<string, string>();
+  const held = (t: TurnLike) => t.status === "blocked" || t.status === "unclear" || t.status === "escalated";
   turns.forEach((turn, i) => {
     if (turn.status !== "blocked") return;
-    const next = turns.slice(i + 1).find((t) => t.speaker === turn.speaker && t.status !== "blocked" && t.status !== "escalated");
+    const next = turns.slice(i + 1).find((t) => t.speaker === turn.speaker && !held(t));
     if (next) repeated.set(turn.turnId, next.turnId);
   });
   return repeated;

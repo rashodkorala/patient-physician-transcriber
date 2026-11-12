@@ -12,6 +12,7 @@ const entries = [
   ["turnResult", "turn_result.json", "TurnResult"],
   ["turnCaptionFinal", "turn_caption_final.json", "TurnCaption"],
   ["turnCaptionBlocked", "turn_caption_blocked.json", "TurnCaption"],
+  ["turnCaptionUnclear", "turn_caption_unclear.json", "TurnCaption"],
   ["visitStatePublic", "visit_state_public.json", "VisitStatePublic"],
   ["visitStateController", "visit_state_controller.json", "VisitStateController"],
   ["empathyNudge", "empathy_nudge.json", "EmpathyNudge"],

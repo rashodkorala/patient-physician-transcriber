@@ -112,6 +112,7 @@ from graph.turn_graph import TurnPipeline
 from introduction import (
     ask_if_clear_line,
     ask_line,
+    ask_to_repeat_line,
     introduction_line,
     notice_sha256,
     read_name,
@@ -275,7 +276,9 @@ def create_app(
         """What an id may say aloud: a settled final turn, a confirmed read-back, an interpreter line, or the
         visit's current consent notice in the patient's language (CDR-005), whether or not consent is given.
 
-        Blocked, escalated, rejected, and unsettled turns, other notices, and unknown ids are never spoken.
+        Blocked, unclear, escalated, rejected, and unsettled turns, other notices, and unknown ids are never spoken.
+        An `ask_to_repeat` line (ADR-003) has one text, in the unclear turn's speaker's language, so it is served in
+        that language only.
         """
         visit = hub.visit
         notice = visit.consent_notice()
@@ -674,6 +677,8 @@ def create_app(
                 target=target,
                 text=cmd.text,
                 recognition_confidence=cmd.recognition_confidence,
+                # ADR-003: the speaker's streak before this turn decides between unclear and escalated.
+                unclear_streak=visit.unclear_streak[cmd.speaker],
                 physician_name=visit.physician_name,
                 patient_name=visit.patient_name,
                 emit=lambda stage: status(turn_id, stage),
@@ -702,6 +707,9 @@ def create_app(
             return
 
         record.result = result
+        # ADR-003: unclear adds one, final and the third unclear's escalation reset, blocked and a tone escalation
+        # leave it; a read-back resets it only when confirmed (readback below).
+        visit.unclear_streak[result.speaker] = result.unclear_streak
         await hub.publish("turn.analysis", result.wire())
 
         if result.status == "readback_required":
@@ -710,7 +718,8 @@ def create_app(
             await status(turn_id, "awaiting_readback")
             return
 
-        # final, blocked, or escalated: the turn is settled and shared screens may show it.
+        # final, blocked, unclear, or escalated: the turn is settled and shared screens may show it. Blocked,
+        # unclear, and escalated turns are never spoken and their captions carry no translation (CDR-002).
         record.settled = True
         record.stage = {"final": "spoken"}.get(result.status, result.status)
         visit.append_turn(turn_id)
@@ -718,6 +727,10 @@ def create_app(
         await publish_integrity()
         if result.status == "escalated" and reason:
             await escalate(reason, turn_id)  # type: ignore[arg-type]
+        if result.status == "unclear":
+            # ADR-003: the interpreter asks the speaker, aloud and in their language only, to say it again.
+            speaker_name = {"physician": visit.physician_name, "patient": visit.patient_name}.get(result.speaker)
+            await say(ask_to_repeat_line(cmd.language, speaker_name))
         eb = visit.explain_back
         if (
             result.status == "final"
@@ -746,6 +759,10 @@ def create_app(
         record.settled = True
         record.readback_confirmed = True
         record.stage = "spoken"
+        # ADR-003: a read-back-confirmed turn is spoken, so it resets its speaker's unclear streak.
+        assert record.result is not None
+        record.result = record.result.model_copy(update={"unclear_streak": 0})
+        visit.unclear_streak[record.result.speaker] = 0
         visit.append_turn(ref.turn_id)
         await hub.publish("turn.result", to_caption(record.result, readback_confirmed=True).wire())  # type: ignore[arg-type]
         await publish_integrity()
@@ -955,8 +972,10 @@ def create_app(
                 SegmentAnalysis(segment_id=segment_id, amendment_id=amendment_id, result=result).wire(),
             )
             if result.status != "final":
-                # Blocked or escalated: refused, unchained, the current version stays, no translation anywhere
-                # public. No interpreter offer either: an offer would be chained, and a refused correction is not.
+                # Blocked, unclear, or escalated: refused, unchained, the current version stays, no translation
+                # anywhere public. No interpreter offer either: an offer would be chained, and a refused correction
+                # is not. A correction is not a live turn, so it starts no unclear streak and keeps none (ADR-003);
+                # CDR-006 has no `unclear` reason, so an unclear correction is refused as `failed`.
                 reason = result.status if result.status in ("blocked", "escalated") else "failed"
                 await segment_status("refused", reason)
                 return

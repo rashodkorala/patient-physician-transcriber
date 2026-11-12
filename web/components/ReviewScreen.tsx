@@ -46,7 +46,7 @@ import type {
   VisitStatePublic,
   VoiceSpeaking,
 } from "@/lib/contracts";
-import { type NoticeKey, SPEAKER_KEY, mannerLabel, notice } from "@/lib/i18n";
+import { type NoticeKey, SPEAKER_KEY, heldBackNotice, mannerLabel, notice } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
 import {
   applyAmended,
@@ -584,6 +584,10 @@ export function TranscriptSection({ visit }: { visit: ReviewVisit }) {
                           {patient !== ENGLISH && <span lang={ENGLISH}>{mannerLabel(c.manner, ENGLISH)}</span>}
                         </p>
                       )}
+                      {/* ADR-003: the patient's own unclear turn asks them, beneath their words, to say it again. */}
+                      {c.status === "unclear" && (
+                        <Notice k="didNotCatch" patient={patient} testId="review-unspoken" />
+                      )}
                     </>
                   ) : repeatedAs ? (
                     // TDM-002: a blocked turn shows no translation and no reason; only that it was said again.
@@ -591,11 +595,7 @@ export function TranscriptSection({ visit }: { visit: ReviewVisit }) {
                       <Notice k="repeatedBelow" patient={patient} testId="review-unspoken" />
                     </a>
                   ) : (
-                    <Notice
-                      k={c.status === "escalated" ? "interpreterOffered" : "pleaseRepeat"}
-                      patient={patient}
-                      testId="review-unspoken"
-                    />
+                    <Notice k={heldBackNotice(c.status)} patient={patient} testId="review-unspoken" />
                   )}
                 </div>
                 <div className={styles.side} lang={englishSide !== null ? ENGLISH : undefined}>

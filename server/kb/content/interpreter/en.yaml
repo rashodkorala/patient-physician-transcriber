@@ -15,3 +15,6 @@ lines:
   signal_slower_unnamed: "The patient is asking you to speak more slowly."
   ask_if_clear: "{patient}, is there anything the doctor said today that you would like explained again?"
   ask_if_clear_unnamed: "Is there anything the doctor said today that you would like explained again?"
+  # ADR-003: said to the speaker of an unclear turn, in their language only. {name} is that speaker's name.
+  ask_to_repeat: "Sorry, I did not catch that. Could you say it again?"
+  ask_to_repeat_named: "Sorry, {name}, I did not catch that. Could you say it again?"

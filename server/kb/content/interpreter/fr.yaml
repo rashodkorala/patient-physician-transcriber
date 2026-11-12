@@ -16,3 +16,6 @@ lines:
   signal_slower_unnamed: "La personne que vous soignez vous demande de parler plus lentement."
   ask_if_clear: "{patient}, y a-t-il quelque chose que le médecin a dit aujourd'hui que vous aimeriez qu'on vous explique de nouveau ?"
   ask_if_clear_unnamed: "Y a-t-il quelque chose que le médecin a dit aujourd'hui que vous aimeriez qu'on vous explique de nouveau ?"
+  # ADR-003: said to the speaker of an unclear turn, in their language only. "Pardon" avoids the gendered "désolé".
+  ask_to_repeat: "Pardon, je n'ai pas bien saisi. Pourriez-vous le répéter ?"
+  ask_to_repeat_named: "Pardon, {name}, je n'ai pas bien saisi. Pourriez-vous le répéter ?"

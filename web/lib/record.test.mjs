@@ -144,6 +144,15 @@ test("a blocked turn is repeated by the same speaker's next unblocked turn (tdm_
   ]);
 });
 
+test("an unclear turn is never the repeat of a blocked turn (adr_003)", () => {
+  const turns = [
+    caption("p1", "physician", "0.4 mg", "blocked"),
+    caption("p2", "physician", "mumbled", "unclear"),
+    caption("p3", "physician", "0.4 mg"),
+  ];
+  assert.deepEqual([...repeatedBy(turns)], [["p1", "p3"]]);
+});
+
 test("a visit.state for another visit is a new visit; the first one and repeats are not (cdr_001)", () => {
   const shown = { current: null };
   assert.equal(visitChanged(shown, "v1"), false); // first connect

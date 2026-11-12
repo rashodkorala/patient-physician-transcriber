@@ -17,3 +17,7 @@ lines:
   signal_slower_unnamed: "ਮਰੀਜ਼ ਤੁਹਾਨੂੰ ਥੋੜ੍ਹਾ ਧੀਮੇ ਬੋਲਣ ਲਈ ਕਹਿ ਰਹੇ ਹਨ।"
   ask_if_clear: "{patient} ਜੀ, ਕੀ ਅੱਜ ਡਾਕਟਰ ਜੀ ਨੇ ਕੋਈ ਅਜਿਹੀ ਗੱਲ ਕਹੀ ਹੈ ਜੋ ਤੁਸੀਂ ਦੁਬਾਰਾ ਸਮਝਣਾ ਚਾਹੋਗੇ?"
   ask_if_clear_unnamed: "ਕੀ ਅੱਜ ਡਾਕਟਰ ਜੀ ਨੇ ਕੋਈ ਅਜਿਹੀ ਗੱਲ ਕਹੀ ਹੈ ਜੋ ਤੁਸੀਂ ਦੁਬਾਰਾ ਸਮਝਣਾ ਚਾਹੋਗੇ?"
+  # ADR-003: said to the speaker of an unclear turn, in their language only. "Was not heard clearly" avoids the
+  # interpreter's gender (ਸਕਿਆ or ਸਕੀ).
+  ask_to_repeat: "ਮਾਫ਼ ਕਰਨਾ ਜੀ, ਇਹ ਗੱਲ ਸਾਫ਼ ਸੁਣਾਈ ਨਹੀਂ ਦਿੱਤੀ। ਕੀ ਤੁਸੀਂ ਇਸਨੂੰ ਦੁਬਾਰਾ ਕਹਿ ਸਕਦੇ ਹੋ?"
+  ask_to_repeat_named: "ਮਾਫ਼ ਕਰਨਾ {name} ਜੀ, ਇਹ ਗੱਲ ਸਾਫ਼ ਸੁਣਾਈ ਨਹੀਂ ਦਿੱਤੀ। ਕੀ ਤੁਸੀਂ ਇਸਨੂੰ ਦੁਬਾਰਾ ਕਹਿ ਸਕਦੇ ਹੋ?"

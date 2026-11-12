@@ -34,6 +34,7 @@ from contracts import (
     CONTROLLER_ONLY_EVENTS,
     ORIGINAL,
     SILENT,
+    SPEAKERS,
     ClinicalNote,
     ConsentNotice,
     ConsentState,
@@ -58,6 +59,7 @@ from contracts import (
     SegmentConfirmation,
     SegmentHistory,
     SegmentHistoryController,
+    Speaker,
     SummaryCheck,
     TamperState,
     TrustUpdate,
@@ -85,7 +87,7 @@ class TurnRecord:
     speaker: str
     source_text: str
     stage: str
-    # Settled turns (spoken, blocked, or escalated) are the only ones shared screens see.
+    # Settled turns (spoken, blocked, unclear, or escalated) are the only ones shared screens see.
     settled: bool = False
     readback_confirmed: bool = False
 
@@ -204,6 +206,10 @@ class Visit:
     # saw it held back (blocked or escalated). A read-back-confirmed turn is spoken when confirmed, which may be
     # after turns submitted later, so `turns` (submission order) is not the spoken order; this is.
     settled_order: list[str] = field(default_factory=list)
+    # ADR-003 and CDR-002: each speaker's consecutive unclear turns. unclear adds one; a final or read-back-confirmed
+    # turn resets it; the third unclear's escalation resets it; blocked turns and tone escalations leave it.
+    # In the controller's visit.state only, so a reloaded controller shows it.
+    unclear_streak: dict[Speaker, int] = field(default_factory=lambda: {s: 0 for s in SPEAKERS})
 
     def names(self) -> Names:
         return Names(physician_name=self.physician_name, patient_name=self.patient_name)
@@ -392,6 +398,7 @@ class Visit:
                 summary_stale=self.summary_stale,
                 signals=self.signals,
                 trust=self.trust,
+                unclear_streak=dict(self.unclear_streak),
             ).wire()
 
         current_public = None

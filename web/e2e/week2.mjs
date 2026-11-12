@@ -1,7 +1,8 @@
 // Week 2 end-to-end check (tasks 2.4, 2.5, and 2.6): run against `scripts/dev.sh --prod` with
 // TRANSLATOR=fake. Drives typed turns on /control and checks what /control and /screen show:
 // manner labels and glossary explanations, empathy nudges on /control only, read-back confirm and
-// reject, a blocked dose, and an escalated turn, with no private data ever reaching /screen.
+// reject, a blocked dose, an escalated turn, and two unclear turns then a third that escalates (ADR-003), with no
+// private data ever reaching /screen.
 // Usage: node e2e/week2.mjs [baseUrl] [screenshotDir]
 import { chromium } from "playwright-core";
 import { giveConsent } from "./consent-steps.mjs";
@@ -126,6 +127,65 @@ await check((await control.locator('[data-testid="notice"]').innerText()).includ
 await shot(control, "control-escalated");
 await shot(tv, "screen-escalated");
 
+// ADR-003: a turn not caught is unclear twice, never translated on the screen, and the interpreter asks again in
+// the speaker's language; the same speaker's third in a row escalates with a human interpreter offered.
+const UNCLEAR = "ਮੈਨੂੰ ਕੱਲ੍ਹ ਤੋਂ ਚੱਕਰ ਆ ਰਹੇ ਹਨ। (test: unclear)";
+const ASK_AGAIN_PA = "ਇਹ ਗੱਲ ਸਾਫ਼ ਸੁਣਾਈ ਨਹੀਂ ਦਿੱਤੀ";
+const lastControlTurn = () => control.locator('[data-testid="turn"]').last();
+for (const attempt of [1, 2]) {
+  n = await lastTurnId();
+  await say("patient", UNCLEAR);
+  caption = await waitForCaption(n);
+  await check((await caption.getAttribute("data-status")) === "unclear", `unclear turn ${attempt} is unclear on /screen`);
+  const notice = caption.locator('[data-testid="notice-didNotCatch"]');
+  await check(
+    (await notice.count()) === 1 &&
+      (await notice.innerText()).includes("Sorry, I did not catch that. Please say it again.") &&
+      (await notice.innerText()).includes("ਮਾਫ਼ ਕਰਨਾ ਜੀ"),
+    `unclear turn ${attempt}: the say-it-again notice in both languages`,
+  );
+  const unclearText = await caption.innerText();
+  await check(unclearText.includes("Not spoken") && !unclearText.includes("[en-CA]"), `unclear turn ${attempt}: not spoken, no translation`);
+  await tv.waitForSelector('[data-testid="interpreter-line"][data-purpose="ask_to_repeat"]', { timeout: 15000 });
+  const line = tv.locator('[data-testid="interpreter-line"][data-purpose="ask_to_repeat"]');
+  await check(
+    (await line.count()) === 1 && (await line.innerText()).includes(ASK_AGAIN_PA) && !(await line.innerText()).includes("Sorry"),
+    `unclear turn ${attempt}: the interpreter asks again in Punjabi only`,
+  );
+  await control.waitForFunction(
+    (attemptNo) => {
+      const turns = document.querySelectorAll('[data-testid="turn"]');
+      return turns[turns.length - 1]?.textContent?.includes(`unclear, not spoken (attempt ${attemptNo} of 2)`);
+    },
+    attempt,
+    { timeout: 15000 },
+  );
+  await check((await lastControlTurn().getAttribute("data-status")) === "unclear", `/control logs attempt ${attempt} of 2`);
+  const streakLine = await control.locator('[data-testid="unclear-streak"] li[data-speaker="patient"]').innerText();
+  await check(
+    attempt === 1
+      ? streakLine.includes("Patient: not caught once")
+      : streakLine === "Patient: not caught twice in a row; a human interpreter is offered on the next",
+    `/control shows the patient's streak after attempt ${attempt}`,
+  );
+}
+await shot(control, "control-unclear");
+await shot(tv, "screen-unclear");
+n = await lastTurnId();
+await say("patient", UNCLEAR);
+caption = await waitForCaption(n);
+await check((await caption.getAttribute("data-status")) === "escalated", "the third unclear turn in a row escalates");
+await check((await caption.locator('[data-testid="notice-interpreterOffered"]').count()) === 1, "the third offers a human interpreter in both languages");
+await check((await tv.locator('[data-testid="interpreter-line"][data-purpose="ask_to_repeat"]').count()) === 0, "the third is not asked again");
+await control.waitForFunction(
+  () => document.querySelector('[data-testid="notice"]')?.textContent?.includes("not caught three times in a row"),
+  undefined,
+  { timeout: 15000 },
+);
+await check(true, "/control names the low-confidence escalation");
+await check((await control.locator('[data-testid="unclear-streak"]').count()) === 0, "/control clears the streak after the third");
+await shot(control, "control-unclear-escalated");
+
 const PRIVATE = /"turn\.analysis"|"turn\.readback_required"|"empathy\.nudge"|"emotion"|"backTranslation"|"certainty"|"nudges"/;
 const leaked = [...tvFrames, ...lateFrames].filter((f) => PRIVATE.test(f));
 if (leaked.length) await fail(`/screen received private data: ${leaked[0].slice(0, 200)}`);
@@ -142,5 +202,11 @@ await check(
   captionsSeen.some((c) => c.sourceText.includes("(test: mismatch)")) && wrongDose.length === 0,
   "the blocked turn reached /screen without its translation",
 );
+const unclearSeen = captionsSeen.filter((c) => c.status === "unclear");
+await check(
+  unclearSeen.length >= 2 && unclearSeen.every((c) => c.translation === null && c.criticalValues.length === 0),
+  "the unclear turns reached /screen without a translation",
+);
+await check(!tvFrames.some((f) => f.includes("unclearStreak")), "/screen never received the unclear streak");
 
 await browser.close();

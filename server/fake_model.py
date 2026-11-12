@@ -22,9 +22,12 @@ from llm import ScriptedModel
 from trust import CultureCueDraft, NudgeDraft
 
 MEDICATIONS = ("aspirin", "nitroglycerin", "metformin", "amlodipine")
-# Markers that let the browser check (web/e2e/week2.mjs) drive blocked and escalated turns.
+# Markers that let the browser check (web/e2e/week2.mjs) drive blocked, unclear, and escalated turns.
 MISMATCH_MARKER = "(test: mismatch)"  # first number times ten on every attempt, so the turn is blocked
-TONE_MARKER = "(test: tone)"  # tone check fails on every attempt, so the turn is escalated
+TONE_MARKER = "(test: tone)"  # tone check fails on every attempt, so the turn is escalated at once
+# ADR-003: confidence 0.3 on every attempt, so the turn is unclear, and the speaker's third in a row escalates.
+UNCLEAR_MARKER = "(test: unclear)"
+UNCLEAR_CONFIDENCE = 0.3
 WORRY = re.compile(r"scared|worried|afraid|ਡਰ|ਫ਼ਿਕਰ|peur|inquiet", re.IGNORECASE)
 RELIEF = re.compile(r"relief|relieved|better now|thank you|ਸ਼ੁਕਰ|soulag", re.IGNORECASE)
 # IDR-005: the manner the fake reads from a physician's words; plain unless the words clearly carry one.
@@ -72,7 +75,7 @@ def translate(user: str) -> Draft:
         translation=f"[{field(user, 'target_code')}] {translated}",
         back_translation=text,
         tone_tags=[tone],
-        confidence=0.95,
+        confidence=UNCLEAR_CONFIDENCE if UNCLEAR_MARKER in text else 0.95,
     )
 
 
