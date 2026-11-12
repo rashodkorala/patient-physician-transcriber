@@ -1,4 +1,4 @@
-// Unit tests for the record helpers (demo-night-mvp tasks 3.5 to 3.8; CDR-006, CDR-007). Usage: npm test
+// Unit tests for the record helpers (demo-night-mvp tasks 3.5 to 3.8; CDR-001, CDR-006, CDR-007). Usage: npm test
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -13,6 +13,7 @@ import {
   summarySpeechId,
   turnOfEntry,
   versions,
+  visitChanged,
 } from "./record.ts";
 
 const caption = (turnId, speaker, sourceText, status = "final") => ({
@@ -141,4 +142,13 @@ test("a blocked turn is repeated by the same speaker's next unblocked turn (tdm_
     ["p1", "p3"],
     ["p2", "p3"],
   ]);
+});
+
+test("a visit.state for another visit is a new visit; the first one and repeats are not (cdr_001)", () => {
+  const shown = { current: null };
+  assert.equal(visitChanged(shown, "v1"), false); // first connect
+  assert.equal(visitChanged(shown, "v1"), false); // a reconnect, or a state after visit.set_languages
+  assert.equal(visitChanged(shown, "v2"), true); // visit.new
+  assert.equal(shown.current, "v2");
+  assert.equal(visitChanged(shown, "v2"), false);
 });

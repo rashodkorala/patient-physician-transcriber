@@ -90,13 +90,22 @@
 .intro .actions { margin-top: 0; }
 .introStatus { margin: 0; font-size: var(--text-md); }
 
-.primary, .secondary {
+.primary, .secondary, .danger {
   min-height: 44px; padding: 10px 18px; border-radius: var(--r-control); font-weight: 500; cursor: pointer;
   border: 1px solid var(--care); font-size: 15px; line-height: 1.25;
 }
 .primary { background: var(--care); color: var(--care-ink); }
 .secondary { background: var(--surface); color: var(--care); }
-.primary:disabled, .secondary:disabled { opacity: 0.45; cursor: default; }
+/* A primary action that cannot be undone, in the stop colour; --care-ink reads on it in both themes. */
+.danger { background: var(--stop); border-color: var(--stop); color: var(--care-ink); }
+.primary:disabled, .secondary:disabled, .danger:disabled { opacity: 0.45; cursor: default; }
+
+/* CDR-001 `visit.new`: the confirm is inline, outlined in the stop colour, so it cannot be mistaken for routine. */
+.newVisitConfirm {
+  display: grid; gap: 4px; padding: 16px 20px 20px; border: 1px solid var(--stop); border-radius: var(--r-card);
+  background: var(--stop-soft);
+}
+.newVisitWarning { margin: 0; font-size: var(--text-md); font-weight: 500; color: var(--ink); }
 .quiet {
   border: none; background: none; padding: 0; min-height: 44px; color: var(--care); cursor: pointer;
   font-size: var(--text-sm); font-weight: 500; text-decoration: underline; text-underline-offset: 0.2em;

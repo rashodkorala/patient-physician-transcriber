@@ -11,6 +11,7 @@
  * (MDD-005 rule 3, CDR-008): the review role never receives them, and nothing here would render them.
  *
  * @implements MDD-005: Trust across the barrier
+ * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
  * @implements IDR-005: Manner vocabulary and voice delivery
  * @implements ADR-012: Clinic design system
@@ -24,6 +25,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CommandRefused, Envelope, PatientSignal, PatientSignalEntry, Speaker } from "@/lib/contracts";
 import { type NoticeKey, SIGNAL_KEY, SPEAKER_KEY, mannerLabel } from "@/lib/i18n";
+import { visitChanged } from "@/lib/record";
 import Highlighted from "./Highlighted";
 import {
   Bi,
@@ -70,8 +72,20 @@ export default function PatientScreen() {
     [],
   );
 
+  // CDR-001 `visit.new`: the visit shown, so a visit.state for another one clears this device's signal feedback.
+  const shownVisit = useRef<string | null>(null);
+
   const onSignalEvent = useCallback((event: Envelope) => {
     switch (event.type) {
+      case "visit.state": {
+        if (!visitChanged(shownVisit, event.visitId)) break;
+        asked.current = null;
+        clearTimeout(sentTimer.current);
+        clearTimeout(refusedTimer.current);
+        setSent(null);
+        setRefused(null);
+        break;
+      }
       case "patient.signal": {
         // Accepted: shown for a moment, then the controls are plain again. Another device's signal is not ours.
         const entry = event.payload as PatientSignalEntry;

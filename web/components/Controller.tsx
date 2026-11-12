@@ -77,7 +77,17 @@ import { LANGUAGE_LABELS, RECOGNITION, ROADMAP } from "@/lib/languages";
 import { type ListeningState, type Side, VOICE_TAIL_MS, isShortReply, listeningState, sideFor } from "@/lib/listening";
 import { type LatencyRow, median, segments as latencySegments, toCsv } from "@/lib/latency";
 import { serverHttpUrl, useVisitSocket } from "@/lib/socket";
-import { applyAmended, brokenEntryLabel, captionOf, effective, isConfirmed, summaryIndexOf, summaryReading, turnOfEntry } from "@/lib/record";
+import {
+  applyAmended,
+  brokenEntryLabel,
+  captionOf,
+  effective,
+  isConfirmed,
+  summaryIndexOf,
+  summaryReading,
+  turnOfEntry,
+  visitChanged,
+} from "@/lib/record";
 import { playbackMessages } from "@/lib/speaking";
 import { insertTrust, lastSpokenIn, settledOrder } from "@/lib/trust";
 import {
@@ -400,6 +410,11 @@ export default function Controller() {
   const lastSpoken = useRef<{ text: string; language: Language; speechId: string } | null>(null);
   // CDR-008: settled turns in the order they settled, so a late trust update is listed at its turn's place.
   const settled = useRef<string[]>([]);
+  // CDR-001 `visit.new`: the visit shown, the turn still in the graph (from turn.started until its analysis or
+  // discard; nothing new can start while it runs), and whether the physician is confirming a new visit.
+  const shownVisit = useRef<string | null>(null);
+  const [inGraph, setInGraph] = useState<string | null>(null);
+  const [confirmingNew, setConfirmingNew] = useState(false);
 
   const physicianLanguage: Language = "en-CA";
   const languageOf = (speaker: Speaker): Language => (speaker === "physician" ? physicianLanguage : patientLanguage);
@@ -443,10 +458,43 @@ export default function Controller() {
     setNames(current);
   };
 
+  // A voice that fails is reported; one stopped on purpose (a new visit, CDR-001; summary.stop) is not.
+  const notSpoken = useCallback((error: Error) => {
+    if (!(error instanceof SpeechStopped)) setNotice(`Not spoken: ${error.message}`);
+  }, []);
+
   const onEvent = useCallback((event: Envelope) => {
     switch (event.type) {
       case "visit.state": {
         const state = event.payload as VisitStateController;
+        if (visitChanged(shownVisit, event.visitId)) {
+          // CDR-001 `visit.new`: everything kept only from live events goes, as if the page had just connected;
+          // the snapshot below sets the rest. The saved default physician name is applied again for the new visit.
+          stopSpeaking(() => true);
+          const active = capture.current;
+          capture.current = null;
+          void active?.stop().catch(() => undefined);
+          setRecording(null);
+          setTypedText("");
+          setOutcomes({});
+          setDismissed(new Set());
+          setLatency([]);
+          pendingTimes.current = [];
+          setProposed(null);
+          setIntroSkipped(false);
+          setHandsFree(false);
+          setLastHeard(null);
+          setHeld([]);
+          setMarkers([]);
+          setInjection(null);
+          lastStarted.current = null;
+          setNoteStatus(null);
+          setSummaryStatus(null);
+          setTamperTarget("");
+          setInGraph(null);
+          setConfirmingNew(false);
+          setNotice("New visit started");
+        }
         setPatientLanguage(state.patientLanguage);
         setTurns(state.turns);
         setPendingReadback(state.pendingReadback ?? null);
@@ -609,7 +657,7 @@ export default function Controller() {
         // CDR-005: the notice is read in the patient's language through the speak gate, by its speech id.
         const { speechId, language } = event.payload as ConsentSpeak;
         const text = noticeRef.current?.lines.find((line) => line.language === language)?.text;
-        if (text) speak(text, language, speechId).catch((error: Error) => setNotice(`Not spoken: ${error.message}`));
+        if (text) speak(text, language, speechId).catch(notSpoken);
         break;
       }
       case "record.integrity":
@@ -646,7 +694,7 @@ export default function Controller() {
         const spoken = closing ? line.lines.filter((l) => l.language !== physicianLanguage) : line.lines;
         // speak() keeps lines in order and fetches each one's audio straight away.
         for (const { language, text } of spoken) {
-          speak(text, language, line.lineId).catch((error: Error) => setNotice(`Not spoken: ${error.message}`));
+          speak(text, language, line.lineId).catch(notSpoken);
         }
         if (closing) {
           const english = line.lines.find((l) => l.language === physicianLanguage)?.text;
@@ -665,6 +713,7 @@ export default function Controller() {
       case "turn.started": {
         const started = event.payload as TurnStarted;
         lastStarted.current = started.turnId;
+        setInGraph(started.turnId);
         const now = Date.now();
         const times = pendingTimes.current.shift() ?? { endOfSpeechAt: now, submittedAt: now };
         setLatency((rows) => [...rows, { turnId: started.turnId, speaker: started.speaker, ...times }]);
@@ -672,6 +721,10 @@ export default function Controller() {
       }
       case "turn.status": {
         const status = event.payload as TurnStatus;
+        // A turn leaves the graph with its analysis, or here when it fails or is discarded on the way.
+        if (status.stage === "discarded" || status.stage === "failed") {
+          setInGraph((id) => (id === status.turnId ? null : id));
+        }
         if (status.stage === "discarded") {
           updateOutcome(status.turnId, { discarded: true });
           setPendingReadback((p) => (p === status.turnId ? null : p));
@@ -681,6 +734,7 @@ export default function Controller() {
       }
       case "turn.analysis": {
         const result = event.payload as TurnResult;
+        setInGraph((id) => (id === result.turnId ? null : id));
         updateLatency(result.turnId, { analysisAt: Date.now() });
         setTurns((prev) => {
           const next = [...prev.filter((t) => t.turnId !== result.turnId), result];
@@ -711,6 +765,8 @@ export default function Controller() {
           speak(caption.translation, caption.targetLanguage, caption.turnId)
             .then(({ startedAt }) => updateLatency(caption.turnId, { speechStartAt: startedAt }))
             .catch((error: Error) => {
+              // Stopped (a new visit, CDR-001) is not a failure of the voice.
+              if (error instanceof SpeechStopped) return;
               updateOutcome(caption.turnId, { voiceFailed: true });
               setNotice(`Not spoken: ${error.message}`);
             });
@@ -752,7 +808,7 @@ export default function Controller() {
         break;
       }
     }
-  }, [startCall, closeInterpreter, physicianLanguage]);
+  }, [startCall, closeInterpreter, notSpoken, physicianLanguage]);
 
   const { state, send } = useVisitSocket("controller", onEvent);
 
@@ -1159,9 +1215,12 @@ export default function Controller() {
               {consented && consentState ? (
                 <div className={styles.consentGiven}>
                   <p className={styles.consentStatus} data-testid="consent-status">
-                    Consent given {clock(consentState.at)}
-                    <span className={styles.consentBy}>
-                      {consentState.by === "patient" ? ", by the patient" : ", on the patient’s behalf"}
+                    {/* One flex item, so the gap after the dot never opens a space before the comma. */}
+                    <span>
+                      Consent given {clock(consentState.at)}
+                      <span className={styles.consentBy}>
+                        {consentState.by === "patient" ? ", by the patient" : ", on the patient’s behalf"}
+                      </span>
                     </span>
                   </p>
                   <div className={styles.consentLinks}>
@@ -1279,6 +1338,40 @@ export default function Controller() {
                 </>
               )}
             </div>
+            {/* CDR-001 `visit.new`: a fresh visit on every screen without restarting the server; asks first. */}
+            {confirmingNew ? (
+              <div className={styles.newVisitConfirm} role="group" aria-label="Start a new visit">
+                <p className={styles.newVisitWarning}>This clears the current visit on every screen. The record is not kept.</p>
+                <div className={styles.actions}>
+                  <button
+                    className={styles.danger}
+                    data-testid="new-visit-confirm"
+                    disabled={state !== "open" || inGraph !== null}
+                    onClick={() => {
+                      setConfirmingNew(false);
+                      send("visit.new", {});
+                    }}
+                  >
+                    Start new visit
+                  </button>
+                  <button className={styles.secondary} data-testid="new-visit-cancel" onClick={() => setConfirmingNew(false)}>
+                    Keep this visit
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className={styles.actions}>
+                <button
+                  className={styles.secondary}
+                  data-testid="new-visit"
+                  disabled={state !== "open" || inGraph !== null}
+                  title={inGraph !== null ? "Wait for the turn being interpreted to finish" : undefined}
+                  onClick={() => setConfirmingNew(true)}
+                >
+                  Start a new visit
+                </button>
+              </div>
+            )}
           </section>
 
           <section className={styles.section}>

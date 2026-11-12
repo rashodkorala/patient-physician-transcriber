@@ -238,6 +238,18 @@ def create_app(
     app.state.hub = hub
     background: set[asyncio.Task] = set()
     app.state.background = background
+    # CDR-004: the running voice-ceiling timers, so a new visit (CDR-001 `visit.new`) can cancel them.
+    ceilings: set[asyncio.Task] = set()
+    app.state.ceilings = ceilings
+
+    def live(visit: Visit, epoch: int | None = None) -> bool:
+        """Whether work begun in `visit` may still publish: the visit has not been replaced by `visit.new` (CDR-001)
+        and, when `epoch` is given, consent has not been withdrawn since (CDR-005 consent rule 3).
+
+        Every slow run (a turn in the graph, the trust advisor, a correction, an explain-back check, the note, and
+        the summary) captures its visit when it starts and checks here before it publishes anything.
+        """
+        return hub.visit is visit and (epoch is None or visit.consent_epoch == epoch)
 
     @app.get("/api/health")
     async def health() -> dict:
@@ -324,8 +336,9 @@ def create_app(
 
     async def status(turn_id: str, stage: str) -> None:
         record = hub.visit.turns.get(turn_id)
-        if record:
-            record.stage = stage
+        if record is None:
+            return  # a turn of a visit that `visit.new` replaced: the new visit never hears of it (CDR-001)
+        record.stage = stage
         await hub.publish("turn.status", TurnStatus(turn_id=turn_id, stage=stage).wire())
 
     async def publish_integrity() -> None:
@@ -556,7 +569,7 @@ def create_app(
             visit.proposed_names.clear()
             await advance_introduction()
 
-    async def send_trust(turn_id: str, epoch: int) -> None:
+    async def send_trust(visit: Visit, turn_id: str, epoch: int) -> None:
         """MDD-005 and CDR-008: one trust.update per spoken turn, to controllers only, after the trust advisor
         returns, or at once without a cue if it fails. Never on the turn's critical path.
 
@@ -566,11 +579,11 @@ def create_app(
 
         `epoch` is the consent epoch the turn was spoken under (CDR-005 consent rule 3): once consent is withdrawn
         no model call starts, and an advisor call that was running is dropped with its nudge and its update.
-        The update is placed in `visit.trust` by its turn's spoken position, however late it returns.
+        The update is placed in `visit.trust` by its turn's spoken position, however late it returns. `visit` is the
+        visit the turn was spoken in; once `visit.new` replaces it, the update is dropped the same way (CDR-001).
         """
-        visit = hub.visit
         record = visit.turns.get(turn_id)
-        if record is None or record.result is None or visit.consent_epoch != epoch:
+        if record is None or record.result is None or not live(visit, epoch):
             return
         result = record.result
         history = [SpokenTurn(r.speaker, r.emotion, r.manner) for r in visit.spoken_results_before(turn_id)]
@@ -584,8 +597,9 @@ def create_app(
                 nudge = await advisor.nudge(turn_id, result.emotion, result.translation)
         except Exception:
             log.exception("trust advisor failed")
-        if visit.consent_epoch != epoch:
-            # Consent was withdrawn while the advisor was running: nothing of this turn's trust reaches anyone.
+        if not live(visit, epoch):
+            # Consent was withdrawn, or a new visit started, while the advisor was running: nothing of this turn's
+            # trust reaches anyone.
             return
         if nudge:
             visit.nudges.append(nudge)
@@ -644,7 +658,7 @@ def create_app(
 
         async def claim_injection() -> bool:
             # TDM-002: one shot; spent on the first physician turn with a dose number, then disarmed.
-            if not visit.injection_armed:
+            if not visit.injection_armed or not live(visit):
                 return False
             visit.injection_armed = False
             visit.injected_turns.append(turn_id)
@@ -667,13 +681,18 @@ def create_app(
             )
         except Exception as exc:  # refusal or API failure: nothing is spoken
             log.exception("turn pipeline failed")
-            await status(turn_id, "failed")
-            await error(conn, f"Translation failed: {exc}", "turn.submit")
+            if live(visit):
+                await status(turn_id, "failed")
+                await error(conn, f"Translation failed: {exc}", "turn.submit")
             return
         log.info(
             "turn %s %s, attempts %d, in %.2fs", turn_id, result.status, result.attempts, time.perf_counter() - started
         )
 
+        if not live(visit):
+            # CDR-001 `visit.new`: the visit this turn began in was replaced while it was in the graph. It belongs
+            # to no visit now, so nothing of it is published, spoken, or chained, not even its discard.
+            return
         if visit.consent_epoch != epoch:
             # CDR-005 consent rule 3: consent was withdrawn while this turn was in the graph. Never spoken,
             # never published, never chained; the controller sees it discarded.
@@ -709,7 +728,7 @@ def create_app(
         ):
             await set_explain_back("listening", [*eb.explanation_turn_ids, turn_id])
         if result.status == "final":
-            spawn(send_trust(turn_id, epoch))
+            spawn(send_trust(visit, turn_id, epoch))
 
     async def readback(conn: Connection, payload: dict, confirmed: bool) -> None:
         ref = TurnRef.model_validate(payload)
@@ -731,7 +750,7 @@ def create_app(
         await hub.publish("turn.result", to_caption(record.result, readback_confirmed=True).wire())  # type: ignore[arg-type]
         await publish_integrity()
         # A confirmed read-back is a spoken turn, so it gets its trust update like every other (CDR-008).
-        spawn(send_trust(ref.turn_id, visit.consent_epoch))
+        spawn(send_trust(visit, ref.turn_id, visit.consent_epoch))
 
     # ---------- ADR-003 and CDR-001: off-the-record pause, interpreter, and high-risk marks ----------
 
@@ -892,14 +911,15 @@ def create_app(
             await error(conn, "Another correction is still being checked", command, "busy")
             return
         visit.amend_in_flight = cmd.segment_id
-        spawn(run_amendment(conn, cmd, new_entry_id()))
+        spawn(run_amendment(visit, conn, cmd, new_entry_id()))
 
-    async def run_amendment(conn: Connection, cmd: SegmentAmend, amendment_id: str) -> None:
+    async def run_amendment(visit: Visit, conn: Connection, cmd: SegmentAmend, amendment_id: str) -> None:
         """The correction through the same turn graph as a live turn; applied and chained only if it ends final."""
-        visit = hub.visit
         segment_id, epoch = cmd.segment_id, visit.consent_epoch
 
         async def segment_status(stage: str, reason: str | None = None) -> None:
+            if not live(visit):
+                return  # the visit was replaced by `visit.new` (CDR-001)
             event = SegmentStatus(segment_id=segment_id, amendment_id=amendment_id, stage=stage, reason=reason)  # type: ignore[arg-type]
             await hub.publish("segment.status", event.wire())
 
@@ -925,8 +945,9 @@ def create_app(
                 log.exception("correction pipeline failed")
                 await segment_status("refused", "failed")
                 return
-            if visit.consent_epoch != epoch:
-                # Consent was withdrawn while it was checked: discarded like a live turn, never chained or shown.
+            if not live(visit, epoch):
+                # Consent was withdrawn, or a new visit started, while it was checked: discarded like a live turn,
+                # never chained or shown (segment_status says nothing into a new visit).
                 await segment_status("refused", "failed")
                 return
             await hub.publish(
@@ -1041,10 +1062,9 @@ def create_app(
             await error(conn, "The patient has not explained anything back yet", command, "not_allowed")
             return
         await set_explain_back("checking")
-        spawn(run_explain_back(conn, explain_back_id, turn_ids))
+        spawn(run_explain_back(visit, conn, explain_back_id, turn_ids))
 
-    async def run_explain_back(conn: Connection, explain_back_id: str, turn_ids: list[str]) -> None:
-        visit = hub.visit
+    async def run_explain_back(visit: Visit, conn: Connection, explain_back_id: str, turn_ids: list[str]) -> None:
         plan = visit.explain_back_plan
         assert plan is not None
         # The explanation at its effective versions now, so a correction made while listening is used.
@@ -1052,7 +1072,7 @@ def create_app(
 
         def current() -> bool:
             eb = visit.explain_back
-            return eb is not None and eb.explain_back_id == explain_back_id and eb.state == "checking"
+            return live(visit) and eb is not None and eb.explain_back_id == explain_back_id and eb.state == "checking"
 
         try:
             result = await check_explain_back(
@@ -1105,12 +1125,12 @@ def create_app(
             await error(conn, "A note is already being written", "note.generate", "busy")
             return
         visit.note_generating = True
-        spawn(run_note(new_entry_id(), visit.freeze()))
+        spawn(run_note(visit, new_entry_id(), visit.freeze()))
 
-    async def run_note(note_id: str, snapshot) -> None:
-        visit = hub.visit
-
+    async def run_note(visit: Visit, note_id: str, snapshot) -> None:
         async def note_status(stage: str, detail: str | None = None) -> None:
+            if not live(visit):
+                return  # the visit was replaced by `visit.new` (CDR-001)
             event = ArtefactStatus(artefact_id=note_id, kind="note", stage=stage, detail=detail)  # type: ignore[arg-type]
             await hub.publish("note.status", event.wire())
 
@@ -1121,6 +1141,8 @@ def create_app(
                 log.exception("note generation failed")
                 detail = "; ".join(exc.problems) if isinstance(exc, GenerationFailed) else str(exc)
                 await note_status("failed", detail)
+                return
+            if not live(visit):
                 return
             # Regenerating replaces the current note; it is fresh until the chain grows past its head.
             visit.note, visit.note_stale = wire_note(note), False
@@ -1138,12 +1160,12 @@ def create_app(
             await error(conn, "A summary is already being written", "summary.generate", "busy")
             return
         visit.summary_generating = True
-        spawn(run_summary(new_entry_id(), visit.patient_language, visit.freeze()))
+        spawn(run_summary(visit, new_entry_id(), visit.patient_language, visit.freeze()))
 
-    async def run_summary(summary_id: str, language: str, snapshot) -> None:
-        visit = hub.visit
-
+    async def run_summary(visit: Visit, summary_id: str, language: str, snapshot) -> None:
         async def summary_status(stage: str, detail: str | None = None) -> None:
+            if not live(visit):
+                return  # the visit was replaced by `visit.new` (CDR-001)
             # Every role hears the stage; only controllers hear the detail (CDR-007).
             event = ArtefactStatus(artefact_id=summary_id, kind="summary", stage=stage, detail=detail)  # type: ignore[arg-type]
             await hub.publish_shaped("summary.status", event.wire(), event.model_copy(update={"detail": None}).wire())
@@ -1156,6 +1178,8 @@ def create_app(
             except Exception as exc:
                 log.exception("summary generation failed")
                 await summary_status("refused", str(exc))
+                return
+            if not live(visit):
                 return
             for check in outcome.checks:
                 wired = wire_summary_check(check)
@@ -1287,7 +1311,28 @@ def create_app(
         await set_speech(speech)
         task = asyncio.create_task(clear_after_ceiling(speech))
         background.add(task)
+        ceilings.add(task)
         task.add_done_callback(background.discard)
+        task.add_done_callback(ceilings.discard)
+
+    # ---------- CDR-001: a new visit ----------
+
+    async def new_visit(conn: Connection, payload: dict) -> None:
+        """Replace the in-memory visit with a fresh one and send every role its new visit.state (CDR-001, ADR-007).
+
+        Controller only. Allowed at any time, including during a read-back or an open explain-back, which go with
+        the old visit. The old visit is dropped, not kept: nothing of it is chained into the new one. Work still
+        running for it (a turn in the graph, the trust advisor, a correction, a check, the note, or the summary)
+        finds `live` false and publishes nothing; the voice ceiling timers are cancelled, and the new visit
+        starts silent. Each device's signal hold restarts, as if it had just connected.
+        """
+        for task in list(ceilings):
+            task.cancel()
+        hub.visit = Visit()
+        for other in hub.connections:
+            other.last_signal_at = None
+        log.info("new visit %s", hub.visit.visit_id)
+        await hub.publish_state()
 
     async def voice_ended(conn: Connection, payload: dict) -> None:
         cmd = VoicePlayback.model_validate(payload)
@@ -1330,6 +1375,7 @@ def create_app(
         "summary.stop": stop_summary,
         "patient.signal": patient_signal,
         "visit.ask_if_clear": ask_if_clear,
+        "visit.new": new_visit,
     }
 
     @app.websocket("/ws/visit")
@@ -1364,6 +1410,10 @@ def create_app(
             while True:
                 message = await ws.receive_json()
                 command = message.get("type", "")
+                if command == "visit.new" and conn.role == "review":
+                    # CDR-001: the patient's device may not end the visit; it is told so, without content.
+                    await error(conn, "Only the physician can start a new visit", command, "not_allowed")
+                    continue
                 if command in CONTROLLER_COMMANDS and conn.role != "controller":
                     continue  # screens may not send controller commands
                 if command in REVIEW_OR_CONTROLLER_COMMANDS and conn.role == "screen":

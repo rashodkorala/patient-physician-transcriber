@@ -8,6 +8,7 @@
  * each turn, and marks the presenter's injected turns (TDM-002) and the entry the tamper control altered
  * (TDM-005). It plays no audio and reports no voice: only /control speaks.
  *
+ * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
  * @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
@@ -46,7 +47,7 @@ import type {
 } from "@/lib/contracts";
 import { mannerLabel } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
-import { applyAmended, brokenEntryLabel, captionOf, effective, resolveSources, turnOfEntry, versionOf } from "@/lib/record";
+import { applyAmended, brokenEntryLabel, captionOf, effective, resolveSources, turnOfEntry, versionOf, visitChanged } from "@/lib/record";
 import { useVisitSocket } from "@/lib/socket";
 import RecordBadge from "./RecordBadge";
 import styles from "./recordView.module.css";
@@ -118,11 +119,19 @@ export default function RecordView() {
   const turnsRef = useRef<TurnResult[]>([]);
   const lastStarted = useRef<string | null>(null);
   const sourceList = useRef<HTMLOListElement | null>(null);
+  // CDR-001 `visit.new`: the visit shown, so a visit.state for another one starts the view afresh.
+  const shownVisit = useRef<string | null>(null);
 
   const onEvent = useCallback((event: Envelope) => {
     switch (event.type) {
       case "visit.state": {
         const state = event.payload as ControllerState;
+        if (visitChanged(shownVisit, event.visitId)) {
+          setStatus(null);
+          setSelected(null);
+          setError(null);
+          lastStarted.current = null;
+        }
         setTurns(state.turns);
         turnsRef.current = state.turns;
         setSegments(state.segments ?? []);

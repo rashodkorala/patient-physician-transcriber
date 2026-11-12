@@ -221,3 +221,16 @@ export function repeatedBy(turns: TurnLike[]): Map<string, string> {
   });
   return repeated;
 }
+
+/**
+ * CDR-001 `visit.new`: remembers the visit a client is showing, and says whether a `visit.state` (by its envelope's
+ * `visitId`) starts another one. The first visit.state a client receives is not a change; any later one for a
+ * different visit is, and the client then resets everything it kept locally, as if it had just connected.
+ *
+ * @implements CDR-001: Visit WebSocket event contract
+ */
+export function visitChanged(shown: { current: string | null }, received: string): boolean {
+  const changed = shown.current !== null && shown.current !== received;
+  shown.current = received;
+  return changed;
+}

@@ -53,7 +53,7 @@ import {
   mannerLabel,
 } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
-import { applyAmended, brokenEntryLabel, summaryIndexOf, turnOfEntry } from "@/lib/record";
+import { applyAmended, brokenEntryLabel, summaryIndexOf, turnOfEntry, visitChanged } from "@/lib/record";
 import { type ConnectionState, useVisitSocket } from "@/lib/socket";
 import { signalShownFor } from "@/lib/trust";
 import Highlighted from "./Highlighted";
@@ -544,6 +544,8 @@ export default function SharedScreen() {
   // when it was made, so a TV joining late does not show a stale one.
   const [signal, setSignal] = useState<PatientSignalEntry | null>(null);
   const signalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // CDR-001 `visit.new`: the visit on screen, so a visit.state for another one starts the screen afresh.
+  const shownVisit = useRef<string | null>(null);
 
   const showSignal = useCallback((entry: PatientSignalEntry, live: boolean) => {
     const left = signalShownFor(entry, live, Date.now());
@@ -584,6 +586,13 @@ export default function SharedScreen() {
     switch (event.type) {
       case "visit.state": {
         const state = event.payload as VisitStatePublic;
+        if (visitChanged(shownVisit, event.visitId)) {
+          // A new visit: what the screen kept only from live events goes too, as if it had just connected. The
+          // signal notice and the interpreter call are cleared below from the empty snapshot.
+          setLines([]);
+          setSummaryStage(null);
+          if (signalTimer.current) clearTimeout(signalTimer.current);
+        }
         setPaused(state.paused);
         setLanguages({ patient: state.patientLanguage, physician: state.physicianLanguage });
         setCaptions(state.turns);

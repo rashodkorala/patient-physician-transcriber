@@ -1083,6 +1083,9 @@ CONTROLLER_COMMANDS = frozenset(
         "summary.generate",
         # CDR-008.
         "visit.ask_if_clear",
+        # CDR-001 (2026-11-12 amendment): start a fresh in-memory visit. A screen's copy is dropped like every
+        # controller command; a review copy is refused with `command.refused` `not_allowed`.
+        "visit.new",
     }
 )
 

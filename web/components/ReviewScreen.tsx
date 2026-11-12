@@ -11,6 +11,7 @@
  * `useReviewVisit` holds the state every part reads and the visit connection; a screen passes its own handler
  * for the events it adds (the patient device's signals). The default export is the plain review composition.
  *
+ * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-005: Consent and explain-back on the visit channel
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
  * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
@@ -56,6 +57,7 @@ import {
   summaryIndexOf,
   turnOfEntry,
   versions,
+  visitChanged,
 } from "@/lib/record";
 import { type ConnectionState, useVisitSocket } from "@/lib/socket";
 import { type Capture, startCapture } from "@/lib/speech";
@@ -150,6 +152,8 @@ export function useReviewVisit(onExtra?: (event: Envelope) => void) {
   const capture = useRef<Capture | null>(null);
   const captionsRef = useRef<TurnCaption[]>([]);
   const messageTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // CDR-001 `visit.new`: the visit shown, so a visit.state for another one starts the device afresh.
+  const shownVisit = useRef<string | null>(null);
 
   const say = useCallback((key: NoticeKey | null) => {
     clearTimeout(messageTimer.current);
@@ -164,6 +168,18 @@ export function useReviewVisit(onExtra?: (event: Envelope) => void) {
       switch (event.type) {
         case "visit.state": {
           const state = event.payload as ReviewState;
+          if (visitChanged(shownVisit, event.visitId)) {
+            // A new visit: what the device kept only from live events goes too, as if it had just connected. A
+            // correction being spoken is dropped unsent; the new visit has no turn for it.
+            const active = capture.current;
+            capture.current = null;
+            void active?.stop().catch(() => undefined);
+            setRecording(null);
+            setCorrection(null);
+            setRefusedOn(null);
+            setSummaryStage(null);
+            say(null);
+          }
           setPatient(state.patientLanguage);
           setCaptions(state.turns);
           captionsRef.current = state.turns;
