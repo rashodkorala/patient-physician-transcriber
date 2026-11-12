@@ -2,7 +2,12 @@
 
     START -> retrieve -> translate -> verify -+-> done      (final or readback_required)
                             ^                 +-> block     (critical value still mismatched)
-                            +-- retry once ---+-> escalate  (confidence or tone still failing)
+                            +-- retry once ---+-> escalate  (confidence or tone still failing: unsettled)
+
+The graph reports a confidence or tone failure that survived the retry; it does not choose between unclear and
+escalated. TurnPipeline.run does, from the speaker's unclear streak before the turn (ADR-003, amended
+2026-11-12): a tone failure escalates at once, and a confidence failure is unclear until the speaker's third
+consecutive one, which escalates with reason low_confidence.
 
 translate also reads the speaker's emotion, certainty, manner, and medications, in the same call: the
 latency mitigation ADR-004 names, applied 2026-10-25. Retrieval is local, so it adds no model call.
@@ -10,7 +15,7 @@ Manner (IDR-005) is read from the words alone, defaults to plain, and may enter 
 adverb (gentle, serious, urgent, or apologetic only) when the relayed words alone would lose it; the tone check
 is told to expect that adverb.
 
-Outcome order when several apply: blocked, escalated, readback_required, final (CDR-002).
+Outcome order when several apply: blocked, escalated, unclear, readback_required, final (CDR-002).
 
 The interpreter relays each turn as a person between the two, in reported speech that names the
 speaker ("Dr. Thomas is saying ..."), with every clinical detail kept exactly (MDD-004).
@@ -52,6 +57,8 @@ from llm import Model
 
 LOW_CONFIDENCE = 0.7
 MAX_ATTEMPTS = 2
+# ADR-003: a speaker's first and second consecutive unclear turns are unclear; the third escalates.
+UNCLEAR_LIMIT = 2
 
 LANGUAGE_NAMES = {
     "pa-IN": "Punjabi (Gurmukhi script)",
@@ -259,6 +266,40 @@ def multiply_first_dose(translation: str, language: str) -> str | None:
     return None
 
 
+# ---------- ADR-003: unclear turns and the per-speaker streak ----------
+
+
+def settle_failure(failures: list[str], unclear_streak: int) -> tuple[str, str | None]:
+    """The outcome of a confidence or tone failure that survived the retry: (status, escalation reason).
+
+    `unclear_streak` is the speaker's consecutive unclear turns before this one. A confidence failure is unclear
+    while the streak is below UNCLEAR_LIMIT and escalates with low_confidence once it reaches it. A tone failure
+    escalates at once with tone_failure, because repeating does not repair a meaning drift; when both fail, the
+    confidence rule names the reason only once the streak has reached the limit (CDR-001, CDR-002).
+
+    @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
+    @implements CDR-002: Turn result schema
+    """
+    if "confidence" in failures and unclear_streak >= UNCLEAR_LIMIT:
+        return "escalated", "low_confidence"
+    if "tone" in failures:
+        return "escalated", "tone_failure"
+    return "unclear", None
+
+
+def streak_after(status: str, reason: str | None, unclear_streak: int) -> int:
+    """The speaker's unclear streak after a turn with this outcome (CDR-002 `unclearStreak`).
+
+    unclear adds one; final resets to 0; the third unclear's low_confidence escalation resets to 0; blocked, a tone
+    escalation, and a read-back still waiting leave it (a read-back resets it when the physician confirms).
+    """
+    if status == "unclear":
+        return unclear_streak + 1
+    if status == "final" or (status == "escalated" and reason == "low_confidence"):
+        return 0
+    return unclear_streak
+
+
 # ---------- graph ----------
 
 
@@ -346,8 +387,8 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
         return {"status": "blocked", "escalation_reason": None}
 
     def escalate(state: TurnState) -> dict:
-        reason = "low_confidence" if "confidence" in state["failures"] else "tone_failure"
-        return {"status": "escalated", "escalation_reason": reason}
+        # Unsettled: TurnPipeline.run turns the surviving failures into unclear or escalated (settle_failure).
+        return {"status": "unsettled", "escalation_reason": None}
 
     def done(state: TurnState) -> dict:
         readback = state["speaker"] == "physician" and bool(state["critical"])
@@ -387,6 +428,7 @@ class TurnPipeline:
         target: str,
         text: str,
         recognition_confidence: float,
+        unclear_streak: int = 0,
         physician_name: str | None = None,
         patient_name: str | None = None,
         emit: Emit | None = None,
@@ -411,6 +453,11 @@ class TurnPipeline:
             },
             config={"configurable": {"emit": emit, "claim_injection": claim_injection}},
         )
+        status: str = state["status"]
+        reason: str | None = state.get("escalation_reason")
+        if status == "unsettled":
+            # ADR-003: the speaker's streak before this turn decides between unclear and escalated.
+            status, reason = settle_failure(state["failures"], unclear_streak)
         draft: Draft = state["draft"]
         # A glossary translation may carry a gloss in brackets the model can leave out.
         said = draft.translation.casefold()
@@ -430,7 +477,8 @@ class TurnPipeline:
             glossary_used=used,
             critical_values=state["critical"],
             confidence=state["confidence"],
-            status=state["status"],
+            status=status,  # type: ignore[arg-type]
             attempts=state["attempts"],
+            unclear_streak=streak_after(status, reason, unclear_streak),
         )
-        return result, state.get("escalation_reason")
+        return result, reason

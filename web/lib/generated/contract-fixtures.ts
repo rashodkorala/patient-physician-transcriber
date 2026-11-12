@@ -17,7 +17,8 @@ export const turnResult = {
   "confidence": 0.93,
   "status": "readback_required",
   "attempts": 1,
-  "manner": "plain"
+  "manner": "plain",
+  "unclearStreak": 0
 } satisfies TurnResult;
 
 export const turnCaptionFinal = {
@@ -42,6 +43,21 @@ export const turnCaptionBlocked = {
   "targetLanguage": "pa-IN",
   "sourceText": "Use the nitroglycerin spray: 0.4 milligrams.",
   "status": "blocked",
+  "translation": null,
+  "toneLabel": null,
+  "glossaryUsed": [],
+  "criticalValues": [],
+  "readbackConfirmed": false,
+  "manner": null
+} satisfies TurnCaption;
+
+export const turnCaptionUnclear = {
+  "turnId": "t4",
+  "speaker": "patient",
+  "sourceLanguage": "pa-IN",
+  "targetLanguage": "en-CA",
+  "sourceText": "ਮੈਨੂੰ ਕੱਲ੍ਹ ਤੋਂ ਚੱਕਰ ਆ ਰਹੇ ਹਨ।",
+  "status": "unclear",
   "translation": null,
   "toneLabel": null,
   "glossaryUsed": [],
@@ -215,7 +231,8 @@ export const visitStateController = {
       "confidence": 0.93,
       "status": "readback_required",
       "attempts": 1,
-      "manner": "plain"
+      "manner": "plain",
+      "unclearStreak": 0
     }
   ],
   "currentTurn": {
@@ -243,7 +260,8 @@ export const visitStateController = {
     "confidence": 0.93,
     "status": "readback_required",
     "attempts": 1,
-    "manner": "plain"
+    "manner": "plain",
+    "unclearStreak": 0
   },
   "pendingReadback": "t1",
   "nudges": [
@@ -354,7 +372,8 @@ export const visitStateController = {
             "confidence": 0.93,
             "status": "final",
             "attempts": 1,
-            "manner": "plain"
+            "manner": "plain",
+            "unclearStreak": 0
           }
         }
       ],
@@ -604,7 +623,12 @@ export const visitStateController = {
       },
       "at": "2026-11-19T19:06:30.120000+00:00"
     }
-  ]
+  ],
+  "unclearStreak": {
+    "patient": 2,
+    "physician": 0,
+    "companion": 0
+  }
 } satisfies VisitStateController;
 
 export const empathyNudge = {
@@ -828,7 +852,8 @@ export const segmentAnalysis = {
     "confidence": 0.93,
     "status": "final",
     "attempts": 1,
-    "manner": "plain"
+    "manner": "plain",
+    "unclearStreak": 0
   }
 } satisfies SegmentAnalysis;
 
@@ -936,7 +961,8 @@ export const segmentHistoryController = {
         "confidence": 0.93,
         "status": "final",
         "attempts": 1,
-        "manner": "plain"
+        "manner": "plain",
+        "unclearStreak": 0
       }
     }
   ],

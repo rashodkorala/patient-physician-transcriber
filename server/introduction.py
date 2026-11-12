@@ -1,5 +1,5 @@
 """The interpreter's own fixed words: the consent notice, its introduction and the names it does not know yet, the
-patient's signals relayed to the physician, and the closing check.
+patient's signals relayed to the physician, the closing check, and the say-it-again request after an unclear turn.
 
 Lines are fixed, reviewed text from kb/content/interpreter/ and kb/content/consent/, never written by a model.
 Only reading a name out of a spoken reply uses the model, and the physician confirms that name before it is
@@ -112,6 +112,22 @@ def ask_if_clear_line(physician_language: str, patient_language: str, patient_na
             for language in (patient_language, physician_language)
         ],
     )
+
+
+# ---------- ADR-003: asking the speaker of an unclear turn to say it again ----------
+
+
+def ask_to_repeat_line(speaker_language: str, speaker_name: str | None) -> InterpreterLine:
+    """The interpreter's say-it-again request after an unclear turn: one text, in the speaker's language only,
+    naming the speaker when their name is known (ADR-003, CDR-003 `ask_to_repeat`).
+
+    @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
+    """
+    if speaker_name:
+        text = line_text(speaker_language, "ask_to_repeat_named", name=speaker_name)
+    else:
+        text = line_text(speaker_language, "ask_to_repeat")
+    return interpreter_line("ask_to_repeat", [(speaker_language, text)])
 
 
 # ---------- the consent notice (CDR-005) ----------

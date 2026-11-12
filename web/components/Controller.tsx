@@ -77,7 +77,17 @@ import { LANGUAGE_LABELS, RECOGNITION, ROADMAP } from "@/lib/languages";
 import { type ListeningState, type Side, VOICE_TAIL_MS, isShortReply, listeningState, sideFor } from "@/lib/listening";
 import { type LatencyRow, median, segments as latencySegments, toCsv } from "@/lib/latency";
 import { serverHttpUrl, useVisitSocket } from "@/lib/socket";
-import { applyAmended, brokenEntryLabel, captionOf, effective, isConfirmed, summaryIndexOf, summaryReading, turnOfEntry } from "@/lib/record";
+import {
+  applyAmended,
+  brokenEntryLabel,
+  captionOf,
+  effective,
+  isConfirmed,
+  summaryIndexOf,
+  summaryReading,
+  turnOfEntry,
+  visitChanged,
+} from "@/lib/record";
 import { playbackMessages } from "@/lib/speaking";
 import { insertTrust, lastSpokenIn, settledOrder } from "@/lib/trust";
 import {
@@ -129,7 +139,8 @@ const LISTENING_TEXT: Record<ListeningState, string> = {
 };
 
 const REASON_TEXT: Record<EscalationReason, string> = {
-  low_confidence: "the translation stayed uncertain after a retry",
+  // ADR-003: low confidence escalates only on the same speaker's third unclear turn in a row.
+  low_confidence: "the speaker was not caught three times in a row",
   tone_failure: "the tone check failed after a retry",
   high_risk: "this moment was marked high risk",
   requested: "an interpreter was requested",
@@ -169,6 +180,62 @@ const ACTION_FOR: Record<EscalationReason, EscalationEntry["action"]> = {
 };
 
 const SPEAKER_TEXT: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
+const SPEAKERS: Speaker[] = ["patient", "physician", "companion"];
+
+/** ADR-006, ADR-010: what the running server uses, from GET /api/health; every value is a string. */
+type Services = {
+  translator: string;
+  liveModel: string;
+  toneModel: string;
+  recordModel: string;
+  recognition: string;
+  voice: string;
+  voiceModel: string;
+  voiceId: string;
+  embeddings: string;
+};
+
+/** Display names for the model ids the server reports; an id not listed here is shown as it is. */
+const MODEL_NAMES: Record<string, string> = {
+  "claude-sonnet-5-5": "Claude Sonnet 5.5",
+  "claude-haiku-5-5": "Haiku 5.5",
+  "claude-opus-5-5": "Opus 5.5",
+  eleven_v4: "Eleven v4",
+};
+const modelName = (id: string) => MODEL_NAMES[id] ?? id;
+
+/**
+ * The header's services line, so the presenter can see at a glance whether this is a live run.
+ * @implements ADR-006: LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary
+ * @implements ADR-010: Voice output: ElevenLabs Eleven v4 replaces OpenAI text-to-speech; Azure stays fallback
+ */
+function ServicesLine({ services }: { services: Services }) {
+  const recognised = services.recognition === "azure";
+  const recognition = recognised ? "Azure recognition." : "No speech recognition key.";
+  let voice = "No voice.";
+  if (services.voice === "elevenlabs") {
+    voice = `ElevenLabs ${modelName(services.voiceModel)} voice${recognised ? ", Azure fallback" : ""}.`;
+  } else if (services.voice === "azure") voice = "Azure voice.";
+  return (
+    <p className={styles.services} data-testid="services">
+      {services.translator === "claude" ? (
+        `${modelName(services.liveModel)} for turns, ${modelName(services.toneModel)} for checks, ` +
+        `${modelName(services.recordModel)} for the note and summary.`
+      ) : (
+        <span className={styles.servicesWarn} data-state="fake">
+          Fake model, no AI calls. Not for a live visit.
+        </span>
+      )}{" "}
+      {recognition} {voice}
+      {services.embeddings === "hashing" && (
+        <>
+          {" "}
+          <span className={styles.servicesWarn}>Test embedder, not for rehearsal.</span>
+        </>
+      )}
+    </p>
+  );
+}
 
 /** CDR-008 trust view: the patient's or companion's emotion in plain words. */
 const EMOTION_TEXT: Record<Emotion, string> = {
@@ -247,6 +314,18 @@ function ValuesTable({ turn, only }: { turn: TurnResult; only?: "mismatched" }) 
   );
 }
 
+/** ADR-003: a speaker's unclear turns before the next one escalates and a human interpreter is offered. */
+const UNCLEAR_LIMIT = 2;
+
+/** ADR-003: one speaker's live unclear streak, for the Privacy and interpreter section; nothing when it is 0. */
+function streakText(speaker: Speaker, count: number): string | null {
+  if (count <= 0) return null;
+  if (count < UNCLEAR_LIMIT) {
+    return `${SPEAKER_TEXT[speaker]}: not caught once; a human interpreter is offered on the third in a row`;
+  }
+  return `${SPEAKER_TEXT[speaker]}: not caught twice in a row; a human interpreter is offered on the next`;
+}
+
 function statusText(turn: TurnResult, outcome: Outcome, pending: boolean): string {
   switch (turn.status) {
     case "final":
@@ -255,6 +334,9 @@ function statusText(turn: TurnResult, outcome: Outcome, pending: boolean): strin
       return "blocked, not spoken";
     case "escalated":
       return "escalated, not spoken";
+    case "unclear":
+      // ADR-003: the speaker's first or second in a row; the third escalates.
+      return `unclear, not spoken (attempt ${turn.unclearStreak ?? 1} of ${UNCLEAR_LIMIT})`;
     case "readback_required":
       if (pending) return "waiting for your read-back";
       if (outcome.spoken) return outcome.voiceFailed ? "confirmed, voice failed" : "confirmed and spoken";
@@ -288,6 +370,8 @@ export default function Controller() {
   const [introSkipped, setIntroSkipped] = useState(false);
   // TDM-003: chosen when the server starts and fixed until it restarts, so it is read once.
   const [testMode, setTestMode] = useState(false);
+  // ADR-006, ADR-010: null until the health call answers, so the services line never guesses.
+  const [services, setServices] = useState<Services | null>(null);
   const capture = useRef<Capture | null>(null);
   // IDR-004: hands-free listening, the side heard last, short replies waiting for the physician, and
   // whether the interpreter's voice (or its echo) is still in the room.
@@ -320,6 +404,8 @@ export default function Controller() {
   const [integrity, setIntegrity] = useState<RecordIntegrity | null>(null);
   const [escalations, setEscalations] = useState<EscalationEntry[]>([]);
   const interpreterOpen = useRef(false);
+  // ADR-003: each speaker's unclear streak, from visit.state and every turn.analysis, so a reload still shows it.
+  const [unclearStreak, setUnclearStreak] = useState<Partial<Record<Speaker, number>>>({});
   // CDR-005: the latest explain-back's state, and every result (private to the physician).
   const [explainBack, setExplainBack] = useState<ExplainBackState | null>(null);
   const [explainBackResults, setExplainBackResults] = useState<ExplainBackResult[]>([]);
@@ -343,6 +429,11 @@ export default function Controller() {
   const lastSpoken = useRef<{ text: string; language: Language; speechId: string } | null>(null);
   // CDR-008: settled turns in the order they settled, so a late trust update is listed at its turn's place.
   const settled = useRef<string[]>([]);
+  // CDR-001 `visit.new`: the visit shown, the turn still in the graph (from turn.started until its analysis or
+  // discard; nothing new can start while it runs), and whether the physician is confirming a new visit.
+  const shownVisit = useRef<string | null>(null);
+  const [inGraph, setInGraph] = useState<string | null>(null);
+  const [confirmingNew, setConfirmingNew] = useState(false);
 
   const physicianLanguage: Language = "en-CA";
   const languageOf = (speaker: Speaker): Language => (speaker === "physician" ? physicianLanguage : patientLanguage);
@@ -386,10 +477,43 @@ export default function Controller() {
     setNames(current);
   };
 
+  // A voice that fails is reported; one stopped on purpose (a new visit, CDR-001; summary.stop) is not.
+  const notSpoken = useCallback((error: Error) => {
+    if (!(error instanceof SpeechStopped)) setNotice(`Not spoken: ${error.message}`);
+  }, []);
+
   const onEvent = useCallback((event: Envelope) => {
     switch (event.type) {
       case "visit.state": {
         const state = event.payload as VisitStateController;
+        if (visitChanged(shownVisit, event.visitId)) {
+          // CDR-001 `visit.new`: everything kept only from live events goes, as if the page had just connected;
+          // the snapshot below sets the rest. The saved default physician name is applied again for the new visit.
+          stopSpeaking(() => true);
+          const active = capture.current;
+          capture.current = null;
+          void active?.stop().catch(() => undefined);
+          setRecording(null);
+          setTypedText("");
+          setOutcomes({});
+          setDismissed(new Set());
+          setLatency([]);
+          pendingTimes.current = [];
+          setProposed(null);
+          setIntroSkipped(false);
+          setHandsFree(false);
+          setLastHeard(null);
+          setHeld([]);
+          setMarkers([]);
+          setInjection(null);
+          lastStarted.current = null;
+          setNoteStatus(null);
+          setSummaryStatus(null);
+          setTamperTarget("");
+          setInGraph(null);
+          setConfirmingNew(false);
+          setNotice("New visit started");
+        }
         setPatientLanguage(state.patientLanguage);
         setTurns(state.turns);
         setPendingReadback(state.pendingReadback ?? null);
@@ -408,6 +532,7 @@ export default function Controller() {
         // CDR-006: a reload keeps the recorded interpreter events, the open offer, and the injection marks.
         const recorded = state.escalations ?? [];
         setEscalations(recorded);
+        setUnclearStreak(state.unclearStreak ?? {});
         interpreterOpen.current = Boolean(state.interpreterOpen);
         if (!state.interpreterOpen) closeInterpreter();
         else {
@@ -552,7 +677,7 @@ export default function Controller() {
         // CDR-005: the notice is read in the patient's language through the speak gate, by its speech id.
         const { speechId, language } = event.payload as ConsentSpeak;
         const text = noticeRef.current?.lines.find((line) => line.language === language)?.text;
-        if (text) speak(text, language, speechId).catch((error: Error) => setNotice(`Not spoken: ${error.message}`));
+        if (text) speak(text, language, speechId).catch(notSpoken);
         break;
       }
       case "record.integrity":
@@ -589,7 +714,7 @@ export default function Controller() {
         const spoken = closing ? line.lines.filter((l) => l.language !== physicianLanguage) : line.lines;
         // speak() keeps lines in order and fetches each one's audio straight away.
         for (const { language, text } of spoken) {
-          speak(text, language, line.lineId).catch((error: Error) => setNotice(`Not spoken: ${error.message}`));
+          speak(text, language, line.lineId).catch(notSpoken);
         }
         if (closing) {
           const english = line.lines.find((l) => l.language === physicianLanguage)?.text;
@@ -608,6 +733,7 @@ export default function Controller() {
       case "turn.started": {
         const started = event.payload as TurnStarted;
         lastStarted.current = started.turnId;
+        setInGraph(started.turnId);
         const now = Date.now();
         const times = pendingTimes.current.shift() ?? { endOfSpeechAt: now, submittedAt: now };
         setLatency((rows) => [...rows, { turnId: started.turnId, speaker: started.speaker, ...times }]);
@@ -615,6 +741,10 @@ export default function Controller() {
       }
       case "turn.status": {
         const status = event.payload as TurnStatus;
+        // A turn leaves the graph with its analysis, or here when it fails or is discarded on the way.
+        if (status.stage === "discarded" || status.stage === "failed") {
+          setInGraph((id) => (id === status.turnId ? null : id));
+        }
         if (status.stage === "discarded") {
           updateOutcome(status.turnId, { discarded: true });
           setPendingReadback((p) => (p === status.turnId ? null : p));
@@ -624,6 +754,7 @@ export default function Controller() {
       }
       case "turn.analysis": {
         const result = event.payload as TurnResult;
+        setInGraph((id) => (id === result.turnId ? null : id));
         updateLatency(result.turnId, { analysisAt: Date.now() });
         setTurns((prev) => {
           const next = [...prev.filter((t) => t.turnId !== result.turnId), result];
@@ -631,6 +762,11 @@ export default function Controller() {
           return next;
         });
         lastTurn.current = result.turnId;
+        // ADR-003: the speaker's streak after this turn (a read-back resets it only when confirmed, below).
+        if (result.unclearStreak !== undefined) {
+          const count = result.unclearStreak;
+          setUnclearStreak((all) => ({ ...all, [result.speaker]: count }));
+        }
         if (result.status === "blocked") {
           setNotice("Blocked: a value changed in translation. Ask the speaker to repeat or rephrase.");
         }
@@ -641,8 +777,11 @@ export default function Controller() {
         break;
       case "turn.result": {
         const caption = event.payload as TurnCaption;
-        // Every turn.result is a turn settling (spoken, blocked, or escalated), in the order the server settled it.
+        // Every turn.result is a turn settling (spoken, blocked, unclear, or escalated), in the order the server
+        // settled it.
         if (!settled.current.includes(caption.turnId)) settled.current = [...settled.current, caption.turnId];
+        // ADR-003: a confirmed read-back is spoken, so it resets its speaker's unclear streak, as on the server.
+        if (caption.readbackConfirmed) setUnclearStreak((all) => ({ ...all, [caption.speaker]: 0 }));
         updateLatency(caption.turnId, { resultAt: Date.now(), spoken: caption.status === "final" });
         // The public caption is the signal to speak (CDR-002: shown only once spoken).
         if (caption.status === "final" && caption.translation) {
@@ -654,6 +793,8 @@ export default function Controller() {
           speak(caption.translation, caption.targetLanguage, caption.turnId)
             .then(({ startedAt }) => updateLatency(caption.turnId, { speechStartAt: startedAt }))
             .catch((error: Error) => {
+              // Stopped (a new visit, CDR-001) is not a failure of the voice.
+              if (error instanceof SpeechStopped) return;
               updateOutcome(caption.turnId, { voiceFailed: true });
               setNotice(`Not spoken: ${error.message}`);
             });
@@ -695,7 +836,7 @@ export default function Controller() {
         break;
       }
     }
-  }, [startCall, closeInterpreter, physicianLanguage]);
+  }, [startCall, closeInterpreter, notSpoken, physicianLanguage]);
 
   const { state, send } = useVisitSocket("controller", onEvent);
 
@@ -714,7 +855,10 @@ export default function Controller() {
   useEffect(() => {
     fetch(`${serverHttpUrl()}/api/health`)
       .then((response) => response.json())
-      .then((health: { testLanguages?: boolean }) => setTestMode(Boolean(health.testLanguages)))
+      .then((health: { testLanguages?: boolean; services?: Services }) => {
+        setTestMode(Boolean(health.testLanguages));
+        setServices(health.services ?? null);
+      })
       .catch(() => setTestMode(false)); // unreachable server: the safe answer is no test languages
   }, []);
 
@@ -1000,6 +1144,7 @@ export default function Controller() {
         <div>
           <p className={styles.eyebrow}>Demo night interpreter</p>
           <h1>Physician controller</h1>
+          {services && <ServicesLine services={services} />}
         </div>
         <div className={styles.headerStatus}>
           <RecordBadge integrity={integrity} where={brokenWhere} className={styles.badge} />
@@ -1098,9 +1243,12 @@ export default function Controller() {
               {consented && consentState ? (
                 <div className={styles.consentGiven}>
                   <p className={styles.consentStatus} data-testid="consent-status">
-                    Consent given {clock(consentState.at)}
-                    <span className={styles.consentBy}>
-                      {consentState.by === "patient" ? ", by the patient" : ", on the patient’s behalf"}
+                    {/* One flex item, so the gap after the dot never opens a space before the comma. */}
+                    <span>
+                      Consent given {clock(consentState.at)}
+                      <span className={styles.consentBy}>
+                        {consentState.by === "patient" ? ", by the patient" : ", on the patient’s behalf"}
+                      </span>
                     </span>
                   </p>
                   <div className={styles.consentLinks}>
@@ -1218,6 +1366,40 @@ export default function Controller() {
                 </>
               )}
             </div>
+            {/* CDR-001 `visit.new`: a fresh visit on every screen without restarting the server; asks first. */}
+            {confirmingNew ? (
+              <div className={styles.newVisitConfirm} role="group" aria-label="Start a new visit">
+                <p className={styles.newVisitWarning}>This clears the current visit on every screen. The record is not kept.</p>
+                <div className={styles.actions}>
+                  <button
+                    className={styles.danger}
+                    data-testid="new-visit-confirm"
+                    disabled={state !== "open" || inGraph !== null}
+                    onClick={() => {
+                      setConfirmingNew(false);
+                      send("visit.new", {});
+                    }}
+                  >
+                    Start new visit
+                  </button>
+                  <button className={styles.secondary} data-testid="new-visit-cancel" onClick={() => setConfirmingNew(false)}>
+                    Keep this visit
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className={styles.actions}>
+                <button
+                  className={styles.secondary}
+                  data-testid="new-visit"
+                  disabled={state !== "open" || inGraph !== null}
+                  title={inGraph !== null ? "Wait for the turn being interpreted to finish" : undefined}
+                  onClick={() => setConfirmingNew(true)}
+                >
+                  Start a new visit
+                </button>
+              </div>
+            )}
           </section>
 
           <section className={styles.section}>
@@ -1331,6 +1513,16 @@ export default function Controller() {
                 Mark high risk
               </button>
             </div>
+            {/* ADR-003: a speaker's live unclear streak, only while it is not 0. */}
+            {SPEAKERS.some((s) => (unclearStreak[s] ?? 0) > 0) && (
+              <ul className={styles.recorded} data-testid="unclear-streak" aria-label="Turns not caught">
+                {SPEAKERS.filter((s) => (unclearStreak[s] ?? 0) > 0).map((s) => (
+                  <li key={s} data-speaker={s} data-count={unclearStreak[s]}>
+                    {streakText(s, unclearStreak[s] ?? 0)}
+                  </li>
+                ))}
+              </ul>
+            )}
             {interpreter && (
               <div
                 className={styles.interpreter}
@@ -1665,7 +1857,11 @@ export default function Controller() {
               {turns.flatMap((t) => {
                 const outcome = outcomes[t.turnId] ?? {};
                 const unspoken =
-                  t.status === "blocked" || t.status === "escalated" || outcome.discarded || outcome.voiceFailed;
+                  t.status === "blocked" ||
+                  t.status === "escalated" ||
+                  t.status === "unclear" ||
+                  outcome.discarded ||
+                  outcome.voiceFailed;
                 const wasInjected = injected.has(t.turnId);
                 const altered = t.turnId === brokenTurnId;
                 const tampered = t.turnId === tamperedTurnId;
@@ -1739,6 +1935,11 @@ export default function Controller() {
                           </p>
                         )}
                       </>
+                    )}
+                    {t.status === "unclear" && (
+                      <p className={styles.instruction}>
+                        Not caught. The interpreter asked the speaker to say it again.
+                      </p>
                     )}
                     {t.status === "escalated" && (
                       <p className={styles.instruction}>

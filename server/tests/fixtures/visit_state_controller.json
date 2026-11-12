@@ -29,7 +29,8 @@
       "confidence": 0.93,
       "status": "readback_required",
       "attempts": 1,
-      "manner": "plain"
+      "manner": "plain",
+      "unclearStreak": 0
     }
   ],
   "currentTurn": {
@@ -57,7 +58,8 @@
     "confidence": 0.93,
     "status": "readback_required",
     "attempts": 1,
-    "manner": "plain"
+    "manner": "plain",
+    "unclearStreak": 0
   },
   "pendingReadback": "t1",
   "nudges": [
@@ -168,7 +170,8 @@
             "confidence": 0.93,
             "status": "final",
             "attempts": 1,
-            "manner": "plain"
+            "manner": "plain",
+            "unclearStreak": 0
           }
         }
       ],
@@ -418,5 +421,10 @@
       },
       "at": "2026-11-19T19:06:30.120000+00:00"
     }
-  ]
+  ],
+  "unclearStreak": {
+    "patient": 2,
+    "physician": 0,
+    "companion": 0
+  }
 }

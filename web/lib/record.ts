@@ -210,14 +210,28 @@ export function resolveSources<T extends TurnLike>(
 
 /**
  * Blocked turns and the turn that repeated each one: the next turn by the same speaker that was not itself
- * blocked or escalated. A blocked turn not yet repeated is left out.
+ * blocked, unclear, or escalated. A blocked turn not yet repeated is left out.
  */
 export function repeatedBy(turns: TurnLike[]): Map<string, string> {
   const repeated = new Map<string, string>();
+  const held = (t: TurnLike) => t.status === "blocked" || t.status === "unclear" || t.status === "escalated";
   turns.forEach((turn, i) => {
     if (turn.status !== "blocked") return;
-    const next = turns.slice(i + 1).find((t) => t.speaker === turn.speaker && t.status !== "blocked" && t.status !== "escalated");
+    const next = turns.slice(i + 1).find((t) => t.speaker === turn.speaker && !held(t));
     if (next) repeated.set(turn.turnId, next.turnId);
   });
   return repeated;
+}
+
+/**
+ * CDR-001 `visit.new`: remembers the visit a client is showing, and says whether a `visit.state` (by its envelope's
+ * `visitId`) starts another one. The first visit.state a client receives is not a change; any later one for a
+ * different visit is, and the client then resets everything it kept locally, as if it had just connected.
+ *
+ * @implements CDR-001: Visit WebSocket event contract
+ */
+export function visitChanged(shown: { current: string | null }, received: string): boolean {
+  const changed = shown.current !== null && shown.current !== received;
+  shown.current = received;
+  return changed;
 }

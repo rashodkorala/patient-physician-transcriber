@@ -31,8 +31,10 @@ def test_every_language_has_every_line():
 def test_lines_use_only_known_placeholders(language):
     for key, text in LINES[language].items():
         # Fails on any placeholder the flow does not fill.
-        text.format(physician="Dr. Thomas", patient="Harpreet")
+        text.format(physician="Dr. Thomas", patient="Harpreet", name="Harpreet")
         assert ("{physician}" in text) == key.endswith("with_physician")
+        # ADR-003: only the named say-it-again line names its speaker, whoever that is.
+        assert ("{name}" in text) == (key == "ask_to_repeat_named"), key
         assert ("{patient}" in text) == (key in NAMED_PATIENT_KEYS), key
         if key in NAMED_PATIENT_KEYS - {"welcome_with_patient"}:
             assert "{" not in LINES[language][f"{key}_unnamed"]

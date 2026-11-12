@@ -42,6 +42,7 @@ PatientLanguage = Literal["pa-IN", "fr-CA", "si-LK", "ta-LK"]
 # Selectable only in test mode (TDM-003). Tamil left test mode on 6 November 2026 (TDM-004).
 TEST_LANGUAGES: tuple[PatientLanguage, ...] = ("si-LK",)
 Speaker = Literal["patient", "physician", "companion"]
+SPEAKERS: tuple[Speaker, ...] = ("patient", "physician", "companion")
 ToneTag = Literal["reassuring", "respectful", "empathetic", "neutral", "urgent", "uncertain"]
 ToneLabel = Literal["respectful", "reassuring", "empathetic", "neutral"]
 Emotion = Literal["calm", "worried", "embarrassed", "in_pain", "relieved", "confused"]
@@ -52,8 +53,11 @@ PatientSignal = Literal["not_understood", "slower", "repeat"]
 TrustCueKind = Literal["reassurance", "understanding", "culture"]
 Certainty = Literal["high", "medium", "low"]
 CriticalKind = Literal["dose", "unit", "frequency", "date", "number", "medication"]
-TurnStatusValue = Literal["final", "readback_required", "blocked", "escalated"]
-CaptionStatus = Literal["final", "blocked", "escalated"]
+# ADR-003 (amended 2026-11-12): unclear is a confidence failure that survived the retry, before the third in a row.
+TurnStatusValue = Literal["final", "readback_required", "blocked", "escalated", "unclear"]
+CaptionStatus = Literal["final", "blocked", "escalated", "unclear"]
+# Settled turns that are never spoken and never show a translation (CDR-002).
+HELD_BACK: tuple[str, ...] = ("blocked", "escalated", "unclear")
 Role = Literal["controller", "screen", "review"]
 IntroductionState = Literal["pending", "asking_physician", "asking_patient", "done", "skipped"]
 NameRole = Literal["physician", "patient"]
@@ -66,6 +70,8 @@ LinePurpose = Literal[
     "signal_not_understood",
     "signal_slower",
     "ask_if_clear",
+    # ADR-003 and CDR-003: the interpreter asks the speaker of an unclear turn to say it again, in their language.
+    "ask_to_repeat",
 ]
 MANNERS: tuple[Manner, ...] = (
     "plain",
@@ -135,6 +141,8 @@ class TurnResult(Wire):
     attempts: int
     # IDR-005: how the speaker said it, read from the words. Every turn has one; plain when nothing is marked.
     manner: Manner = "plain"
+    # ADR-003 and CDR-002: the speaker's unclear streak after this turn; controller only, never in TurnCaption.
+    unclear_streak: int = Field(default=0, ge=0)
 
 
 class TurnCaption(Wire):
@@ -164,10 +172,10 @@ class TurnCaption(Wire):
 def to_caption(result: TurnResult, readback_confirmed: bool = False) -> TurnCaption:
     """Project a settled turn for shared screens.
 
-    Blocked and escalated turns never expose their translation, tone, or translated values.
-    Callers emit a caption only once a turn is spoken, blocked, or escalated (CDR-002).
+    Blocked, unclear, and escalated turns never expose their translation, tone, manner, or translated values.
+    Callers emit a caption only once a turn is spoken, blocked, unclear, or escalated (CDR-002).
     """
-    if result.status in ("blocked", "escalated"):
+    if result.status in HELD_BACK:
         return TurnCaption(
             turn_id=result.turn_id,
             speaker=result.speaker,
@@ -913,6 +921,8 @@ class VisitStateController(Wire):
     # CDR-008: the patient's signals for every role; the trust timeline for the controller only.
     signals: list[PatientSignalEntry] = Field(default_factory=list)
     trust: list[TrustUpdate] = Field(default_factory=list)
+    # ADR-003 and CDR-002: each speaker's unclear streak, controller only; optional, so an older client ignores it.
+    unclear_streak: dict[Speaker, int] = Field(default_factory=dict)
 
 
 class VisitStatePublic(Wire):
@@ -1083,6 +1093,9 @@ CONTROLLER_COMMANDS = frozenset(
         "summary.generate",
         # CDR-008.
         "visit.ask_if_clear",
+        # CDR-001 (2026-11-12 amendment): start a fresh in-memory visit. A screen's copy is dropped like every
+        # controller command; a review copy is refused with `command.refused` `not_allowed`.
+        "visit.new",
     }
 )
 

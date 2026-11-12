@@ -50,10 +50,11 @@ import {
   type NoticeKey,
   SIGNAL_KEY,
   bilingual,
+  heldBackNotice,
   mannerLabel,
 } from "@/lib/i18n";
 import { LANGUAGE_LABELS } from "@/lib/languages";
-import { applyAmended, brokenEntryLabel, summaryIndexOf, turnOfEntry } from "@/lib/record";
+import { applyAmended, brokenEntryLabel, summaryIndexOf, turnOfEntry, visitChanged } from "@/lib/record";
 import { type ConnectionState, useVisitSocket } from "@/lib/socket";
 import { signalShownFor } from "@/lib/trust";
 import Highlighted from "./Highlighted";
@@ -72,8 +73,11 @@ interface Pending {
 
 const SPEAKER_LABEL: Record<Speaker, string> = { physician: "Physician", patient: "Patient", companion: "Companion" };
 const STATE_LABEL: Record<ConnectionState, string> = { open: "Connected", connecting: "Connecting", closed: "Reconnecting" };
-/** CDR-008: interpreter lines said during the visit; they stay until the next turn settles, unlike the introduction. */
-const MID_VISIT_LINES = new Set<LinePurpose>(["signal_not_understood", "signal_slower", "ask_if_clear"]);
+/**
+ * CDR-008: interpreter lines said during the visit; they stay until the next turn settles, unlike the introduction.
+ * ADR-003: the say-it-again request after an unclear turn is one of them.
+ */
+const MID_VISIT_LINES = new Set<LinePurpose>(["signal_not_understood", "signal_slower", "ask_if_clear", "ask_to_repeat"]);
 
 function Notice({ notice, first, second }: { notice: NoticeKey; first: Language; second: Language }) {
   return (
@@ -440,11 +444,7 @@ function Caption({ c, names, broken, patient }: { c: TurnCaption; names: Names; 
             )}
           </>
         ) : (
-          <Notice
-            notice={c.status === "escalated" ? "interpreterOffered" : "pleaseRepeat"}
-            first={c.targetLanguage}
-            second={c.sourceLanguage}
-          />
+          <Notice notice={heldBackNotice(c.status)} first={c.targetLanguage} second={c.sourceLanguage} />
         )}
       </div>
     </article>
@@ -544,6 +544,8 @@ export default function SharedScreen() {
   // when it was made, so a TV joining late does not show a stale one.
   const [signal, setSignal] = useState<PatientSignalEntry | null>(null);
   const signalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // CDR-001 `visit.new`: the visit on screen, so a visit.state for another one starts the screen afresh.
+  const shownVisit = useRef<string | null>(null);
 
   const showSignal = useCallback((entry: PatientSignalEntry, live: boolean) => {
     const left = signalShownFor(entry, live, Date.now());
@@ -584,6 +586,13 @@ export default function SharedScreen() {
     switch (event.type) {
       case "visit.state": {
         const state = event.payload as VisitStatePublic;
+        if (visitChanged(shownVisit, event.visitId)) {
+          // A new visit: what the screen kept only from live events goes too, as if it had just connected. The
+          // signal notice and the interpreter call are cleared below from the empty snapshot.
+          setLines([]);
+          setSummaryStage(null);
+          if (signalTimer.current) clearTimeout(signalTimer.current);
+        }
         setPaused(state.paused);
         setLanguages({ patient: state.patientLanguage, physician: state.physicianLanguage });
         setCaptions(state.turns);

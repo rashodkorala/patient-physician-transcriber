@@ -81,7 +81,7 @@ def test_turn_result_fixture_validates_cdr_002():
     assert result.wire() == load("turn_result.json")
 
 
-@pytest.mark.parametrize("name", ["turn_caption_final.json", "turn_caption_blocked.json"])
+@pytest.mark.parametrize("name", ["turn_caption_final.json", "turn_caption_blocked.json", "turn_caption_unclear.json"])
 def test_turn_caption_fixtures_validate_cdr_002(name):
     caption = TurnCaption.model_validate(load(name))
     assert caption.wire() == load(name)

@@ -14,5 +14,6 @@
   "confidence": 0.93,
   "status": "readback_required",
   "attempts": 1,
-  "manner": "plain"
+  "manner": "plain",
+  "unclearStreak": 0
 }

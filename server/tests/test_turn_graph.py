@@ -30,7 +30,9 @@ def model(translate=None, tone_check=None):
     return ScriptedModel(handlers)
 
 
-def run(kb, m, text=DOSE, speaker="physician", source="en-CA", target="pa-IN", recognition=0.95, **names):
+def run(
+    kb, m, text=DOSE, speaker="physician", source="en-CA", target="pa-IN", recognition=0.95, unclear_streak=0, **names
+):
     stages = []
 
     async def emit(stage):
@@ -44,6 +46,7 @@ def run(kb, m, text=DOSE, speaker="physician", source="en-CA", target="pa-IN", r
             target=target,
             text=text,
             recognition_confidence=recognition,
+            unclear_streak=unclear_streak,
             emit=emit,
             **names,
         )
@@ -122,9 +125,66 @@ def test_mismatch_beats_tone_failure_cdr_002(kb):
     assert result.status == "blocked"
 
 
-def test_low_recognition_confidence_escalates_as_low_confidence_cdr_001(kb):
+def test_low_recognition_confidence_is_unclear_before_the_third_adr_003(kb):
+    for streak in (0, 1):
+        result, reason, _ = run(kb, model(), text="Hello.", speaker="patient", recognition=0.4, unclear_streak=streak)
+        assert result.status == "unclear" and reason is None and result.attempts == 2
+        assert result.unclear_streak == streak + 1
+
+
+def test_third_low_confidence_turn_escalates_as_low_confidence_cdr_002(kb):
+    result, reason, _ = run(kb, model(), text="Hello.", speaker="patient", recognition=0.4, unclear_streak=2)
+    assert result.status == "escalated" and reason == "low_confidence"
+    assert result.unclear_streak == 0  # the third unclear's escalation starts the count again
+
+
+def test_confidence_and_tone_failure_escalates_as_tone_failure_until_the_third_cdr_002(kb):
+    # Both failed: a tone failure escalates at once, and confidence names the reason only at the third (CDR-001).
     result, reason, _ = run(kb, model(tone_check=tone_fails(2)), text="Hello.", recognition=0.4)
-    assert result.status == "escalated" and reason == "low_confidence"  # both failed: low_confidence wins
+    assert result.status == "escalated" and reason == "tone_failure" and result.unclear_streak == 0
+    result, reason, _ = run(kb, model(tone_check=tone_fails(2)), text="Hello.", recognition=0.4, unclear_streak=1)
+    assert result.status == "escalated" and reason == "tone_failure" and result.unclear_streak == 1
+    result, reason, _ = run(kb, model(tone_check=tone_fails(2)), text="Hello.", recognition=0.4, unclear_streak=2)
+    assert result.status == "escalated" and reason == "low_confidence" and result.unclear_streak == 0
+
+
+def test_tone_only_failure_escalates_at_once_whatever_the_streak_adr_003(kb):
+    for streak in (0, 1, 2):
+        result, reason, _ = run(kb, model(tone_check=tone_fails(2)), text="It is unlikely.", unclear_streak=streak)
+        assert result.status == "escalated" and reason == "tone_failure"
+        assert result.unclear_streak == streak  # a tone escalation leaves the streak
+
+
+def test_blocked_and_final_turns_and_the_streak_cdr_002(kb):
+    blocked, _, _ = run(kb, model(translate=mistranslate_dose(2)), unclear_streak=1)
+    assert blocked.status == "blocked" and blocked.unclear_streak == 1  # blocked leaves it
+    final, _, _ = run(kb, model(), text="Hello.", speaker="patient", source="pa-IN", target="en-CA", unclear_streak=2)
+    assert final.status == "final" and final.unclear_streak == 0  # final resets it
+    readback, _, _ = run(kb, model(), unclear_streak=1)
+    assert readback.status == "readback_required" and readback.unclear_streak == 1  # reset only when confirmed
+
+
+def test_unclear_beats_readback_but_blocked_beats_unclear_cdr_002(kb):
+    # A physician dose turn that matches but stays below the confidence threshold is unclear, never read back.
+    unclear, _, _ = run(kb, model(), recognition=0.4)
+    assert unclear.status == "unclear" and all(v.matched for v in unclear.critical_values)
+    blocked, _, _ = run(kb, model(translate=mistranslate_dose(2)), recognition=0.4)
+    assert blocked.status == "blocked"
+
+
+def test_fake_unclear_marker_is_unclear_on_every_attempt_adr_003(kb):
+    text = f"Hello. {fake_model.UNCLEAR_MARKER}"
+    result, reason, _ = run(kb, model(), text=text, speaker="patient", source="pa-IN", target="en-CA")
+    assert result.status == "unclear" and reason is None and result.attempts == 2
+    assert result.confidence == fake_model.UNCLEAR_CONFIDENCE
+
+
+def test_unclear_caption_has_no_translation_cdr_002(kb):
+    result, _, _ = run(kb, model(), recognition=0.4)
+    caption = to_caption(result).wire()
+    assert caption["status"] == "unclear" and caption["translation"] is None and caption["toneLabel"] is None
+    assert caption["criticalValues"] == [] and caption["glossaryUsed"] == [] and caption["manner"] is None
+    assert "unclearStreak" not in caption and result.wire()["unclearStreak"] == 1
 
 
 def test_patient_numbers_are_checked_but_not_read_back_cdr_002(kb):

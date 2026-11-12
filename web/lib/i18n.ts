@@ -10,7 +10,7 @@
  * native speaker signs them off, like the knowledge base (task 2.1).
  */
 
-import type { Language, Manner, PatientSignal, Speaker } from "./contracts";
+import type { CaptionStatus, Language, Manner, PatientSignal, Speaker } from "./contracts";
 import en from "@/i18n/en.json";
 import fr from "@/i18n/fr.json";
 import pa from "@/i18n/pa.json";
@@ -20,6 +20,8 @@ import ta from "@/i18n/ta.json";
 export type NoticeKey =
   | "checkingDose"
   | "pleaseRepeat"
+  // ADR-003: beneath an unclear turn's original, in both languages; the turn is never spoken.
+  | "didNotCatch"
   | "interpreterOffered"
   | "ready"
   | "paused"
@@ -82,6 +84,17 @@ export type NoticeKey =
   // The quiet line on the patient's device while a turn is still being interpreted.
   | "stageListening"
   | "stageTranslating";
+
+/**
+ * CDR-002: the notice a settled turn that was never spoken shows instead of its translation. An escalated turn
+ * says a human interpreter is offered; an unclear one (ADR-003) asks the speaker to say it again; a blocked one
+ * asks them to repeat.
+ */
+export function heldBackNotice(status: CaptionStatus): NoticeKey {
+  if (status === "escalated") return "interpreterOffered";
+  if (status === "unclear") return "didNotCatch";
+  return "pleaseRepeat";
+}
 
 /** IDR-005: the label key for each manner the screens show; plain shows nothing. */
 export const MANNER_KEY: Record<Exclude<Manner, "plain">, NoticeKey> = {
