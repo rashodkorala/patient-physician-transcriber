@@ -10,7 +10,7 @@ proposed_by: agent
 category: api-contract
 related_decisions: [mdd-005, adr-001, adr-003, adr-007, cdr-001, cdr-002, cdr-003, cdr-006, idr-003, idr-005]
 related_specs: [patient-voice, manner-in-relay, trust-signals-for-the-physician, companion-turns]
-related_changes: [trust-across-the-barrier]
+related_changes: [trust-across-the-barrier, affect-in-words]
 ai_context:
   implementation_priorities:
     - "Every addition is additive to CDR-001, CDR-002, CDR-003, and CDR-006; no existing field changes shape"

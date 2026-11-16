@@ -10,7 +10,7 @@ proposed_by: agent
 category: architecture
 related_decisions: [adr-009, adr-005, mdd-004, cdr-003]
 related_specs: [interpreter-voice]
-related_changes: [mediator-voice, trust-across-the-barrier]
+related_changes: [mediator-voice, trust-across-the-barrier, affect-in-words]
 ai_context:
   implementation_priorities:
     - "Speak verified relays and interpreter lines with ElevenLabs eleven_v4 through the server's speak-by-id endpoint (CDR-003)"
@@ -75,3 +75,5 @@ The `mediator-voice` change, task group 3, with "OpenAI" read as "ElevenLabs" in
 - 2026-11-03, rashodkorala: Accepted in session. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-06, rashodkorala: ADR-009 is now superseded by this record. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-16, rashodkorala: Amended by reference by MDD-006 and IDR-006 as to voice delivery (one constant delivery for every turn and every interpreter line, affect carried in words); this record is not superseded and stays accepted.
+  Recorded by Claude (agent) at rashodkorala's explicit request.

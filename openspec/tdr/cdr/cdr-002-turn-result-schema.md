@@ -10,7 +10,7 @@ proposed_by: agent
 category: api-contract
 related_decisions: [adr-002, adr-004, cdr-001]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice, trust-across-the-barrier]
+related_changes: [demo-night-mvp, mediator-voice, trust-across-the-barrier, affect-in-words]
 ai_context:
   implementation_priorities:
     - "Single shape for every translated turn"

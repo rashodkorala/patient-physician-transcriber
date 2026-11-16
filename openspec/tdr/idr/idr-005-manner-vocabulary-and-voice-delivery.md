@@ -10,7 +10,7 @@ proposed_by: agent
 category: implementation
 related_decisions: [mdd-004, mdd-005, adr-002, adr-004, adr-010, cdr-002, cdr-008]
 related_specs: [manner-in-relay]
-related_changes: [trust-across-the-barrier]
+related_changes: [trust-across-the-barrier, affect-in-words]
 ai_context:
   implementation_priorities:
     - "The translate call reads manner alongside emotion and certainty; no extra model call"
@@ -121,3 +121,5 @@ Code carries `@implements IDR-005: Manner vocabulary and voice delivery`.
 - 2026-11-10, rashodkorala: Blanket authorisation given in session (see MDD-005). Recorded as accepted by Claude (agent) at rashodkorala's explicit request; rashodkorala reviews the built result.
 - 2026-11-11, rashodkorala: amended after the live run under the blanket authorisation (see MDD-005); recorded by Claude (agent). The frame adverb is now only for gentle, serious, urgent, and apologetic (reassuring's frame adverb is none, since the live model added "reassuringly" where the words already carried it), and the relay keeps indirect speech through every sentence.
 - 2026-11-11, rashodkorala: Accepted after reviewing the built result ("accept all four, record the verdicts"). Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-16, rashodkorala: Amended by reference by MDD-006 and IDR-006 as to voice delivery (one constant delivery for every turn and every interpreter line, affect carried in words); this record is not superseded and stays accepted.
+  Recorded by Claude (agent) at rashodkorala's explicit request.

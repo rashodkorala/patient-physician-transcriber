@@ -10,7 +10,7 @@ proposed_by: agent
 category: architecture
 related_decisions: [adr-004]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice, trust-across-the-barrier]
+related_changes: [demo-night-mvp, mediator-voice, trust-across-the-barrier, affect-in-words]
 ai_context:
   implementation_priorities:
     - "Live turn calls must be fast"

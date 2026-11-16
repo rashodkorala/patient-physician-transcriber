@@ -10,7 +10,7 @@ proposed_by: agent
 category: architecture
 related_decisions: [adr-001, adr-002, adr-003]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice, trust-across-the-barrier]
+related_changes: [demo-night-mvp, mediator-voice, trust-across-the-barrier, affect-in-words]
 ai_context:
   implementation_priorities:
     - "Per-turn graph: retrieve, translate (which also reads emotion, certainty, and medications), verify, retry once, then done, block, or escalate"
