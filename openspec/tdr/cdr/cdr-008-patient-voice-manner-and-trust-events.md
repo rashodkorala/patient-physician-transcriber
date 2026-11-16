@@ -160,7 +160,7 @@ TrustUpdate: {
 
 - `afterTurnId` is the most recent settled turn when the signal arrived, or `null` before the first.
 - For a turn update: `turnId`, `speaker`, and `manner` are set; `emotion` is set for patient and companion turns and `null` for physician turns; `signal` is `null`.
-- `reassuranceLanded` is set only on a patient turn that follows (a) an earlier patient turn whose emotion was `worried`, `embarrassed`, `in_pain`, or `confused` and (b) a physician turn between them whose manner was `reassuring`, `warm`, `gentle`, or `encouraging`: `true` when this turn's emotion is `calm` or `relieved`, otherwise `false`; `null` in every other case.
+- `reassuranceLanded` is set only on a patient turn that follows (a) an earlier patient turn whose emotion was `worried`, `frightened`, `embarrassed`, `in_pain`, or `confused` and (b) a physician turn between them whose manner was `reassuring`, `warm`, `gentle`, or `encouraging`: `true` when this turn's emotion is `calm` or `relieved`, otherwise `false`; `null` in every other case.
   The mark resets once it has landed: after a `true`, later patient turns carry `null` until a new worried turn and a new reassuring physician turn after it.
 - For a signal update: `signal`, `turnId` (the `afterTurnId`), and `cue` of kind `understanding` are set; `speaker`, `emotion`, `manner`, and `reassuranceLanded` are `null`.
 - The `signal` chain entry body is the `PatientSignalEntry`; its `entryId` is the `signalId`.
@@ -197,3 +197,5 @@ Code carries `@implements CDR-008: Patient signals, manner, trust updates, compa
 - 2026-11-11, rashodkorala: amended under the blanket authorisation (see MDD-005); recorded by Claude (agent). `reassuranceLanded` resets once it has landed (Data Schemas).
 - 2026-11-11, rashodkorala: amended under the blanket authorisation (see MDD-005); recorded by Claude (agent). The `patient.signal` two second hold is per connection and a reload resets it, an accepted gap (Contract Specification).
 - 2026-11-11, rashodkorala: Accepted after reviewing the built result ("accept all four, record the verdicts"). Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-16, rashodkorala: amended ("Yes, same as worried"). `frightened`, the emotion MDD-006 decision 8 adds, is treated the same as `worried`: it gets the empathy nudge and counts as the earlier worry in the `reassuranceLanded` rule (Data Schemas).
+  Recorded by Claude (agent) at rashodkorala's explicit request. The status stays accepted.
