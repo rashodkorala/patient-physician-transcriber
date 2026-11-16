@@ -202,7 +202,7 @@ def test_speak_gate_serves_ask_to_repeat_in_the_speakers_language_only_adr_003(k
         assert client.get(f"/api/speech/{line['lineId']}?language=en-CA").status_code == 404
         assert client.get(f"/api/speech/{line['lineId']}").status_code == 404
         assert client.get(f"/api/speech/{line['lineId']}?language=pa-IN").status_code == 200
-    assert [(text, language) for text, language, _ in voice.said] == [(LINES["pa"]["ask_to_repeat"], "pa-IN")]
+    assert voice.said == [(LINES["pa"]["ask_to_repeat"], "pa-IN")]
 
 
 # ---------- the record ----------

@@ -247,7 +247,7 @@ def test_a_passed_summary_is_public_chained_and_spoken_by_sentence_cdr_007(clien
             public_stages = [e["payload"] for e in seen if e["type"] == "summary.status"]
             assert [s["stage"] for s in public_stages] == ["generating", "checking", "ready"]
 
-        # The speak gate serves each sentence in the patient's language only, with the calm line delivery.
+        # The speak gate serves each sentence in the patient's language only, in the constant delivery (IDR-006).
         first = summary["sentences"][0]
         assert first["sentenceId"] == f"{summary['summaryId']}.0"
         assert client.get(f"/api/speech/{first['sentenceId']}", params={"language": "pa-IN"}).status_code == 200

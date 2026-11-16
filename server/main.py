@@ -22,6 +22,8 @@ Run with the app factory so nothing loads on import: uvicorn main:create_app --f
 @implements MDD-005: Trust across the barrier
 @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
 @implements IDR-005: Manner vocabulary and voice delivery
+@implements MDD-006: Affect in words
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
 @contract ws:/ws/visit
 @contract http:GET /api/speech/{speech_id}
 @see openspec/tdr/adr/adr-001-system-architecture.md
@@ -128,12 +130,9 @@ from visit_store import Connection, Hub, SegmentRecord, Speech, TurnRecord, Visi
 from voice import (
     DEFAULT_MODEL,
     DEFAULT_VOICE,
-    LINE_DELIVERY,
-    Delivery,
     ElevenLabsVoice,
     Voice,
     VoiceUnavailable,
-    delivery_for_turn,
 )
 
 # uvicorn prints this logger, so timing lines and errors show in the dev.sh output.
@@ -272,9 +271,10 @@ def create_app(
         except SpeechNotConfigured as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    def speakable(speech_id: str, language: Language | None) -> tuple[str, Language, Delivery] | None:
+    def speakable(speech_id: str, language: Language | None) -> tuple[str, Language] | None:
         """What an id may say aloud: a settled final turn, a confirmed read-back, an interpreter line, or the
         visit's current consent notice in the patient's language (CDR-005), whether or not consent is given.
+        Each is said in the voice's one constant delivery (IDR-006), so only the text and language are returned.
 
         Blocked, unclear, escalated, rejected, and unsettled turns, other notices, and unknown ids are never spoken.
         An `ask_to_repeat` line (ADR-003) has one text, in the unclear turn's speaker's language, so it is served in
@@ -285,23 +285,22 @@ def create_app(
         if notice and speech_id == notice.speech_id:
             if language != notice.language:
                 return None
-            return notice.lines[0].text, notice.language, LINE_DELIVERY
-        # CDR-007: `{summaryId}.{n}`, a sentence of the current passed summary only, in its language only, with
-        # the calm interpreter-line delivery. A refused or replaced summary is never held, so never served.
+            return notice.lines[0].text, notice.language
+        # CDR-007: `{summaryId}.{n}`, a sentence of the current passed summary only, in its language only. A
+        # refused or replaced summary is never held, so never served.
         summary = visit.summary
         if summary and speech_id.startswith(f"{summary.summary_id}."):
             sentence = next((s for s in summary.sentences if s.sentence_id == speech_id), None)
             if sentence is None or language != summary.language:
                 return None
-            return sentence.text, summary.language, LINE_DELIVERY
+            return sentence.text, summary.language
         record = visit.turns.get(speech_id)
         if record and record.result:
             result = record.result
             if (record.settled and result.status == "final") or record.readback_confirmed:
-                # IDR-005: a physician turn is said in the physician's manner; a patient or companion turn conveys
-                # the speaker's emotion to the physician.
-                delivery = delivery_for_turn(result.speaker, result.manner, result.emotion, result.certainty)
-                return result.translation, result.target_language, delivery
+                # IDR-006: the settled translation, frame phrase and all, in the constant delivery; manner, emotion,
+                # and certainty no longer change how it is said.
+                return result.translation, result.target_language
             return None
         line = visit.interpreter_lines.get(speech_id)
         if line:
@@ -310,7 +309,7 @@ def create_app(
             parts = line.lines[:1] if line.purpose == "ask_if_clear" else line.lines
             for part in parts:
                 if part.language == language:
-                    return part.text, part.language, LINE_DELIVERY
+                    return part.text, part.language
         return None
 
     @app.get("/api/speech/{speech_id}")
@@ -319,11 +318,11 @@ def create_app(
         found = speakable(speech_id, language)
         if found is None:
             raise HTTPException(status_code=404, detail="Nothing to speak for that id")
-        text, target, delivery = found
+        text, target = found
         if voice is None or not voice.supports(target):
             raise HTTPException(status_code=503, detail=f"No server voice for {target}")
         try:
-            audio = await voice.stream(text, target, delivery)
+            audio = await voice.stream(text, target)
         except VoiceUnavailable as exc:
             log.warning("server voice failed for %s, browser falls back to Azure: %s", speech_id, exc)
             raise HTTPException(status_code=503, detail=str(exc)) from exc

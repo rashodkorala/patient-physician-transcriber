@@ -516,7 +516,7 @@ def test_ask_if_clear_says_one_line_in_two_languages_spoken_in_the_patients_only
             # The speak gate serves the patient's language only; the physician's copy is shown, never spoken.
             assert client.get(f"/api/speech/{line['lineId']}?language=pa-IN").status_code == 200
             assert client.get(f"/api/speech/{line['lineId']}?language=en-CA").status_code == 404
-            assert [(t, lang) for t, lang, _ in voice.said] == [(line["lines"][0]["text"], "pa-IN")]
+            assert voice.said == [(line["lines"][0]["text"], "pa-IN")]
             command(ctl, "voice.started", speechId=line["lineId"], language="en-CA")
             assert drain_until(ctl, "error")[-1]["payload"]["command"] == "voice.started"
             command(ctl, "voice.started", speechId=line["lineId"], language="pa-IN")
