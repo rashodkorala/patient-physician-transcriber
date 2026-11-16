@@ -31,6 +31,11 @@ implementation_refs:
   - server/main.py
   - server/graph/turn_graph.py
   - server/fake_model.py
+  - server/contracts.py
+  - server/visit_store.py
+  - server/chains/snapshot.py
+  - server/chains/note.py
+  - server/chains/summary.py
   - docs/known-gaps.md
 test_refs:
   - server/tests/test_voice.py::test_every_turn_and_interpreter_line_gets_the_one_constant_delivery_idr_006
@@ -46,6 +51,17 @@ test_refs:
   - server/tests/test_contracts.py::test_affect_in_words_adds_no_wire_field_idr_006
   - server/tests/test_trust_channel.py::test_worried_patient_label_reaches_the_controller_only_and_the_phrase_only_the_translation_idr_006
   - server/tests/test_trust_channel.py::test_speak_gate_speaks_the_worried_patient_relay_with_its_phrase_and_refuses_non_final_turns_idr_006
+  - server/tests/test_turn_graph.py::test_listed_phrase_that_undermines_a_stated_dose_fails_the_tone_check_idr_006
+  - server/tests/test_turn_graph.py::test_close_paraphrase_counts_as_the_frame_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_affect_phrase_on_a_physician_relay_is_never_final_idr_006
+  - server/tests/test_turn_graph.py::test_physician_who_says_sounding_is_not_mistaken_for_an_affect_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_reported_phrase_must_appear_once_and_not_on_a_calm_turn_idr_006
+  - server/tests/test_turn_graph.py::test_patient_turn_relayed_to_the_patient_carries_no_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_turn_result_keeps_the_phrase_off_the_wire_idr_006
+  - server/tests/test_grounded_checks.py::test_the_affect_phrase_is_left_out_of_every_source_idr_006
+  - server/tests/test_grounded_checks.py::test_without_affect_phrase_idr_006
+  - server/tests/test_note_summary_channel.py::test_the_affect_phrase_never_reaches_the_note_or_the_summary_idr_006
+  - server/tests/test_trust_channel.py::test_patient_turn_in_the_physicians_language_is_relayed_to_the_patient_without_a_phrase_idr_006
   - web/e2e/screen-manner.mjs
   - web/e2e/trust-view.mjs
 ---

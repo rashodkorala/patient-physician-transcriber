@@ -33,9 +33,16 @@ For a patient or companion turn whose affect is clearly not plain, the relay to 
 That phrase is spoken aloud in the room in the physician's language, so the patient and anyone else present can hear it.
 Because the shown text and the spoken text are the same, the phrase also appears inside the translation on the shared screen, on the patient's device, and in the record.
 The patient's manner and emotion never appear as a label anywhere but the physician's controller.
+The phrase is only ever for the physician: a patient who speaks the physician's language is relayed to themselves without it.
+The clinical note and the patient summary leave the phrase out, because it is the interpreter's reading of how the patient sounded, not something the patient said.
+The phrase is taken out of their sources by code, using the phrase the translate call reports, and their prompts also say to leave it out.
+If the live model ever wrote a phrase without reporting it, only the prompt rule would keep it out; that path is checked with a mocked model only.
 
 ## Not yet reviewed by native speakers
 
 How the affect phrase reads in the physician's language, and in the reporting frames used for each patient language pair, has not been reviewed by native speakers.
 The phrase is English-first in practice, and the fake model used in tests writes it in English only.
+The tone check is told that the same meaning in another language, or a close paraphrase such as "sounding anxious", counts as the one frame phrase.
+That instruction is unverified with a live model: every test of it uses a mocked tone check.
+The code check that stops a phrase on a physician relay reads English back-translations only; for other source languages it relies on the tone check.
 That review is an end-of-project task (`affect-in-words` task 7.1), run only when the project lead asks.
