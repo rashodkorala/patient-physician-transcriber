@@ -159,3 +159,6 @@ Code carries `@contract TurnResult` or `@contract TurnCaption` and `@implements 
   Recorded by Claude (agent) at rashodkorala's explicit request. The status stays accepted.
 - 2026-11-16, rashodkorala: amended ("Yes, treat as same"). In the time-of-day comparison, evening, night, and bedtime count as the same time of day, so "every night" agrees with "chaque soir" and with "at bedtime"; morning and noon stay distinct from them and from each other, so morning against night still does not match.
   Recorded by Claude (agent) at rashodkorala's explicit request. The status stays accepted.
+- 2026-11-16, rashodkorala: amended ("Yes, add the field"). A settled turn may carry private notes for the controller, as a list of short plain-text strings in a new controller-only field, for example that a relay was delivered although the speaker's gender was not stated (ADR-003).
+  The field goes to controller connections only, with the other controller-only turn analysis; it never reaches a screen or review connection, live or in `visit.state`, and it is not spoken, shown in a caption, or used as a source for the note or summary.
+  Recorded by Claude (agent) at rashodkorala's explicit request. The status stays accepted.
