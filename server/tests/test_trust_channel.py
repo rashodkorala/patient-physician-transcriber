@@ -506,6 +506,28 @@ def test_speak_gate_speaks_the_worried_patient_relay_with_its_phrase_and_refuses
     assert len(voice.said) == 1
 
 
+def test_patient_turn_in_the_physicians_language_is_relayed_to_the_patient_without_a_phrase_idr_006(kb):  # noqa: F811
+    """Review fix 4: the server tells the turn graph the relay is for the patient, so no phrase is spoken to them."""
+    model = ScriptedModel(
+        {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "trust": fake_model.trust}
+    )
+    with (
+        ConsentedClient(create_app(model=model, settings=SETTINGS, kb=kb)) as client,
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+    ):
+        ctl.receive_json()
+        submit(ctl, "patient", "en-CA", "I am scared of the needle.")
+        caption = drain_until(ctl, "turn.result")[-1]["payload"]
+        assert caption["status"] == "final" and caption["targetLanguage"] == "pa-IN"
+        assert WORRIED_PHRASE not in caption["translation"] and " says, " not in caption["translation"]
+        user = next(u for purpose, u in model.calls if purpose == "translate")
+        assert fake_model.field(user, "listener") == "patient"
+        # The same speaker in their own language is relayed to the physician, with the phrase.
+        submit(ctl, "patient", "pa-IN", WORRIED_PA)
+        caption = drain_until(ctl, "turn.result")[-1]["payload"]
+        assert caption["targetLanguage"] == "en-CA" and WORRIED_PHRASE in caption["translation"]
+
+
 # ---------- companion turns (CDR-008) ----------
 
 

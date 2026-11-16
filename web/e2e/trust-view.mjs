@@ -145,7 +145,14 @@ await check(!("trust" in late.state) && Array.isArray(late.state.signals), "a la
 // IDR-006: a worried patient's translation carries "sounding worried" in its frame, as spoken; past that, neither
 // screen names an emotion (no "sounds worried", no "Still worried", no label).
 const withoutPhrase = async (page) => (await page.locator("main").innerText()).toLowerCase().replaceAll("sounding worried", "");
-await check((await tv.locator("main").innerText()).includes("sounding worried"), "/screen shows the affect phrase inside a translation");
+const occurrences = (text) => text.split("sounding worried").length - 1;
+const translations = await tv.locator('[data-testid="caption"] div[lang="en-CA"] p').allInnerTexts();
+const inTranslations = translations.reduce((n, text) => n + occurrences(text), 0);
+await check(inTranslations > 0, "/screen shows the affect phrase inside a caption's translation element");
+await check(
+  occurrences(await tv.locator("main").innerText()) === inTranslations,
+  "and nowhere else on /screen",
+);
 await check(
   !(await withoutPhrase(patient)).includes("worried") && !(await withoutPhrase(tv)).includes("worried"),
   "/screen and /patient show no emotion label",

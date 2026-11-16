@@ -4,9 +4,9 @@ Translations are the source text tagged with the target language, with approved 
 swapped in, so numbers and units survive and the safety checks behave as they would with a faithful translation.
 Never used on stage: the server only selects it with TRANSLATOR=fake or without credentials.
 
-A patient or companion turn the fake reads as anything but calm opens with a reporting frame carrying one hedged
-affect phrase ("The patient says, sounding worried, ..."), as the live model is asked to (IDR-006); every other
-turn has no frame.
+A patient or companion turn relayed to the physician that the fake reads as anything but calm opens with a reporting
+frame carrying one hedged affect phrase ("The patient says, sounding worried, ..."), reported as `affect_phrase`, as
+the live model is asked to (IDR-006); every other turn has no frame.
 
 @implements EDR-002: Testing: pytest with mocked LLM, speaker-rated tone set, latency check
 @implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
@@ -83,7 +83,10 @@ def translate(user: str) -> Draft:
     tone = "reassuring" if re.search(r"reassur|not have|unlikely", text, re.IGNORECASE) else "respectful"
     physician = field(user, "speaker") == "physician"
     emotion = emotion_of(text)
-    frame = "" if physician else affect_frame(field(user, "speaker_name"), emotion)
+    # IDR-006: the phrase is only for the physician, about a patient or companion.
+    to_physician = not physician and field(user, "listener") == "physician"
+    phrase = AFFECT_PHRASES.get(emotion, "") if to_physician else ""
+    frame = affect_frame(field(user, "speaker_name"), phrase)
     return Draft(
         emotion=emotion,
         certainty="high",
@@ -93,6 +96,7 @@ def translate(user: str) -> Draft:
         back_translation=f"{frame}{text}",
         tone_tags=[tone],
         confidence=UNCLEAR_CONFIDENCE if UNCLEAR_MARKER in text else 0.95,
+        affect_phrase=phrase,
     )
 
 
@@ -106,9 +110,8 @@ def emotion_of(text: str) -> str:
     return "calm"
 
 
-def affect_frame(speaker_name: str, emotion: str) -> str:
-    """The opening frame with its one affect phrase for a patient or companion turn, or nothing when calm (IDR-006)."""
-    phrase = AFFECT_PHRASES.get(emotion)
+def affect_frame(speaker_name: str, phrase: str) -> str:
+    """The opening frame carrying the turn's one affect phrase, or nothing when there is no phrase (IDR-006)."""
     if not phrase:
         return ""
     return f"{speaker_name[:1].upper()}{speaker_name[1:]} says, {phrase}, "

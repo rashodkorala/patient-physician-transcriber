@@ -14,6 +14,7 @@ edits the model's text. The note is a checked draft; the physician remains its a
 @implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
 @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
 @implements ADR-006: LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
 @contract ClinicalNote (CDR-007)
 @see openspec/tdr/cdr/cdr-007-clinical-note-and-patient-summary.md
 """
@@ -117,6 +118,9 @@ Tag each sentence with exactly one provenance tag:
   and every cited source is a turn by that speaker;
 - interpreter_stated: the sentence only restates the interpreter's own lines;
 - ai_inference: anything you combined, concluded, or summarised across speakers.
+A spoken translation opens with the interpreter's reporting frame ("The patient says ..."). The frame is the
+interpreter's, not the speaker's: never restate it, or any reading of how a speaker sounded ("sounding worried"),
+as something the speaker said. Leave how a speaker sounded out of the note.
 Write every number as digits, and copy every dose, unit, frequency, and medication exactly as the sources give them.
 Never add a dose, number, or frequency that is not in the sources you cite. Do not guess at anything not said."""
 

@@ -96,6 +96,9 @@ class Draft(BaseModel):
     back_translation: str
     tone_tags: list[ToneTag]
     confidence: float
+    # IDR-006: the affect phrase exactly as written in translation, or empty. Code checks it is allowed and appears
+    # once, and keeps it so the record's generated texts can leave it out; it is never a wire field.
+    affect_phrase: str = ""
 
 
 class ToneCheck(BaseModel):
@@ -115,6 +118,9 @@ class TurnState(TypedDict, total=False):
     target: str
     text: str
     speaker_name: str
+    # Who the relay is for: the patient when the physician speaks; otherwise the physician, unless the speaker used
+    # the physician's language, when the relay goes to the patient (IDR-006: the affect phrase is for the physician).
+    listener: str
     listener_name: str | None
     recognition_confidence: float
     glossary: list[GlossaryEntry]
@@ -152,17 +158,20 @@ Rules:
 - Open the turn with one short frame naming the speaker as speaker_name gives it ("Dr. Thomas is saying",
   "your doctor is asking"), then speak to the listener as "you". Do not repeat the frame in every sentence.
   Write a name as it sounds, in the target language's script.
-- The frame may name the manner, once, as one adverb in the target language's natural form ("Dr. Thomas is
-  saying, gently, that ..."), only for gentle, serious, urgent, or apologetic, and only when the relayed words
-  alone would lose it. Never for plain, warm, reassuring, or encouraging (the caption label carries those), never
-  anywhere but the opening frame, and never in a way that changes an instruction, a certainty word, or a number.
-- For a patient or companion turn only, the frame names the speaker's emotion when you read it as anything but
-  calm, once, as one hedged phrase in the target language's natural form, so the physician hears how the speaker
-  sounded: worried as "sounding worried", embarrassed as "sounding embarrassed", in_pain as "sounding as if in
-  pain", relieved as "sounding relieved", and confused as "sounding confused" ("The patient says, sounding
-  worried, that ..."; "The patient's companion says, sounding embarrassed, that ..."). A calm turn gets no
-  phrase, and a physician turn never gets one. Never more than one phrase, never anywhere but the opening frame,
-  and never in a way that changes an instruction, a certainty word, a number, or a medication.
+- For a physician turn only, the frame may name the manner, once, as one adverb in the target language's natural
+  form ("Dr. Thomas is saying, gently, that ..."), only for gentle, serious, urgent, or apologetic, and only when
+  the relayed words alone would lose it. Never for plain, warm, reassuring, or encouraging (the patient's caption
+  label carries those), never anywhere but the opening frame, and never in a way that changes an instruction, a
+  certainty word, or a number.
+- A patient or companion frame never carries a manner adverb. When the listener is the physician, it names the
+  speaker's emotion when you read it as anything but calm, once, as one hedged phrase in the target language's
+  natural form, so the physician hears how the speaker sounded: worried as "sounding worried", embarrassed as
+  "sounding embarrassed", in_pain as "sounding as if in pain", relieved as "sounding relieved", and confused as
+  "sounding confused" ("The patient says, sounding worried, that ..."; "The patient's companion says, sounding
+  embarrassed, that ..."). A calm turn gets no phrase, a physician turn never gets one, and a turn whose listener
+  is the patient never gets one: the phrase is only ever for the physician. Never more than one phrase, never
+  anywhere but the opening frame, and never in a way that changes an instruction, a certainty word, a number, or a
+  medication.
 - Use indirect speech in every sentence, not only the first: the speaker is never "I" or "we" anywhere in your
   relay; say "they", "the doctor", or the name instead, and never quote them after a colon. For example, "We
   found it early. I will start you on a new medicine today." from the physician becomes "Dr. Thomas is saying
@@ -183,20 +192,30 @@ Rules:
 - Write every number as digits and never change numbers, doses, units, frequencies, dates, or medication names.
 - Translate meaning, not idioms.
 Then translate your relay back into the source language as back_translation, keeping its reporting frame.
-tone_tags describe the register of your relay. confidence (0 to 1) is how sure you are the meaning was kept."""
+tone_tags describe the register of your relay. confidence (0 to 1) is how sure you are the meaning was kept.
+affect_phrase is the affect phrase exactly as it appears in your translation (for example "sounding worried"), or
+an empty string when the relay has none."""
 
 TONE_SYSTEM = """You check an interpretation in a medical consultation.
+You are told who spoke (speaker: physician, patient, or companion) and who the relay is for (listener).
 The interpreter relays each utterance in reported speech that names the speaker, for example "Dr. Thomas is
 saying you should rest". That reporting frame, the change from first to third person, and a plain instruction
 ("rest") reported as "you should rest" are expected: never count them as a problem.
-The frame may also carry one manner adverb (gently, reassuringly, seriously, urgently, apologetically, warmly, or
-encouragingly) naming how the speaker spoke, as in "Dr. Thomas is saying, gently, that ...": any such adverb in
-the frame is expected and never a problem, whichever manner it names.
-For a patient or companion, the frame may instead carry one hedged phrase naming how the speaker sounded
-(sounding worried, sounding embarrassed, sounding as if in pain, sounding relieved, or sounding confused), as in
-"The patient says, sounding worried, that ...": one such phrase in the frame is expected and never a problem.
-An adverb or phrase in the frame describes the speaker, not the news: a relay whose seriousness or certainty
-changed still fails certainty_preserved, whatever the frame says.
+For a physician turn, the frame may also carry one manner adverb (gently, reassuringly, seriously, urgently,
+apologetically, warmly, or encouragingly) naming how the physician spoke, as in "Dr. Thomas is saying, gently,
+that ...": such an adverb in the frame is acceptable in itself, whichever manner it names.
+For a patient or companion turn whose listener is the physician, the frame may instead carry one hedged phrase
+naming how the speaker sounded, as in "The patient says, sounding worried, that ...": sounding worried, sounding
+embarrassed, sounding as if in pain, sounding relieved, or sounding confused. The same meaning in any language,
+or a close paraphrase such as "sounding anxious" or "seeming upset", counts as that phrase. One such phrase in the
+frame is acceptable in itself.
+Any other affect wording fails meaning_preserved, because it adds something the speaker did not say: a phrase
+about how the speaker sounded on a physician turn or on a turn whose listener is the patient, a manner adverb on a
+patient or companion turn, more than one adverb or phrase, or one outside the opening frame.
+An acceptable adverb or phrase describes the speaker, not the news, and still fails certainty_preserved when it
+makes the statement more or less certain or serious than the original, for example "sounding confused" in front
+of a dose the speaker stated plainly. A relay whose seriousness or certainty changed fails certainty_preserved,
+whatever the frame says.
 Compare the original utterance with the back-translation of the interpretation.
 meaning_preserved: every instruction, warning, condition, and question in the original is there, and nothing
 was added, such as advice or an answer the speaker did not give.
@@ -215,6 +234,7 @@ def _translate_user(state: TurnState) -> str:
     lines = [
         tag("speaker", state["speaker"]),
         tag("speaker_name", state["speaker_name"]),
+        tag("listener", state["listener"]),
         tag("listener_name", state.get("listener_name") or "unknown"),
         tag("source_language", LANGUAGE_NAMES[state["source"]]),
         tag("target_language", LANGUAGE_NAMES[state["target"]]),
@@ -317,6 +337,52 @@ def streak_after(status: str, reason: str | None, unclear_streak: int) -> int:
     return unclear_streak
 
 
+# ---------- affect phrase (IDR-006) ----------
+
+SOUNDING = re.compile(r"\bsounding\b", re.IGNORECASE)
+
+
+def affect_phrase_allowed(speaker: str, listener: str) -> bool:
+    """The affect phrase is only for the physician, about a patient or companion (IDR-006)."""
+    return speaker != "physician" and listener == "physician"
+
+
+def frame_problem(state: TurnState, draft: Draft) -> str | None:
+    """A deterministic check of the relay's affect phrase, or None when there is nothing wrong.
+
+    The phrase the model reports must appear exactly once in the translation, only on a non-calm patient or
+    companion turn relayed to the physician. Where no phrase is allowed, a back-translation that says "sounding" more
+    often than the original did has added one: a physician who says "sounding" keeps it in the original too, so the
+    count, not the word, is the signal. Back-translations are in the source language, so this guard reads English
+    sources only; elsewhere the tone check is told the same rule.
+    """
+    phrase = draft.affect_phrase.strip()
+    allowed = affect_phrase_allowed(state["speaker"], state["listener"])
+    if phrase and not allowed:
+        return "An affect phrase is only for a patient or companion turn relayed to the physician; remove it."
+    if phrase and draft.emotion == "calm":
+        return "A calm turn carries no affect phrase; remove it."
+    if phrase and draft.translation.count(phrase) != 1:
+        return f'The affect phrase "{phrase}" must appear exactly once, in the opening frame.'
+    if not allowed and len(SOUNDING.findall(draft.back_translation)) > len(SOUNDING.findall(state["text"])):
+        return "The relay adds a phrase about how the speaker sounded, which this turn must not carry; remove it."
+    return None
+
+
+def without_affect_phrase(translation: str, phrase: str) -> str:
+    """The translation with its affect phrase taken out of the frame, for texts that restate what was said."""
+    phrase = phrase.strip()
+    if not phrase or phrase not in translation:
+        return translation
+    if translation.startswith(f"{phrase}, "):
+        rest = translation[len(phrase) + 2 :]
+        return rest[:1].upper() + rest[1:]
+    for found in (f", {phrase},", f"{phrase}, ", f", {phrase}", phrase):
+        if found in translation:
+            return translation.replace(found, "", 1)
+    return translation
+
+
 # ---------- graph ----------
 
 
@@ -370,9 +436,20 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
         tone = await model.parse(
             purpose="tone_check",
             system=TONE_SYSTEM,
-            user="\n".join([tag("original", state["text"]), tag("back_translation", draft.back_translation)]),
+            user="\n".join(
+                [
+                    tag("speaker", state["speaker"]),
+                    tag("listener", state["listener"]),
+                    tag("original", state["text"]),
+                    tag("back_translation", draft.back_translation),
+                ]
+            ),
             schema=ToneCheck,
         )
+        # IDR-006: a misplaced affect phrase fails like a meaning change, whatever the tone check said.
+        problem = frame_problem(state, draft)
+        if problem:
+            tone = tone.model_copy(update={"meaning_preserved": False, "issue": problem})
         recognition = state.get("recognition_confidence") or 1.0
         confidence = min(draft.confidence, recognition)
         failures = []
@@ -450,10 +527,12 @@ class TurnPipeline:
         patient_name: str | None = None,
         emit: Emit | None = None,
         claim_injection: ClaimInjection | None = None,
+        listener: str | None = None,
     ) -> tuple[TurnResult, str | None]:
-        # The listener is the patient when the physician speaks, and the physician otherwise.
+        # The listener is the patient when the physician speaks, and the physician otherwise, unless the caller
+        # says a patient or companion turn is relayed to the patient (spoken in the physician's language).
         names = {"physician": physician_name, "patient": patient_name}
-        listener = "patient" if speaker == "physician" else "physician"
+        listener = "patient" if speaker == "physician" else (listener or "physician")
         state: dict[str, Any] = await self.graph.ainvoke(
             {
                 "turn_id": turn_id,
@@ -462,6 +541,7 @@ class TurnPipeline:
                 "target": target,
                 "text": text,
                 "speaker_name": names.get(speaker) or UNNAMED[speaker],
+                "listener": listener,
                 "listener_name": names[listener],
                 "recognition_confidence": recognition_confidence,
                 "attempts": 0,
@@ -498,4 +578,5 @@ class TurnPipeline:
             attempts=state["attempts"],
             unclear_streak=streak_after(status, reason, unclear_streak),
         )
+        result._affect_phrase = draft.affect_phrase.strip()
         return result, reason

@@ -16,6 +16,7 @@ chained (CDR-007). A language whose units critical_values.py does not know is re
 @implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
 @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
 @implements ADR-006: LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
 @contract PatientSummary (CDR-007)
 @contract SummaryCheck (CDR-007)
 @see openspec/tdr/cdr/cdr-007-clinical-note-and-patient-summary.md
@@ -191,7 +192,9 @@ Say what the patient was told to do: every medicine, dose, and how often to take
 Every sentence cites one or more sources by kind, id, and version exactly as the sources give them.
 Write every number as digits, and copy every dose, unit, and frequency exactly as the patient heard it, in the
 words of the spoken translation. Never add a number, dose, or frequency that is not in the sources, and never leave
-out a dose the physician gave. Do not add advice, explanation, or reassurance that was not given."""
+out a dose the physician gave. Do not add advice, explanation, or reassurance that was not given.
+Never say how the patient sounded or felt as the interpreter described it ("sounding worried"): a spoken translation
+opens with the interpreter's reporting frame, which is never part of what anyone said."""
 
 
 def _user(snapshot: Snapshot, language: str, pinned: list[str]) -> str:

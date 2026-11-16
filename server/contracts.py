@@ -12,6 +12,7 @@
 @implements TDM-005: Hidden record-tamper control for the demo
 @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
 @implements IDR-005: Manner vocabulary and voice delivery
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
 @contract ws:/ws/visit
 @contract TurnResult
 @contract TurnCaption
@@ -28,7 +29,7 @@
 
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
 if TYPE_CHECKING:  # the chains import this module, so their result types are named for type checking only
@@ -143,6 +144,13 @@ class TurnResult(Wire):
     manner: Manner = "plain"
     # ADR-003 and CDR-002: the speaker's unclear streak after this turn; controller only, never in TurnCaption.
     unclear_streak: int = Field(default=0, ge=0)
+    # IDR-006: the affect phrase inside `translation`, kept server-side so the clinical note and patient summary can
+    # leave it out. A private attribute, so it is never a field and never on the wire.
+    _affect_phrase: str = PrivateAttr(default="")
+
+    @property
+    def affect_phrase(self) -> str:
+        return self._affect_phrase
 
 
 class TurnCaption(Wire):

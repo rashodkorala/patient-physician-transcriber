@@ -9,12 +9,17 @@ interpreter's own lines (CDR-003), which are not chain entries. It holds:
 - the interpreter's own lines, citable only as `interpreter_stated`;
 - the ids of blocked, unclear, and escalated turns, as gaps, without any text.
 
+A patient or companion turn's affect phrase ("sounding worried", IDR-006) is taken out of its translation here,
+using the phrase the turn graph recorded: it is the interpreter's reading of how the speaker sounded, so no
+generation may restate it as something the speaker said.
+
 Only the fields named here are copied out of an entry, so nothing private can reach a model even if an entry
 carried it: no emotion, certainty, back-translation, confidence, nudge, injection or tamper state, and no
 unspoken translation. Consent, confirmation, explain-back, interpreter, and summary entries are never sources.
 
 @implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
 @implements CDR-006: Record chain entries, review corrections, and tamper control
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
 @see openspec/tdr/adr/adr-011-grounded-generation-checked-by-code.md
 """
 
@@ -24,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from contracts import InterpreterLine
+from graph.turn_graph import without_affect_phrase
 
 SourceKind = Literal["turn", "interpreter_line"]
 ORIGINAL = "original"
@@ -123,12 +129,15 @@ def freeze(
     head_hash: str,
     entries: Sequence[Mapping[str, Any]],
     interpreter_lines: Iterable[InterpreterLine] = (),
+    affect_phrases: Mapping[str, str] | None = None,
 ) -> Snapshot:
     """The snapshot of a record chain, taken when a generation starts.
 
     `entries` are the CDR-006 `RecordEntry` payloads oldest first, as stored in the chain (for example
-    `[e.payload for e in chain.entries]`), and `head_hash` is the chain head at that moment.
+    `[e.payload for e in chain.entries]`), and `head_hash` is the chain head at that moment. `affect_phrases` maps
+    a turn or amendment id to the affect phrase in its translation, which the source leaves out (IDR-006).
     """
+    phrases = affect_phrases or {}
     originals: dict[str, SourceTurn] = {}
     order: list[str] = []
     gaps: list[str] = []
@@ -151,7 +160,7 @@ def freeze(
                 source_language=str(body.get("sourceLanguage")),
                 source_text=str(body.get("sourceText", "")),
                 target_language=str(body.get("targetLanguage")),
-                translation=str(body.get("translation")),
+                translation=without_affect_phrase(str(body.get("translation")), phrases.get(turn_id, "")),
                 critical_values=_values(body.get("criticalValues")),
                 readback_confirmed=bool(body.get("readbackConfirmed", False)),
             )
@@ -162,15 +171,16 @@ def freeze(
             current = originals.get(segment_id)
             if current is None:
                 continue
+            version = str(body.get("amendmentId") or entry.get("entryId"))
             originals[segment_id] = SourceTurn(
                 turn_id=segment_id,
-                version=str(body.get("amendmentId") or entry.get("entryId")),
+                version=version,
                 speaker=current.speaker,
                 speaker_name=current.speaker_name,
                 source_language=current.source_language,
                 source_text=str(body.get("sourceText", "")),
                 target_language=current.target_language,
-                translation=str(body.get("translation", "")),
+                translation=without_affect_phrase(str(body.get("translation", "")), phrases.get(version, "")),
                 critical_values=_values(body.get("criticalValues")),
                 readback_confirmed=current.readback_confirmed,
             )

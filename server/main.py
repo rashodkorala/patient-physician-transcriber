@@ -682,6 +682,9 @@ def create_app(
                 patient_name=visit.patient_name,
                 emit=lambda stage: status(turn_id, stage),
                 claim_injection=claim_injection if cmd.speaker == "physician" else None,
+                # IDR-006: a patient or companion turn in the physician's language is relayed to the patient, so it
+                # carries no affect phrase; the phrase is only ever for the physician.
+                listener="physician" if target == physician else "patient",
             )
         except Exception as exc:  # refusal or API failure: nothing is spoken
             log.exception("turn pipeline failed")

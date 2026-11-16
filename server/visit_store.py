@@ -14,6 +14,7 @@
 @implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
 @implements MDD-005: Trust across the barrier
 @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
 @contract ws:/ws/visit
 @see openspec/tdr/adr/adr-007-in-memory-state-websocket.md
 @see openspec/tdr/cdr/cdr-006-record-entries-review-corrections-and-tamper.md
@@ -295,10 +296,24 @@ class Visit:
         self.trust.insert(bisect.bisect_right(self.trust, key(update), key=key), update)
 
     def freeze(self) -> sources.Snapshot:
-        """ADR-011's frozen sources: the chain as stored now, and the interpreter's own lines."""
+        """ADR-011's frozen sources: the chain as stored now, and the interpreter's own lines.
+
+        IDR-006: each turn's and correction's affect phrase is handed over too, so the sources leave it out; it is
+        the interpreter's reading of how the speaker sounded, never something they said.
+        """
         return sources.freeze(
-            self.chain.head_hash, [e.payload for e in self.chain.entries], self.interpreter_lines.values()
+            self.chain.head_hash,
+            [e.payload for e in self.chain.entries],
+            self.interpreter_lines.values(),
+            affect_phrases=self.affect_phrases(),
         )
+
+    def affect_phrases(self) -> dict[str, str]:
+        """The affect phrase of every turn and applied correction that has one, by turn or amendment id."""
+        phrases = {turn_id: r.result.affect_phrase for turn_id, r in self.turns.items() if r.result}
+        for segment in self.segments.values():
+            phrases.update({a.amendment_id: a.analysis.affect_phrase for a in segment.amendments})
+        return {key: phrase for key, phrase in phrases.items() if phrase}
 
     def explain_back_open(self) -> bool:
         return self.explain_back is not None and self.explain_back.state in ("listening", "checking")
