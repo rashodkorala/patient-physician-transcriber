@@ -26,8 +26,28 @@ ai_context:
     - "The critical value check and the tone check behave as before; the tone check accepts the frame phrase"
     - "No wire field for manner or emotion is added to any public projection"
 affects: [server/, web/e2e/, docs/]
-implementation_refs: []
-test_refs: []
+implementation_refs:
+  - server/voice.py
+  - server/main.py
+  - server/graph/turn_graph.py
+  - server/fake_model.py
+  - docs/known-gaps.md
+test_refs:
+  - server/tests/test_voice.py::test_every_turn_and_interpreter_line_gets_the_one_constant_delivery_idr_006
+  - server/tests/test_voice.py::test_tag_leads_and_text_brackets_cannot_act_as_tags
+  - server/tests/test_turn_graph.py::test_prompts_define_the_affect_phrase_rule_idr_006
+  - server/tests/test_turn_graph.py::test_worried_patient_turn_has_exactly_one_phrase_in_the_frame_idr_006
+  - server/tests/test_turn_graph.py::test_calm_patient_turn_has_no_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_companion_turn_names_the_companion_and_carries_one_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_physician_turn_never_gets_an_affect_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_frame_phrase_passes_the_tone_check_idr_006
+  - server/tests/test_turn_graph.py::test_phrase_that_makes_the_statement_more_certain_fails_the_tone_check_idr_006
+  - server/tests/test_turn_graph.py::test_worried_patient_dose_keeps_its_value_and_the_check_still_blocks_a_change_idr_006
+  - server/tests/test_contracts.py::test_affect_in_words_adds_no_wire_field_idr_006
+  - server/tests/test_trust_channel.py::test_worried_patient_label_reaches_the_controller_only_and_the_phrase_only_the_translation_idr_006
+  - server/tests/test_trust_channel.py::test_speak_gate_speaks_the_worried_patient_relay_with_its_phrase_and_refuses_non_final_turns_idr_006
+  - web/e2e/screen-manner.mjs
+  - web/e2e/trust-view.mjs
 ---
 
 # MDD-006: Affect in words: a constant interpreter voice, with the patient's affect carried as one hedged phrase in the reporting frame

@@ -41,7 +41,7 @@ test_refs:
   - server/tests/test_trust.py
   - server/tests/test_trust_channel.py
   - server/tests/test_turn_graph.py::test_manner_is_read_in_the_translate_call_and_labels_a_physician_turn_idr_005
-  - server/tests/test_voice.py::test_every_manner_has_a_delivery_and_physician_turns_follow_it_idr_005
+  - server/tests/test_voice.py::test_every_turn_and_interpreter_line_gets_the_one_constant_delivery_idr_006
   - web/e2e/patient-voice.mjs
   - web/e2e/trust-view.mjs
   - web/e2e/screen-manner.mjs

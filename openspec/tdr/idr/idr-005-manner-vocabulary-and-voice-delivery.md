@@ -42,8 +42,7 @@ test_refs:
   - server/tests/test_turn_graph.py::test_manner_is_read_in_the_translate_call_and_labels_a_physician_turn_idr_005
   - server/tests/test_turn_graph.py::test_patient_turn_has_a_private_manner_and_no_caption_label_idr_005
   - server/tests/test_turn_graph.py::test_prompts_define_manner_the_frame_rule_and_the_tone_check_allowance_idr_005
-  - server/tests/test_voice.py::test_every_manner_has_a_delivery_and_physician_turns_follow_it_idr_005
-  - server/tests/test_voice.py::test_patient_and_companion_turns_convey_the_speakers_emotion_idr_005
+  - server/tests/test_voice.py::test_every_turn_and_interpreter_line_gets_the_one_constant_delivery_idr_006
   - server/tests/test_trust_channel.py::test_physician_caption_carries_manner_and_patient_caption_never_does_cdr_008
   - web/lib/i18n.test.mjs
   - web/e2e/screen-manner.mjs

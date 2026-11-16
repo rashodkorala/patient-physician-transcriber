@@ -69,8 +69,10 @@ TDRs: MDD-006
 
 TDRs: MDD-006, IDR-006
 
-- [ ] 6.1 Annotate the changed code with `@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery` and update the superseded `@implements IDR-005` voice-delivery notes; verify `python3 scripts/check_tdr.py` passes with no annotation pointing to a non-accepted record
-- [ ] 6.2 Fill `implementation_refs` and `test_refs` in MDD-006 and IDR-006 before archiving; verify the lists name real files and tests
+- [x] 6.1 Annotate the changed code with `@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery` and update the superseded `@implements IDR-005` voice-delivery notes; verify `python3 scripts/check_tdr.py` passes with no annotation pointing to a non-accepted record
+  Done 2026-11-16: `server/voice.py`, `server/main.py`, `server/graph/turn_graph.py`, and `server/fake_model.py` carry `@implements IDR-006` (and the first three `@implements MDD-006`); the `@implements IDR-005` and `MDD-005` notes in `server/voice.py` are replaced, since the voice no longer follows manner or emotion. `python3 scripts/check_tdr.py` prints OK.
+- [x] 6.2 Fill `implementation_refs` and `test_refs` in MDD-006 and IDR-006 before archiving; verify the lists name real files and tests
+  Done 2026-11-16: `implementation_refs` and `test_refs` are filled in MDD-006 and IDR-006, and every listed file and test was checked to exist; the two removed voice-delivery tests in the test refs of IDR-005 and MDD-005 are replaced by the IDR-006 constant-delivery test.
 
 ## 7. End of project (deferred, run only when the project lead asks)
 
