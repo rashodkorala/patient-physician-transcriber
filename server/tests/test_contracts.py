@@ -188,6 +188,33 @@ def test_caption_never_carries_private_fields_cdr_002():
         TurnCaption.model_validate({**load("turn_caption_final.json"), "emotion": "worried"})
 
 
+def test_affect_in_words_adds_no_wire_field_idr_006():
+    """The affect phrase lives inside `translation`; the turn result, the caption, and a trust update keep the field
+    sets they had before affect-in-words (IDR-006, CDR-002, CDR-008)."""
+    common = {"turn_id", "speaker", "source_language", "target_language", "source_text", "translation"}
+    common |= {"glossary_used", "critical_values", "status", "manner"}
+    assert set(TurnResult.model_fields) == common | {
+        "back_translation",
+        "tone_tags",
+        "emotion",
+        "certainty",
+        "confidence",
+        "attempts",
+        "unclear_streak",
+    }
+    assert set(TurnCaption.model_fields) == common | {"tone_label", "readback_confirmed"}
+    assert set(TrustUpdate.model_fields) == {
+        "turn_id",
+        "speaker",
+        "emotion",
+        "manner",
+        "reassurance_landed",
+        "signal",
+        "cue",
+        "at",
+    }
+
+
 @pytest.mark.parametrize("status", ["blocked", "escalated"])
 def test_blocked_and_escalated_captions_hide_translation_cdr_002(status):
     result = TurnResult.model_validate(load("turn_result.json")).model_copy(update={"status": status})

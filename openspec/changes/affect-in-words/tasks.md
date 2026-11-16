@@ -37,9 +37,12 @@ TDRs: MDD-006, IDR-006, ADR-004, ADR-006, CDR-002, EDR-002
 
 TDRs: MDD-006, IDR-006, CDR-008, CDR-002, ADR-007
 
-- [ ] 3.1 Verify no new wire field exists: a contract test asserts `TurnResult`, `TurnCaption`, and a trust update have the same field sets as before, and `npm run check:contracts` passes
-- [ ] 3.2 Verify in `server/tests/test_trust_channel.py` that for a worried patient turn the controller still receives manner and emotion as a label, and the shared screen and patient device projections carry no `manner` or `emotion` field or label, with the phrase present only inside `translation`
-- [ ] 3.3 Verify the speak gate speaks the settled translation text, including the frame phrase, in the physician's language only; a channel test shows the speak-by-id text for a worried patient turn contains the phrase and is refused for any non-final turn as before
+- [x] 3.1 Verify no new wire field exists: a contract test asserts `TurnResult`, `TurnCaption`, and a trust update have the same field sets as before, and `npm run check:contracts` passes
+  Done 2026-11-16: `test_affect_in_words_adds_no_wire_field_idr_006` in `server/tests/test_contracts.py` pins the field sets of `TurnResult`, `TurnCaption`, and `TrustUpdate` as they were before this change; `npm run check:contracts` passes and leaves `web/lib/generated/contract-fixtures.ts` unchanged.
+- [x] 3.2 Verify in `server/tests/test_trust_channel.py` that for a worried patient turn the controller still receives manner and emotion as a label, and the shared screen and patient device projections carry no `manner` or `emotion` field or label, with the phrase present only inside `translation`
+  Done 2026-11-16: `test_worried_patient_label_reaches_the_controller_only_and_the_phrase_only_the_translation_idr_006`: the controller's `turn.analysis` and `trust.update` carry emotion worried and manner plain; every event the screen and the review device receive up to the turn's `record.integrity` has no manner or emotion value, and "sounding worried" appears once, only at `.translation`.
+- [x] 3.3 Verify the speak gate speaks the settled translation text, including the frame phrase, in the physician's language only; a channel test shows the speak-by-id text for a worried patient turn contains the phrase and is refused for any non-final turn as before
+  Done 2026-11-16: `test_speak_gate_speaks_the_worried_patient_relay_with_its_phrase_and_refuses_non_final_turns_idr_006`: the speak gate hands the voice the settled translation, phrase included, in `en-CA` only, and returns 404 for unclear, escalated, and blocked worried turns.
 
 ## 4. End to end
 
