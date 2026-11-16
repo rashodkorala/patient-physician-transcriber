@@ -108,6 +108,10 @@ For a patient or companion turn whose affect is clearly not plain, the spoken re
 7. **Phrase source and visibility (project lead's answers, 2026-11-16).**
    For patient and companion turns the phrase is driven by `emotion`, not `manner`.
    The phrase stays visible in the caption translation text: spoken text and shown text are the same, with no public and private text split.
+8. **Refinements after the live run (project lead's verdict, 2026-11-16).**
+   (a) When the speaker's own words already state the feeling, the relay carries no affect phrase: the words carry the feeling, and a phrase beside them doubles it ("sounding worried, that they are very worried").
+   (b) "Sounding frightened" joins the phrases, for a patient or companion whose emotion is fear, so that fear is not weakened to "sounding worried".
+   Decision 2 stands otherwise: at most one hedged phrase, in the reporting frame only.
 
 ## Alternatives Considered
 
@@ -140,3 +144,6 @@ Code carries `@implements MDD-006: Affect in words`.
   Recorded by Claude (agent) at rashodkorala's explicit request.
   His answers to the design's Open Questions: (1) the affect phrase stays visible in the caption translation text, so spoken and shown text are the same and there is no public and private text split; (2) for patient and companion turns the phrase is driven by `emotion`, not `manner`; (3) certainty steadiness in the voice is removed too, so certainty is carried by the words only; (4) interpreter lines do not keep a separate warm delivery and use the same single constant delivery as turn relays, so there is one delivery everywhere.
   He also decided that MDD-005, IDR-005, and ADR-010 are amended by reference and not superseded; their status stays accepted.
+- 2026-11-16, rashodkorala: Accepted two refinements from the live run of 16 November 2026 ("accept both affect phrase refinements"), now decision 8: no affect phrase when the speaker's own words already state the feeling, and "sounding frightened" added to the phrases.
+  Recorded by Claude (agent) at rashodkorala's explicit request.
+  The status stays accepted; IDR-006's phrase mechanics follow this decision and are to be brought in line when the refinements are built.
