@@ -241,6 +241,7 @@ function ServicesLine({ services }: { services: Services }) {
 const EMOTION_TEXT: Record<Emotion, string> = {
   calm: "sounds calm",
   worried: "sounds worried",
+  frightened: "sounds frightened",
   embarrassed: "sounds embarrassed",
   in_pain: "sounds in pain",
   relieved: "sounds relieved",

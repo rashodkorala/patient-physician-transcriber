@@ -31,7 +31,7 @@ export type PatientLanguage = "pa-IN" | "fr-CA" | "si-LK" | "ta-LK";
 export type Speaker = "patient" | "physician" | "companion";
 export type ToneTag = "reassuring" | "respectful" | "empathetic" | "neutral" | "urgent" | "uncertain";
 export type ToneLabel = "respectful" | "reassuring" | "empathetic" | "neutral";
-export type Emotion = "calm" | "worried" | "embarrassed" | "in_pain" | "relieved" | "confused";
+export type Emotion = "calm" | "worried" | "frightened" | "embarrassed" | "in_pain" | "relieved" | "confused";
 /** IDR-005: how a turn was said, read from the words; plain is the default. */
 export type Manner = "plain" | "warm" | "reassuring" | "gentle" | "serious" | "urgent" | "apologetic" | "encouraging";
 export const MANNERS: Manner[] = ["plain", "warm", "reassuring", "gentle", "serious", "urgent", "apologetic", "encouraging"];

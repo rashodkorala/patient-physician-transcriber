@@ -46,7 +46,7 @@ Speaker = Literal["patient", "physician", "companion"]
 SPEAKERS: tuple[Speaker, ...] = ("patient", "physician", "companion")
 ToneTag = Literal["reassuring", "respectful", "empathetic", "neutral", "urgent", "uncertain"]
 ToneLabel = Literal["respectful", "reassuring", "empathetic", "neutral"]
-Emotion = Literal["calm", "worried", "embarrassed", "in_pain", "relieved", "confused"]
+Emotion = Literal["calm", "worried", "frightened", "embarrassed", "in_pain", "relieved", "confused"]
 # IDR-005: how a turn was said, read from the words; plain is the default.
 Manner = Literal["plain", "warm", "reassuring", "gentle", "serious", "urgent", "apologetic", "encouraging"]
 # CDR-008: the patient's own signals during the visit.
