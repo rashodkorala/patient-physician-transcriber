@@ -10,7 +10,7 @@ proposed_by: agent
 category: architecture
 related_decisions: [mdd-001, mdd-003, adr-002, adr-004, adr-006, cdr-002, cdr-005, cdr-006, cdr-007, idr-003]
 related_specs: [demo-consultation-flow]
-related_changes: [demo-night-mvp, trust-across-the-barrier]
+related_changes: [demo-night-mvp, trust-across-the-barrier, affect-in-words]
 ai_context:
   implementation_priorities:
     - "Build every generation from one frozen source set taken from the record chain, never from live mutable state"
@@ -139,3 +139,4 @@ Tests with the fake model cover each row of the check table, the explain-back co
 - 2026-11-09, Claude (agent): Revised to state rashodkorala's answers, relayed by the supervising session: explain-back runs on Sonnet 5.5, decided here with no ADR-006 edit, and a summary that leaves out a confirmed dose is refused. Still proposed; awaiting human review.
 - 2026-11-09, rashodkorala: Accepted, with the supervising session's recommended answers to the open questions ("yes to all, merge and push, accept with your recommendations"). Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-16, rashodkorala: Extended to the affect-in-words change, which keeps the interpreter's affect phrase out of the note and summary sources ("Yes, add it", in session). Recorded by Claude (agent) at rashodkorala's explicit request.
