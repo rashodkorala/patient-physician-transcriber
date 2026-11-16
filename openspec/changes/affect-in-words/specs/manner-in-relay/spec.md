@@ -9,7 +9,7 @@ The interpreter's voice stays the same for every turn and every interpreter line
 
 ### Requirement: Manner in the interpreter's voice
 The system SHALL speak every turn, physician, patient, and companion, and every interpreter line (introduction, name question, or signal line), in one constant voice delivery that does not vary by manner, emotion, certainty, or kind of line.
-The system SHALL express a patient or companion turn's affect in words: when the speaker's affect is clearly not plain, the spoken relay to the physician SHALL carry exactly one hedged affect phrase inside the reporting frame only, and a plain turn SHALL carry none.
+The system SHALL express a patient or companion turn's affect in words: when the speaker's affect is clearly not plain and their own words do not already state the feeling, the spoken relay to the physician SHALL carry exactly one hedged affect phrase inside the reporting frame only; a plain turn SHALL carry none, and a turn whose words already state the feeling SHALL carry none, because those words carry it.
 A physician turn SHALL keep the existing reporting-frame adverb rule and SHALL carry no affect phrase.
 A patient or companion turn SHALL carry no manner adverb, and a turn relayed to the patient SHALL carry no affect phrase: the phrase is only ever for the physician.
 
@@ -22,12 +22,20 @@ A patient or companion turn SHALL carry no manner adverb, and a turn relayed to 
 - **THEN** it is spoken in the same constant delivery as a turn relay, with no separate warm delivery
 
 #### Scenario: Worried patient conveyed
-- **WHEN** a worried patient turn is relayed to the physician
+- **WHEN** a patient turn that sounds worried, though its words do not say so, is relayed to the physician
 - **THEN** the relay opens with a frame such as "The patient says, sounding worried, ...", the voice delivery is the constant one, and there is exactly one affect phrase
 
 #### Scenario: Companion turn
-- **WHEN** a companion's turn whose affect is clearly embarrassed is relayed to the physician
+- **WHEN** a companion's turn whose affect is clearly embarrassed, though its words do not say so, is relayed to the physician
 - **THEN** the frame names the companion and carries one hedged phrase such as "sounding embarrassed"
+
+#### Scenario: Feeling already stated in the patient's words
+- **WHEN** a patient says "I am very worried" and the turn is relayed to the physician
+- **THEN** the relay keeps "they are very worried" and carries no affect phrase, so the feeling is said once, while the controller's label still reads worried
+
+#### Scenario: Frightened patient
+- **WHEN** a patient asks whether they will die as their mother did, without saying they are afraid, and is read as frightened
+- **THEN** the relay to the physician opens with a frame such as "The patient says, sounding frightened, ...", and the controller's label reads frightened
 
 #### Scenario: Plain patient turn
 - **WHEN** a patient turn without marked feeling is relayed to the physician
@@ -79,6 +87,10 @@ The system SHALL keep every instruction, certainty, and critical value unchanged
 #### Scenario: Feeling stated in the speaker's own words
 - **WHEN** a patient's own words state a feeling, such as "I am really worried", and the relay keeps those words
 - **THEN** the tone check treats them as part of what the patient said, never as an added affect phrase, and a turn relayed to the patient that keeps them is not escalated for them
+
+#### Scenario: Doubled feeling
+- **WHEN** a relay's frame carries an affect phrase and the relay also keeps the patient's own words for the feeling, as in "sounding worried, that they are very worried"
+- **THEN** the tone check fails the relay as doubled, and the same relay without the phrase passes
 
 #### Scenario: Paraphrased or translated phrase
 - **WHEN** the back-translation of a patient relay to the physician carries one close paraphrase of an affect phrase, such as "sounding anxious", or the same meaning in another language
