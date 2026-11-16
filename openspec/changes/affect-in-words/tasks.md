@@ -48,9 +48,12 @@ TDRs: MDD-006, IDR-006, CDR-008, CDR-002, ADR-007
 
 TDRs: MDD-006, IDR-006, CDR-008, EDR-002
 
-- [ ] 4.1 Update `web/e2e/screen-manner.mjs`: keep the physician manner-label checks; change the patient section so a worried patient turn shows no manner or emotion label on `/screen`, and the caption's translation carries exactly one affect phrase inside its opening frame; a plain patient turn shows none; verify `node e2e/screen-manner.mjs` passes on a fresh fake-model stack
-- [ ] 4.2 Check `web/e2e/week2.mjs`, `web/e2e/patient-voice.mjs`, `web/e2e/trust-view.mjs`, and `web/e2e/week1.mjs` for any assertion that depends on a per-emotion voice or on the old patient caption text, and adjust; verify each passes on the fake-model stack, with ports checked first and only own processes stopped
-- [ ] 4.3 Check that the controller still shows the patient's emotion label in `web/e2e/trust-view.mjs` and that `/screen` and `/patient` still carry no emotion label there; verify the script passes
+- [x] 4.1 Update `web/e2e/screen-manner.mjs`: keep the physician manner-label checks; change the patient section so a worried patient turn shows no manner or emotion label on `/screen`, and the caption's translation carries exactly one affect phrase inside its opening frame; a plain patient turn shows none; verify `node e2e/screen-manner.mjs` passes on a fresh fake-model stack
+  Done 2026-11-16: the physician label checks are kept; a worried patient caption has no manner or emotion on the wire or on `/screen`, its translation carries exactly one affect phrase, at the start of its opening frame, shown on `/screen` as spoken, with no emotion word outside the translation; a plain patient caption has none. `node e2e/screen-manner.mjs` passes on a fresh fake-model stack (server :8620, web build :3620).
+- [x] 4.2 Check `web/e2e/week2.mjs`, `web/e2e/patient-voice.mjs`, `web/e2e/trust-view.mjs`, and `web/e2e/week1.mjs` for any assertion that depends on a per-emotion voice or on the old patient caption text, and adjust; verify each passes on the fake-model stack, with ports checked first and only own processes stopped
+  Done 2026-11-16: `week1.mjs`, `week2.mjs`, and `patient-voice.mjs` needed no change (their patient turns are calm, or their checks do not read the patient caption's text); `trust-view.mjs`'s check that `/screen` and `/patient` show no "worried" now allows the phrase inside a translation and also checks for no `data-emotion` attribute. All four pass on a fresh fake-model stack, with ports 8620 and 3620 checked free first and only this run's own processes stopped.
+- [x] 4.3 Check that the controller still shows the patient's emotion label in `web/e2e/trust-view.mjs` and that `/screen` and `/patient` still carry no emotion label there; verify the script passes
+  Done 2026-11-16: `trust-view.mjs` still checks that the controller's trust view reads the patient as worried and "sounds worried", and now that `/screen` shows the phrase only inside a translation and neither `/screen` nor `/patient` shows an emotion label or attribute; it passes.
 
 ## 5. Known gaps and documents
 
