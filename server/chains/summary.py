@@ -17,6 +17,7 @@ chained (CDR-007). A language whose units critical_values.py does not know is re
 @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
 @implements ADR-006: LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary
 @implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
+@implements MDD-004: Mediator voice: the interpreter speaks as a person between the parties, in reported speech
 @contract PatientSummary (CDR-007)
 @contract SummaryCheck (CDR-007)
 @see openspec/tdr/cdr/cdr-007-clinical-note-and-patient-summary.md
@@ -194,7 +195,9 @@ Write every number as digits, and copy every dose, unit, and frequency exactly a
 words of the spoken translation. Never add a number, dose, or frequency that is not in the sources, and never leave
 out a dose the physician gave. Do not add advice, explanation, or reassurance that was not given.
 Never say how the patient sounded or felt as the interpreter described it ("sounding worried"): a spoken translation
-opens with the interpreter's reporting frame, which is never part of what anyone said."""
+opens with the interpreter's reporting frame, which is never part of what anyone said.
+Never guess anyone's gender from their name. Speak to the patient as "you", and where the language needs a gender
+for someone else, use their name, their role, or a respectful form that avoids it."""
 
 
 def _user(snapshot: Snapshot, language: str, pinned: list[str]) -> str:
