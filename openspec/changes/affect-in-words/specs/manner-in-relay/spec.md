@@ -72,6 +72,14 @@ The system SHALL keep every instruction, certainty, and critical value unchanged
 - **WHEN** a patient states a dose plainly and the relay's frame says "sounding confused"
 - **THEN** the tone check fails the relay, although the same phrase is acceptable on a turn where the patient said they were unsure
 
+#### Scenario: Listed phrase beside a plainly stated value
+- **WHEN** a patient says they are confused about one thing and states a dose plainly in the same turn, and the relay's frame says "sounding confused"
+- **THEN** the tone check passes the relay, and the dose stays as plain as it was said
+
+#### Scenario: Feeling stated in the speaker's own words
+- **WHEN** a patient's own words state a feeling, such as "I am really worried", and the relay keeps those words
+- **THEN** the tone check treats them as part of what the patient said, never as an added affect phrase, and a turn relayed to the patient that keeps them is not escalated for them
+
 #### Scenario: Paraphrased or translated phrase
 - **WHEN** the back-translation of a patient relay to the physician carries one close paraphrase of an affect phrase, such as "sounding anxious", or the same meaning in another language
 - **THEN** the tone check treats it as the one frame phrase and passes an otherwise faithful relay
