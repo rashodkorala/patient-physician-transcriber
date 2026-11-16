@@ -16,7 +16,14 @@ adverb (gentle, serious, urgent, or apologetic only) when the relayed words alon
 is told to expect that adverb. For a patient or companion turn, an emotion other than calm enters the frame as one
 hedged phrase ("The patient says, sounding worried, ..."), written in the same call from the same emotion read, so
 the phrase and the controller's label agree; the tone check is told to expect it too (IDR-006). The voice is
-constant, so these words are the only way affect reaches the listener.
+constant, so these words are the only way affect reaches the listener. The tone check is told the phrase the
+interpreter added, so a feeling the speaker stated in their own words is never mistaken for one.
+
+Code also checks what the tone check cannot (affect-in-words group 9, from the live run of 16 November 2026): a
+back-translation with no letter of the source's script was not translated back, so the tone check is not asked and
+the attempt fails; a relay that copies the original's words for a value it was asked to keep fails; and an English
+relay that calls anyone "he" or "she" without a word stating that gender fails (MDD-004). A lost value written in
+another script is named in the retry hint by its meaning, never quoted as something to keep.
 
 Outcome order when several apply: blocked, escalated, unclear, readback_required, final (CDR-002).
 
@@ -102,10 +109,12 @@ class Draft(BaseModel):
 
 
 class ToneCheck(BaseModel):
+    # The issue comes first, so the model states what it found before it judges: with the booleans first, the live
+    # tone check failed a faithful relay while its issue said nothing was wrong (affect-in-words task 9.1).
+    issue: str
     meaning_preserved: bool
     certainty_preserved: bool
     warmth_preserved: bool
-    issue: str
 
 
 # ---------- state ----------
@@ -179,6 +188,8 @@ Rules:
   it early. I will start you on a new medicine today."
 - Never guess anyone's gender from their name. In English, use "they" for someone whose gender you were not
   told. In a language that needs a gender, repeat the name or role, or use a respectful form that avoids it.
+- Write the relay entirely in the target language and its script. Never copy a word of the original into it, not
+  even a word a correction below names: say what it means in the target language instead.
 - Keep everything that was said: every instruction, warning, condition, and question, and every count,
   including "one" or "a" before a medicine or a dose ("one aspirin", "one spray"). Plain everyday words are
   welcome, but never soften, strengthen, add, or drop anything.
@@ -191,7 +202,9 @@ Rules:
 - Use the approved glossary translations for any listed medical term.
 - Write every number as digits and never change numbers, doses, units, frequencies, dates, or medication names.
 - Translate meaning, not idioms.
-Then translate your relay back into the source language as back_translation, keeping its reporting frame.
+Then translate your relay back into the source language as back_translation, keeping its reporting frame. It is
+written in the language and script back_translation_language names, never in the target language: it is a fresh
+translation of your relay, never a copy of it.
 tone_tags describe the register of your relay. confidence (0 to 1) is how sure you are the meaning was kept.
 affect_phrase is the affect phrase exactly as it appears in your translation (for example "sounding worried"), or
 an empty string when the relay has none."""
@@ -200,7 +213,12 @@ TONE_SYSTEM = """You check an interpretation in a medical consultation.
 You are told who spoke (speaker: physician, patient, or companion) and who the relay is for (listener).
 The interpreter relays each utterance in reported speech that names the speaker, for example "Dr. Thomas is
 saying you should rest". That reporting frame, the change from first to third person, and a plain instruction
-("rest") reported as "you should rest" are expected: never count them as a problem.
+("rest") reported as "you should rest" are expected: never count them as a problem. The frame may name the speaker
+by name or by role ("Meena Rajaratnam says", "the patient says"), in any language and script.
+A feeling the speaker states in their own words ("I am really worried", "I am scared", "I am confused about the
+appointment") is part of what they said: the relay must keep it, on every turn and for every listener, and keeping
+it is never an affect phrase or an addition. Only words the interpreter added about how the speaker sounded count as
+an affect phrase. You are told the phrase the interpreter added, if any (interpreter_affect_phrase, or none).
 For a physician turn, the frame may also carry one manner adverb (gently, reassuringly, seriously, urgently,
 apologetically, warmly, or encouragingly) naming how the physician spoke, as in "Dr. Thomas is saying, gently,
 that ...": such an adverb in the frame is acceptable in itself, whichever manner it names.
@@ -213,17 +231,21 @@ Any other affect wording fails meaning_preserved, because it adds something the 
 about how the speaker sounded on a physician turn or on a turn whose listener is the patient, a manner adverb on a
 patient or companion turn, more than one adverb or phrase, or one outside the opening frame.
 An acceptable adverb or phrase describes the speaker, not the news, and still fails certainty_preserved when it
-makes the statement more or less certain or serious than the original, for example "sounding confused" in front
-of a dose the speaker stated plainly. A relay whose seriousness or certainty changed fails certainty_preserved,
-whatever the frame says.
+makes the statement more or less certain or serious than the original: when it names a feeling the speaker never
+expressed and so casts doubt on, or adds weight to, what they said plainly, for example "sounding confused" in
+front of a dose from a speaker who expressed no confusion at all. When the speaker did say they are confused,
+unsure, worried, or the like about anything in the turn, the matching phrase is faithful, even when the same turn
+also states a dose or another value plainly: the phrase is about the speaker, and the value stays as plain as it
+was said. A relay whose seriousness or certainty changed fails certainty_preserved, whatever the frame says.
 Compare the original utterance with the back-translation of the interpretation.
+issue: write this first: one short sentence describing a problem you found, or an empty string when there is none.
+Then judge, in agreement with the issue: when the issue is empty, every value below is true.
 meaning_preserved: every instruction, warning, condition, and question in the original is there, and nothing
 was added, such as advice or an answer the speaker did not give.
 certainty_preserved: the interpretation is neither more nor less certain or serious than the original. A small
 word a fluent speaker adds for natural grammar, such as "still" in "still not better after 5 minutes", does not
-change it.
-warmth_preserved: reassurance, warmth, and respect in the original survive.
-issue: one short sentence describing any problem, or an empty string."""
+change it, and neither does a word of the same strength, such as "very worried" for "really worried".
+warmth_preserved: reassurance, warmth, and respect in the original survive."""
 
 
 def tag(name: str, value: str) -> str:
@@ -239,6 +261,7 @@ def _translate_user(state: TurnState) -> str:
         tag("source_language", LANGUAGE_NAMES[state["source"]]),
         tag("target_language", LANGUAGE_NAMES[state["target"]]),
         tag("target_code", state["target"]),
+        tag("back_translation_language", LANGUAGE_NAMES[state["source"]]),
         tag("glossary", "; ".join(f"{g.term} = {g.translation}" for g in state.get("glossary", [])) or "none"),
         tag("guidance", "\n".join(state.get("guidance", [])) or "none"),
     ]
@@ -247,7 +270,7 @@ def _translate_user(state: TurnState) -> str:
         for v in state.get("critical", []):
             if not v.matched:
                 problems.append(
-                    f"Keep exactly: {v.source}"
+                    keep_value_hint(v, state["source"], state["target"])
                     if v.source
                     else f"Remove the number not in the original: {v.translated}"
                 )
@@ -369,6 +392,160 @@ def frame_problem(state: TurnState, draft: Draft) -> str | None:
     return None
 
 
+# ---------- scripts, back-translations, copied words, and gender (affect-in-words group 9) ----------
+
+# The script each language is written in, as the first word of a letter's Unicode name.
+SCRIPTS = {"en": "LATIN", "fr": "LATIN", "pa": "GURMUKHI", "ta": "TAMIL", "si": "SINHALA"}
+
+
+def script_of(language: str) -> str | None:
+    return SCRIPTS.get(critical_values.lang_key(language))
+
+
+def letters(text: str, script: str | None = None) -> int:
+    """How many letters `text` has, or only those of `script` (vowel signs and other marks are not counted)."""
+    return sum(
+        1
+        for c in text
+        if unicodedata.category(c).startswith("L")
+        and (script is None or unicodedata.name(c, "").startswith(f"{script} "))
+    )
+
+
+def _crosses_scripts(state: TurnState) -> tuple[str, str] | None:
+    """The source and target scripts when they differ, else None."""
+    source, target = script_of(state["source"]), script_of(state["target"])
+    return (source, target) if source and target and source != target else None
+
+
+def value_meaning(value: CriticalValue, source_language: str) -> str | None:
+    """A critical value as digits and a unit or period, free of the original's words ("500 mg", "1 time per day")."""
+    if value.kind == "frequency":
+        found = critical_values.frequencies(value.source, source_language)
+        if found:
+            (times, period), _ = found[0]
+            return f"{times} time{'' if times == 1 else 's'} per {period}"
+    elif value.kind in ("dose", "number"):
+        found = critical_values.quantities(value.source, source_language)
+        if found:
+            q = found[0]
+            return f"{q.value:g}" + (f" {q.unit}" if q.unit else "")
+    return None
+
+
+def keep_value_hint(value: CriticalValue, source_language: str, target_language: str) -> str:
+    """The retry hint for a value the previous attempt lost.
+
+    A value written in the target's script is quoted to keep exactly. One written in another script is never quoted
+    as something to keep: asked to "keep exactly" a Tamil or Punjabi word, the model pasted it into the English relay
+    (live run, 16 November 2026). It is given by its meaning instead, with an explicit ban on copying.
+    """
+    target_script = script_of(target_language)
+    if target_script is None or letters(value.source) == letters(value.source, target_script):
+        return f"Keep exactly: {value.source}"
+    name = LANGUAGE_NAMES[target_language]
+    meaning = value_meaning(value, source_language)
+    what = f"the {value.kind} the original states, {meaning}," if meaning else f"the {value.kind} the original states"
+    return (
+        f"Keep {what} in {name}: write it in {name} words and script, with any number as digits, and never copy a "
+        "word of the original into the relay."
+    )
+
+
+def back_translation_problem(state: TurnState, draft: Draft) -> str | None:
+    """The back-translation is not in the source language, so the tone check would compare nothing.
+
+    Code can only see the script: when the original is mostly written in its own script and the target's script
+    differs, a back-translation with no letter of the source's script is a copy of the relay or a translation into
+    the wrong language. A typed original in another script (a romanised Punjabi turn) is left to the tone check.
+    """
+    scripts = _crosses_scripts(state)
+    if scripts is None:
+        return None
+    source_script, _ = scripts
+    if letters(state["text"], source_script) * 2 < max(letters(state["text"]), 1):
+        return None
+    if letters(draft.back_translation, source_script):
+        return None
+    source_name = LANGUAGE_NAMES[state["source"]]
+    return (
+        f"The back-translation must be a fresh translation of the relay into {source_name}, in its script; it was "
+        "not, so the relay could not be checked. Never copy the relay as the back-translation."
+    )
+
+
+def copied_words(state: TurnState, draft: Draft) -> list[str]:
+    """Words of the original, in its script, that the relay copied for a value the last attempt was asked to keep."""
+    scripts = _crosses_scripts(state)
+    if scripts is None:
+        return []
+    source_script, _ = scripts
+    copied: list[str] = []
+    for value in state.get("critical", []):
+        if value.matched or not value.source:
+            continue
+        for word in re.split(r"[\s()\[\],.;:!?\"'।]+", value.source):
+            if word and letters(word, source_script) and word in draft.translation:
+                copied.append(word)
+    return list(dict.fromkeys(copied))
+
+
+PRONOUNS = {
+    "female": {"she", "her", "hers", "herself"},
+    "male": {"he", "him", "his", "himself"},
+}
+# Words that state a person's gender, so a pronoun of that gender may refer to them.
+GENDERED_WORDS = {
+    "female": {
+        "mother", "mom", "mum", "wife", "daughter", "sister", "aunt", "grandmother", "grandma", "girl", "woman",
+        "women", "lady", "niece", "girlfriend", "mrs", "ms", "miss", "madam",
+    },
+    "male": {
+        "father", "dad", "husband", "son", "brother", "uncle", "grandfather", "grandpa", "boy", "man", "men",
+        "nephew", "boyfriend", "mr", "sir",
+    },
+}  # fmt: skip
+POSSESSIVES = {"her", "his"}
+
+
+def unstated_gender(text: str, stated: frozenset[str] = frozenset()) -> list[str]:
+    """English gendered pronouns in `text` that nothing states the gender of.
+
+    A pronoun is stated when `stated` names its gender (the caller knows it from elsewhere), or when the text has a
+    word of that gender ("their mother ... she"). A gendered word right after "her" or "his" states nothing about the
+    pronoun, which refers to someone else: "her mother" genders the speaker, it does not license "her".
+    """
+    tokens = re.findall(r"[a-z]+", text.casefold())
+    found: list[str] = []
+    for gender, pronouns in PRONOUNS.items():
+        used = [t for t in tokens if t in pronouns]
+        if not used or gender in stated:
+            continue
+        if not any(
+            t in GENDERED_WORDS[gender] and (i == 0 or tokens[i - 1] not in POSSESSIVES) for i, t in enumerate(tokens)
+        ):
+            found += used
+    return list(dict.fromkeys(found))
+
+
+def stated_genders(text: str) -> frozenset[str]:
+    """The genders `text` states, by a pronoun or a gendered title."""
+    tokens = set(re.findall(r"[a-z]+", text.casefold()))
+    titles = {"female": {"mrs", "ms", "miss"}, "male": {"mr"}}
+    return frozenset(g for g in PRONOUNS if tokens & (PRONOUNS[g] | titles[g]))
+
+
+def gender_problem(state: TurnState, draft: Draft) -> str | None:
+    """An English relay that genders someone the original did not (MDD-004: never guess gender from a name)."""
+    if critical_values.lang_key(state["target"]) != "en":
+        return None
+    words = unstated_gender(draft.translation)
+    if not words:
+        return None
+    quoted = ", ".join(f'"{w}"' for w in words)
+    return f'The relay says {quoted}, but the original never gives that gender; say "they", the name, or the role.'
+
+
 def without_affect_phrase(translation: str, phrase: str) -> str:
     """The translation with its affect phrase taken out of the frame, for texts that restate what was said."""
     phrase = phrase.strip()
@@ -433,23 +610,45 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
             medications,
             medication_forms(medications, state.get("glossary", [])),
         )
-        tone = await model.parse(
-            purpose="tone_check",
-            system=TONE_SYSTEM,
-            user="\n".join(
-                [
-                    tag("speaker", state["speaker"]),
-                    tag("listener", state["listener"]),
-                    tag("original", state["text"]),
-                    tag("back_translation", draft.back_translation),
-                ]
-            ),
-            schema=ToneCheck,
-        )
-        # IDR-006: a misplaced affect phrase fails like a meaning change, whatever the tone check said.
-        problem = frame_problem(state, draft)
-        if problem:
-            tone = tone.model_copy(update={"meaning_preserved": False, "issue": problem})
+        # A back-translation in the wrong language leaves the tone check nothing to compare, so it is not asked.
+        unchecked = back_translation_problem(state, draft)
+        if unchecked:
+            tone = ToneCheck(meaning_preserved=False, certainty_preserved=True, warmth_preserved=True, issue="")
+        else:
+            tone = await model.parse(
+                purpose="tone_check",
+                system=TONE_SYSTEM,
+                user="\n".join(
+                    [
+                        tag("speaker", state["speaker"]),
+                        tag("listener", state["listener"]),
+                        # IDR-006: what the interpreter added, so a feeling the speaker stated is never mistaken for it.
+                        tag("interpreter_affect_phrase", draft.affect_phrase.strip() or "none"),
+                        tag("original", state["text"]),
+                        tag("back_translation", draft.back_translation),
+                    ]
+                ),
+                schema=ToneCheck,
+            )
+        # Code checks fail like a meaning change, whatever the tone check said: a misplaced affect phrase (IDR-006),
+        # an unusable back-translation, words copied from the original, and a guessed gender (MDD-004).
+        copied = copied_words(state, draft)
+        problems = [
+            p
+            for p in (
+                unchecked,
+                frame_problem(state, draft),
+                gender_problem(state, draft),
+                f"The relay copies {', '.join(repr(w) for w in copied)} from the original; say it in the target "
+                "language and script instead."
+                if copied
+                else None,
+            )
+            if p
+        ]
+        if problems:
+            issue = " ".join([*problems, tone.issue] if tone.issue else problems)
+            tone = tone.model_copy(update={"meaning_preserved": False, "issue": issue})
         recognition = state.get("recognition_confidence") or 1.0
         confidence = min(draft.confidence, recognition)
         failures = []

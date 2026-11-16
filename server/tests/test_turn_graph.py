@@ -101,7 +101,9 @@ def test_mismatch_then_fixed_on_retry_cdr_002(kb):
     assert result.status == "readback_required" and result.attempts == 2
     assert "retrying" in stages
     retry_prompt = [u for p, u in m.calls if p == "translate"][1]
-    assert "Keep exactly: 0.4 milligrams" in field(retry_prompt, "fix_these")
+    # The lost value is named by its meaning, never as English words to copy into a Punjabi relay (group 9).
+    assert "Keep the dose the original states, 0.4 mg, in Punjabi" in field(retry_prompt, "fix_these")
+    assert "never copy a word of the original into the relay" in field(retry_prompt, "fix_these")
 
 
 def test_mismatch_twice_is_blocked_cdr_002(kb):
@@ -433,7 +435,8 @@ def test_prompts_define_the_affect_phrase_rule_idr_006():
     assert "a manner adverb on a patient or companion turn" in tone
     # Review fix 5: an acceptable phrase still fails when it changes how certain or serious the statement sounds.
     assert "still fails certainty_preserved when it makes the statement more or less certain or serious" in tone
-    assert '"sounding confused" in front of a dose the speaker stated plainly' in tone
+    # Group 9 (live run, T8): only when the speaker expressed no such feeling; a stated value elsewhere is no reason.
+    assert '"sounding confused" in front of a dose from a speaker who expressed no confusion at all' in tone
     # Review fix 6: the same meaning in another language, or a close paraphrase, counts as the phrase.
     assert 'The same meaning in any language, or a close paraphrase such as "sounding anxious"' in tone
     assert "A relay whose seriousness or certainty changed fails certainty_preserved" in tone
@@ -716,7 +719,9 @@ def test_injection_multiplies_the_first_dose_by_ten_on_both_attempts_and_blocks_
     assert dose.matched is False
     # The model translated faithfully both times; the control changed the number after it, on both attempts.
     assert [p for p, _ in m.calls] == ["translate", "tone_check", "translate", "tone_check"]
-    assert "Keep exactly: 0.4 milligrams" in field([u for p, u in m.calls if p == "translate"][1], "fix_these")
+    assert "Keep the dose the original states, 0.4 mg" in field(
+        [u for p, u in m.calls if p == "translate"][1], "fix_these"
+    )
     assert arming.claims == 1 and arming.armed is False
 
 
