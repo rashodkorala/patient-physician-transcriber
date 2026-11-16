@@ -13,7 +13,10 @@ translate also reads the speaker's emotion, certainty, manner, and medications, 
 latency mitigation ADR-004 names, applied 2026-10-25. Retrieval is local, so it adds no model call.
 Manner (IDR-005) is read from the words alone, defaults to plain, and may enter the reporting frame as one
 adverb (gentle, serious, urgent, or apologetic only) when the relayed words alone would lose it; the tone check
-is told to expect that adverb.
+is told to expect that adverb. For a patient or companion turn, an emotion other than calm enters the frame as one
+hedged phrase ("The patient says, sounding worried, ..."), written in the same call from the same emotion read, so
+the phrase and the controller's label agree; the tone check is told to expect it too (IDR-006). The voice is
+constant, so these words are the only way affect reaches the listener.
 
 Outcome order when several apply: blocked, escalated, unclear, readback_required, final (CDR-002).
 
@@ -32,11 +35,14 @@ attempt of the turn, and the normal verify node blocks it. The graph never sets 
 @implements TDM-002: Presenter mismatch control for the blocked-dose beat
 @implements IDR-005: Manner vocabulary and voice delivery
 @implements MDD-005: Trust across the barrier
+@implements MDD-006: Affect in words
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
 @contract TurnResult
 @see openspec/tdr/adr/adr-004-langgraph-turn-graph.md
 @see openspec/tdr/mdd/mdd-004-mediator-voice.md
 @see openspec/tdr/tdm/tdm-002-presenter-mismatch-control.md
 @see openspec/tdr/idr/idr-005-manner-vocabulary-and-voice-delivery.md
+@see openspec/tdr/idr/idr-006-affect-phrase-in-the-frame-and-constant-voice.md
 """
 
 import operator
@@ -130,8 +136,9 @@ class TurnState(TypedDict, total=False):
 
 TRANSLATE_SYSTEM = """You are the interpreter in a medical consultation, sitting between a patient and a physician
 who do not share a language. You are a person in the room relaying what each of them says to the other.
-First read the speaker: emotion is how they feel, certainty is how sure they sound, and medications lists
-every medication name exactly as said (empty list if none).
+First read the speaker: emotion is how they feel, read from the words alone (calm is the default: pick another
+value only when the words clearly carry it), certainty is how sure they sound, and medications lists every
+medication name exactly as said (empty list if none).
 Also read manner: how the speaker said it, from the words alone, as one of plain, warm, reassuring, gentle,
 serious, urgent, apologetic, or encouraging. plain is the default: the words inform or ask without marked
 feeling. Pick another value only when the words clearly carry it: warm when they are friendly and personal;
@@ -147,8 +154,15 @@ Rules:
   Write a name as it sounds, in the target language's script.
 - The frame may name the manner, once, as one adverb in the target language's natural form ("Dr. Thomas is
   saying, gently, that ..."), only for gentle, serious, urgent, or apologetic, and only when the relayed words
-  alone would lose it. Never for plain, warm, reassuring, or encouraging (the voice carries those), never
+  alone would lose it. Never for plain, warm, reassuring, or encouraging (the caption label carries those), never
   anywhere but the opening frame, and never in a way that changes an instruction, a certainty word, or a number.
+- For a patient or companion turn only, the frame names the speaker's emotion when you read it as anything but
+  calm, once, as one hedged phrase in the target language's natural form, so the physician hears how the speaker
+  sounded: worried as "sounding worried", embarrassed as "sounding embarrassed", in_pain as "sounding as if in
+  pain", relieved as "sounding relieved", and confused as "sounding confused" ("The patient says, sounding
+  worried, that ..."; "The patient's companion says, sounding embarrassed, that ..."). A calm turn gets no
+  phrase, and a physician turn never gets one. Never more than one phrase, never anywhere but the opening frame,
+  and never in a way that changes an instruction, a certainty word, a number, or a medication.
 - Use indirect speech in every sentence, not only the first: the speaker is never "I" or "we" anywhere in your
   relay; say "they", "the doctor", or the name instead, and never quote them after a colon. For example, "We
   found it early. I will start you on a new medicine today." from the physician becomes "Dr. Thomas is saying
@@ -178,8 +192,11 @@ saying you should rest". That reporting frame, the change from first to third pe
 The frame may also carry one manner adverb (gently, reassuringly, seriously, urgently, apologetically, warmly, or
 encouragingly) naming how the speaker spoke, as in "Dr. Thomas is saying, gently, that ...": any such adverb in
 the frame is expected and never a problem, whichever manner it names.
-It describes the speaker, not the news: a relay whose seriousness or certainty changed still fails
-certainty_preserved, whatever the frame says.
+For a patient or companion, the frame may instead carry one hedged phrase naming how the speaker sounded
+(sounding worried, sounding embarrassed, sounding as if in pain, sounding relieved, or sounding confused), as in
+"The patient says, sounding worried, that ...": one such phrase in the frame is expected and never a problem.
+An adverb or phrase in the frame describes the speaker, not the news: a relay whose seriousness or certainty
+changed still fails certainty_preserved, whatever the frame says.
 Compare the original utterance with the back-translation of the interpretation.
 meaning_preserved: every instruction, warning, condition, and question in the original is there, and nothing
 was added, such as advice or an answer the speaker did not give.

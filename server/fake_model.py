@@ -4,7 +4,12 @@ Translations are the source text tagged with the target language, with approved 
 swapped in, so numbers and units survive and the safety checks behave as they would with a faithful translation.
 Never used on stage: the server only selects it with TRANSLATOR=fake or without credentials.
 
+A patient or companion turn the fake reads as anything but calm opens with a reporting frame carrying one hedged
+affect phrase ("The patient says, sounding worried, ..."), as the live model is asked to (IDR-006); every other
+turn has no frame.
+
 @implements EDR-002: Testing: pytest with mocked LLM, speaker-rated tone set, latency check
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
 @implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
 """
 
@@ -30,6 +35,15 @@ UNCLEAR_MARKER = "(test: unclear)"
 UNCLEAR_CONFIDENCE = 0.3
 WORRY = re.compile(r"scared|worried|afraid|ਡਰ|ਫ਼ਿਕਰ|peur|inquiet", re.IGNORECASE)
 RELIEF = re.compile(r"relief|relieved|better now|thank you|ਸ਼ੁਕਰ|soulag", re.IGNORECASE)
+EMBARRASSED = re.compile(r"embarrass|ashamed|ਸ਼ਰਮ|gêné|honte", re.IGNORECASE)
+# IDR-006: the hedged phrase for each emotion but calm, as the translate prompt suggests it in English.
+AFFECT_PHRASES = {
+    "worried": "sounding worried",
+    "embarrassed": "sounding embarrassed",
+    "in_pain": "sounding as if in pain",
+    "relieved": "sounding relieved",
+    "confused": "sounding confused",
+}
 # IDR-005: the manner the fake reads from a physician's words; plain unless the words clearly carry one.
 REASSURING = re.compile(r"reassur|not have|unlikely|\bearly\b|nothing to worry", re.IGNORECASE)
 APOLOGETIC = re.compile(r"\bsorry\b|apologi", re.IGNORECASE)
@@ -67,13 +81,16 @@ def translate(user: str) -> Draft:
             r"\d+(?:\.\d+)?", lambda m: f"{(Decimal(m.group()) * 10).normalize():f}", translated, count=1
         )
     tone = "reassuring" if re.search(r"reassur|not have|unlikely", text, re.IGNORECASE) else "respectful"
+    physician = field(user, "speaker") == "physician"
+    emotion = emotion_of(text)
+    frame = "" if physician else affect_frame(field(user, "speaker_name"), emotion)
     return Draft(
-        emotion=emotion_of(text),
+        emotion=emotion,
         certainty="high",
-        manner=manner_of(text) if field(user, "speaker") == "physician" else "plain",
+        manner=manner_of(text) if physician else "plain",
         medications=[m for m in MEDICATIONS if m in text.lower()],
-        translation=f"[{field(user, 'target_code')}] {translated}",
-        back_translation=text,
+        translation=f"[{field(user, 'target_code')}] {frame}{translated}",
+        back_translation=f"{frame}{text}",
         tone_tags=[tone],
         confidence=UNCLEAR_CONFIDENCE if UNCLEAR_MARKER in text else 0.95,
     )
@@ -82,9 +99,19 @@ def translate(user: str) -> Draft:
 def emotion_of(text: str) -> str:
     if WORRY.search(text):
         return "worried"
+    if EMBARRASSED.search(text):
+        return "embarrassed"
     if RELIEF.search(text):
         return "relieved"
     return "calm"
+
+
+def affect_frame(speaker_name: str, emotion: str) -> str:
+    """The opening frame with its one affect phrase for a patient or companion turn, or nothing when calm (IDR-006)."""
+    phrase = AFFECT_PHRASES.get(emotion)
+    if not phrase:
+        return ""
+    return f"{speaker_name[:1].upper()}{speaker_name[1:]} says, {phrase}, "
 
 
 def manner_of(text: str) -> str:
