@@ -3,6 +3,7 @@
 An AI medical interpreter with a verified record, built first for Canada. A patient and a physician who do not share a language see their conversation live in both languages on a shared in-room screen, hear each translation spoken aloud, and can call in a human interpreter at any time. Afterwards, both verify the bilingual record in their own language.
 
 - Market research, language data, and baseline choices: [`docs/product-research.md`](docs/product-research.md)
+- What the prototype knowingly does not do yet: [`docs/known-gaps.md`](docs/known-gaps.md)
 - Project context and constraints: [`openspec/config.yaml`](openspec/config.yaml)
 - Product roadmap change: [`openspec/changes/add-multilingual-medical-consultation`](openspec/changes/add-multilingual-medical-consultation)
 - Demo night (19 November 2026) change: [`openspec/changes/demo-night-mvp`](openspec/changes/demo-night-mvp)
@@ -13,11 +14,12 @@ First-version languages: English, French, Mandarin, Cantonese, Punjabi, Urdu, Ar
 ## Trust across the barrier
 
 Accurate words are not enough when two people share no language; what gets lost first is how something was said.
-The interpreter therefore carries the physician's manner (warm, reassuring, gentle, serious, urgent, apologetic, or encouraging) into its voice, into the reporting frame when words alone would lose it, and into a label the patient can read in their own language.
+The interpreter therefore carries the physician's manner (warm, reassuring, gentle, serious, urgent, apologetic, or encouraging) into the reporting frame when words alone would lose it, and into a label the patient can read in their own language.
+The interpreter's voice stays the same for every turn, so affect travels in words: when a patient or companion clearly sounds other than calm, the relay to the physician carries one hedged phrase in its frame, such as "The patient says, sounding worried, ...".
 The patient has their own controls during the visit, in their own language, so they can say they did not understand or ask for slower or repeated speech without needing permission or English.
 The physician privately sees how the visit is landing: the patient's emotion turn by turn, whether a reassurance landed, every patient signal, and a cue when a topic is sensitive in the patient's culture.
 A companion can speak as a labelled third speaker, and the interpreter can close the loop by asking the patient whether anything should be explained again.
-Decisions: MDD-005, CDR-008, IDR-005; interface: ADR-012 (`web/design/README.md`).
+Decisions: MDD-005, MDD-006, CDR-008, IDR-005, IDR-006; interface: ADR-012 (`web/design/README.md`).
 
 ## Core capabilities
 

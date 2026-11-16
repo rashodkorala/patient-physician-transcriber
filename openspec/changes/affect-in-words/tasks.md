@@ -59,8 +59,10 @@ TDRs: MDD-006, IDR-006, CDR-008, EDR-002
 
 TDRs: MDD-006
 
-- [ ] 5.1 Write `docs/known-gaps.md`, one sentence per line: (a) affect is inferred from the words only, not the audio, so neutral words in a worried voice read as plain, which is why the wording is hedged; (b) the product uses hosted APIs (Claude, ElevenLabs, Azure) rather than its own models hosted on AWS and trained on real consultation data; (c) the voice is not expressive; and the privacy note that the frame phrase is spoken in the room; verify the file exists and links from `README.md`'s document list
-- [ ] 5.2 Update any document that describes the voice as carrying tone, such as `docs/voice-test.md` and `docs/demo-script.md`; verify a search for "tone" and "emotion" in `docs/` shows no claim that the voice conveys affect
+- [x] 5.1 Write `docs/known-gaps.md`, one sentence per line: (a) affect is inferred from the words only, not the audio, so neutral words in a worried voice read as plain, which is why the wording is hedged; (b) the product uses hosted APIs (Claude, ElevenLabs, Azure) rather than its own models hosted on AWS and trained on real consultation data; (c) the voice is not expressive; and the privacy note that the frame phrase is spoken in the room; verify the file exists and links from `README.md`'s document list
+  Done 2026-11-16: `docs/known-gaps.md` records the words-only reading, the hosted APIs, the voice that is not expressive, the phrase spoken and shown in the room, and the pending native-speaker review, one sentence per line; `README.md` links it from its document list and its trust section now says the voice is constant and affect travels as one hedged phrase.
+- [x] 5.2 Update any document that describes the voice as carrying tone, such as `docs/voice-test.md` and `docs/demo-script.md`; verify a search for "tone" and "emotion" in `docs/` shows no claim that the voice conveys affect
+  Done 2026-11-16: `docs/demo-script.md` and the Tamil and Sinhala test scripts now say no emotion label is shown and the patient's translation may open with the phrase; `docs/voice-test.md` keeps its dated run but notes the delivery table no longer exists and the tags did not carry. A search for "tone" and "emotion" in `docs/` finds no claim that the voice conveys affect.
 - [ ] 5.3 On sync or archive, update the `manner-in-relay` main spec's Purpose to the wording in this change's delta; verify `openspec validate affect-in-words` and `openspec validate manner-in-relay --specs` pass
 
 ## 6. Annotations and traceability

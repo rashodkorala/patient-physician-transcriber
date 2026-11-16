@@ -55,7 +55,7 @@
 | 4.1 | Patient | "Will the medicine cost a lot? I don't have insurance." | බෙහෙත් වලට ගොඩක් සල්ලි යනවද? මට රක්ෂණයක් නැහැ. |
 | 4.2 | Physician (nudge phrase) | "I understand cost is a real worry. This medicine is low cost, and we will look at programmes that can help." | (English, final) |
 
-- **Check:** the controller shows a private nudge about cost; the TV shows no emotion.
+- **Check:** the controller shows a private nudge about cost; the TV shows no emotion label; the patient's English translation may open with one hedged phrase in its frame, such as "sounding worried" (MDD-006).
 
 ### 5. Off-the-record pause and disclosure (Requirement: Off-the-record pause)
 

@@ -171,7 +171,8 @@ Manner is the physician's manner read from the words; for patient and companion 
 
 ### Voice fetches
 
-The server log does not print the delivery; the delivery below is what `delivery_for_turn` in `server/voice.py` gives for each turn's manner, emotion, and certainty.
+The server log does not print the delivery; the delivery below is what `delivery_for_turn` in `server/voice.py` gave at the time for each turn's manner, emotion, and certainty.
+Since 16 November 2026 there is no such table: every turn and every interpreter line is spoken in one constant delivery (`[calm]`, stability 0.55), because the varied deliveries did not carry the tone, and a patient's affect is now carried in words instead (MDD-006, IDR-006).
 
 | Speech | Language | HTTP | Bytes | Audio | Delivery | Fetch seconds |
 |---|---|---|---|---|---|---|
@@ -192,6 +193,7 @@ Matched IDR-005:
 - Manner is read in the translate call with no extra model call: `warm` for the greeting, `reassuring` for the reassurance, `plain` for the alcohol question and the 911 instruction.
 - Physician captions carry the manner; patient and companion captions never do.
 - The reassuring turn is voiced `[reassuringly]` and the worried patient turn `[concerned]`, conveying the patient's worry to the physician rather than soothing it.
+  Later listening found the voice did not carry these tags; since 16 November 2026 the voice is constant, and the worried turn would instead open with a phrase such as "Gurpreet Singh is asking, sounding worried, ..." (MDD-006, IDR-006).
 - The frame took the adverb once, inside the frame ("ਕਹਿ ਰਹੇ ਹਨ, ਤਸੱਲੀ ਨਾਲ," / "is saying, reassuringly,"), and the tone check passed it.
   It is debatable whether the words alone ("Your heart tests were reassuring") already carried it, which IDR-005 says should leave the adverb out.
 
