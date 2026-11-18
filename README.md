@@ -147,7 +147,7 @@ The server sends each role only what it may see, and it refuses commands from th
 Speech recognition runs in the browser with short-lived Azure tokens minted by the server, so the speech keys never reach a device.
 
 The turn pipeline is a LangGraph state graph (ADR-004) with four steps: retrieve, translate, verify, and settle.
-The note, summary, and explain-back are single-pass chains that call Claude once through the Anthropic SDK; of LangChain, the code uses only `langchain-core`, which LangGraph builds on.
+The note, summary, and explain-back are single-pass chains that each call Claude once.
 
 A finished capture goes to the turn pipeline, which retrieves glossary and tone guidance from a local knowledge base, asks Claude for a translation, and then verifies it in code.
 The checks compare medication values across languages, look for a lost or altered value, and test the back-translation, the reporting frame, and the script.
