@@ -71,42 +71,74 @@ Language availability and rehearsal evidence are tracked in the [speech test log
 
 ## How it works
 
+The first diagram shows the parts and who talks to whom.
+Every arrow to an outside service is a request with a reply: the reply always returns to the caller, never onwards to another service.
+
 ```mermaid
-flowchart LR
-    subgraph Devices["Browser views"]
+flowchart TB
+    subgraph Views["Browser views (Next.js)"]
+        direction LR
         control["Physician controls<br/>/control"]
         record["Physician record<br/>/record"]
         screen["Shared display<br/>/screen"]
         patient["Patient phone<br/>/patient"]
     end
 
+    azure["Azure Speech<br/>recognition, fallback voice"]
+
     subgraph Server["FastAPI server"]
+        direction TB
         ws["Visit WebSocket<br/>one filtered view per role"]
-        turns["Turn pipeline (LangGraph)<br/>retrieve, translate, verify, settle"]
-        checks["Deterministic checks<br/>critical values, back-translation,<br/>frame, script, gender"]
-        chains["Note, summary, and<br/>explain-back chains"]
-        chain["Hash chain<br/>record integrity"]
+        voice["Interpreter voice<br/>/api/speech"]
+        turns["Turn pipeline<br/>LangGraph state graph:<br/>retrieve, translate, verify, settle"]
+        outputs["Single-pass chains<br/>note, summary, explain-back:<br/>model proposes, code checks"]
+        ws --> turns
+        ws --> outputs
     end
 
-    azure["Azure Speech<br/>recognition, fallback voice"]
-    claude["Claude<br/>translation, checks, note"]
+    claude["Claude<br/>translation, note, summary"]
+    store[("Visit record<br/>server memory, hash chained")]
     eleven["ElevenLabs<br/>interpreter voice"]
 
-    control <--> ws
-    record <--> ws
-    screen <--> ws
-    patient <--> ws
-    ws --> turns
-    turns --- checks
-    ws --> chains
-    ws --> chain
-    turns --> claude
-    chains --> claude
-    control -. "microphone, short-lived token" .-> azure
-    patient -. "microphone, short-lived token" .-> azure
-    screen -. "voice by speech id" .-> ws
-    ws --> eleven
-    ws -. "fallback voice" .-> azure
+    Views <-->|"speech in, text out"| azure
+    Views <-->|"commands in, events out"| ws
+    Views <-->|"relay id in, audio out"| voice
+    turns <-->|"text in, relay out"| claude
+    outputs <-->|"sources in, draft out"| claude
+    voice <-->|"text in, audio out"| eleven
+    turns -->|"settled turn"| store
+```
+
+The second diagram follows one spoken turn from the microphone to the loudspeaker.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant D as Speaker's device
+    participant A as Azure Speech
+    participant S as FastAPI server<br/>LangGraph turn graph
+    participant C as Claude
+    participant V as All views
+    participant E as ElevenLabs
+
+    D->>A: Microphone audio, with a short-lived token
+    A-->>D: Recognised text
+    D->>S: Turn text over the visit WebSocket
+    S->>S: Retrieve glossary and tone guidance
+    S->>C: Source text and guidance
+    C-->>S: Relay, back-translation, emotion, medications, confidence
+    S->>S: Check values, back-translation, frame, script, gender
+    opt A check fails
+        S->>C: Retry once, naming the failure
+        C-->>S: Second draft
+        S->>S: Check again
+    end
+    S->>S: Settle the turn and append it to the hash chain
+    S-->>V: Turn event, filtered by role
+    V->>S: Physician controls ask for the relay audio by id
+    S->>E: Relay text
+    E-->>S: Audio
+    S-->>V: Audio stream, played on the physician laptop
 ```
 
 Each view is a separate Next.js page.
@@ -114,11 +146,16 @@ The physician controls and the record connect to the server as the `controller` 
 The server sends each role only what it may see, and it refuses commands from the wrong role.
 Speech recognition runs in the browser with short-lived Azure tokens minted by the server, so the speech keys never reach a device.
 
+The turn pipeline is a LangGraph state graph (ADR-004) with four steps: retrieve, translate, verify, and settle.
+The note, summary, and explain-back are single-pass chains that call Claude once through the Anthropic SDK; of LangChain, the code uses only `langchain-core`, which LangGraph builds on.
+
 A finished capture goes to the turn pipeline, which retrieves glossary and tone guidance from a local knowledge base, asks Claude for a translation, and then verifies it in code.
 The checks compare medication values across languages, look for a lost or altered value, and test the back-translation, the reporting frame, and the script.
 A failed attempt is retried once.
 A turn that still fails is blocked, marked unclear, or escalated to the simulated human interpreter.
-The interpreter voice is the server's ElevenLabs voice, which the browser asks for by turn id, and Azure speaks only when the server has no voice for the language or the vendor fails.
+Claude's reply never goes straight to a device: it returns to the server, is checked, and only then is sent to the views.
+A turn settles as final, read-back required, blocked, unclear, or escalated, and only a turn that may be spoken has audio.
+The interpreter voice is the server's ElevenLabs voice, which the physician controls ask for by id, and the browser's Azure voice speaks only when the server has no voice for the language or the vendor fails.
 The note, patient summary, and explain-back check use frozen sources: the model proposes, and code checks provenance and values.
 Visit state is in memory (ADR-007).
 
