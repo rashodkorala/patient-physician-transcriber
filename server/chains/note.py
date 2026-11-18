@@ -6,7 +6,8 @@ Checks (ADR-011 section 2), in one pass over the draft:
 - a stated tag stands only when every source has that speaker, otherwise it becomes ai_inference and is listed in
   `tagDowngrades`; code never upgrades a tag;
 - every quantity and frequency in a stated sentence equals one in its cited sources, and an ai_inference sentence
-  introduces no dose or frequency that is absent from all sources.
+  introduces no dose or frequency that is absent from all sources;
+- no sentence calls anyone "he" or "she" unless a cited source states that gender (affect-in-words task 9.5).
 
 Any problem other than a downgrade means one retry with the problems pinned in the prompt, then failure. Code never
 edits the model's text. The note is a checked draft; the physician remains its author (MDD-001).
@@ -14,6 +15,8 @@ edits the model's text. The note is a checked draft; the physician remains its a
 @implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
 @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
 @implements ADR-006: LLM: Claude Sonnet 5.5 for live turns, Opus 5.5 for note and summary
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
+@implements MDD-004: Mediator voice: the interpreter speaks as a person between the parties, in reported speech
 @contract ClinicalNote (CDR-007)
 @see openspec/tdr/cdr/cdr-007-clinical-note-and-patient-summary.md
 """
@@ -40,7 +43,8 @@ from chains.checks import (
     source_values,
     values_in,
 )
-from chains.snapshot import Snapshot, render_sources
+from chains.snapshot import Snapshot, SourceLine, SourceTurn, render_sources
+from graph.turn_graph import stated_genders, unstated_gender
 from llm import Model, ModelRefused
 
 PURPOSE = "clinical_note"  # runs on RECORD_MODEL, Opus 5.5 (ADR-006), via llm.ClaudeModel
@@ -117,6 +121,11 @@ Tag each sentence with exactly one provenance tag:
   and every cited source is a turn by that speaker;
 - interpreter_stated: the sentence only restates the interpreter's own lines;
 - ai_inference: anything you combined, concluded, or summarised across speakers.
+A spoken translation opens with the interpreter's reporting frame ("The patient says ..."). The frame is the
+interpreter's, not the speaker's: never restate it, or any reading of how a speaker sounded ("sounding worried"),
+as something the speaker said. Leave how a speaker sounded out of the note.
+Never guess anyone's gender from their name. Call the patient "the patient" or "they", and anyone else by their
+role, unless a source you cite calls that person "he" or "she" or gives a title such as Mr or Mrs.
 Write every number as digits, and copy every dose, unit, frequency, and medication exactly as the sources give them.
 Never add a dose, number, or frequency that is not in the sources you cite. Do not guess at anything not said."""
 
@@ -160,6 +169,7 @@ def check_note(
                 downgrades.append(TagDowngrade(sentence_id=sentence_id, from_=sentence.tag))
             if not ref_problems:
                 problems += _value_problems(label, sentence, sources, all_values, medications)
+                problems += _gender_problems(label, sentence.text, sources)
             sentences.append(
                 NoteSentence(
                     sentence_id=sentence_id,
@@ -172,6 +182,29 @@ def check_note(
     if n == 0:
         problems.append("The note has no sentences")
     return tuple(sections), downgrades, problems
+
+
+def _gender_problems(label: str, text: str, sources: list[SourceTurn | SourceLine]) -> list[str]:
+    """A pronoun that genders someone no cited source gendered (MDD-004: never guess gender from a name).
+
+    A gender is stated when a cited source's words or speaker's title say it ("she", "Mr"), or the sentence itself
+    names a gendered relation ("the patient's mother ... she"). The note is English, so English pronouns are read.
+    """
+    said = " ".join(_source_texts(s) for s in sources)
+    words = unstated_gender(text, stated_genders(said))
+    if not words:
+        return []
+    quoted = ", ".join(f'"{w}"' for w in words)
+    return [
+        f"{label} says {quoted}, but no source it cites gives that gender; "
+        'say "the patient", "they", or the person\'s role instead'
+    ]
+
+
+def _source_texts(source: SourceTurn | SourceLine) -> str:
+    if isinstance(source, SourceLine):
+        return " ".join(text for _, text in source.texts)
+    return " ".join([source.speaker_name or "", source.source_text, source.translation])
 
 
 def _value_problems(label, sentence: DraftSentence, sources, all_values: list[Value], medications) -> list[str]:

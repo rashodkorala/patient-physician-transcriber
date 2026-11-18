@@ -10,7 +10,7 @@ proposed_by: agent
 category: strategy
 related_decisions: [mdd-001, adr-002, adr-003, adr-009]
 related_specs: [mediator-interpretation, visit-introduction]
-related_changes: [mediator-voice, trust-across-the-barrier]
+related_changes: [mediator-voice, trust-across-the-barrier, affect-in-words]
 ai_context:
   implementation_priorities:
     - "Interpret each turn in reported speech that names the speaker, for example 'Dr. Thomas is saying you should take this medicine 2 times a day after every meal'"

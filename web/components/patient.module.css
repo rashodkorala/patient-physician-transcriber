@@ -34,6 +34,9 @@
 }
 .control:hover { border-color: var(--care); }
 .control:active { background: var(--care-soft); }
+.clarify:not(:disabled) { border-color: var(--patient); background: var(--patient-soft); }
+.clarify:not(:disabled):hover,
+.clarify:not(:disabled):active { border-color: var(--ink); }
 .control:disabled { color: var(--muted); border-color: var(--line); background: var(--paper); cursor: default; }
 /* Resume is the one control that stays live while paused, so it carries the accent. */
 .resume { border-color: var(--care); color: var(--care); }

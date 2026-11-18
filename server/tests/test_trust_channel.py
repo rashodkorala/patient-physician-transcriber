@@ -1,6 +1,6 @@
-"""Trust across the barrier on the visit channel (MDD-005, CDR-008, IDR-005): the patient's signals, trust updates
-for the controller only, the reassurance rule and culture cues through the channel, companion turns, the closing
-check, and a model that fails, all against the full turn graph with the scripted model (EDR-002)."""
+"""Trust across the barrier on the visit channel (MDD-005, CDR-008, IDR-005, IDR-006): the patient's signals, trust
+updates for the controller only, the reassurance rule and culture cues through the channel, the affect phrase in the
+translation only, companion turns, the closing check, and a model that fails, all against the full turn graph with the scripted model (EDR-002)."""
 
 import asyncio
 import threading
@@ -434,6 +434,100 @@ def test_physician_caption_carries_manner_and_patient_caption_never_does_cdr_008
             close(sockets)
 
 
+# ---------- affect in words (IDR-006, MDD-006) ----------
+
+WORRIED_PHRASE = "sounding worried"
+
+
+def labels(obj) -> list[str]:
+    """Every manner or emotion key with a value, anywhere in a payload."""
+    if isinstance(obj, dict):
+        own = [k for k in ("manner", "emotion") if obj.get(k) is not None]
+        return own + [label for v in obj.values() for label in labels(v)]
+    if isinstance(obj, list):
+        return [label for v in obj for label in labels(v)]
+    return []
+
+
+def phrase_places(obj, path="") -> list[str]:
+    """Where the affect phrase appears in a payload, by key path."""
+    if isinstance(obj, dict):
+        return [p for k, v in obj.items() for p in phrase_places(v, f"{path}.{k}")]
+    if isinstance(obj, list):
+        return [p for v in obj for p in phrase_places(v, path)]
+    return [path] if isinstance(obj, str) and WORRIED_PHRASE in obj else []
+
+
+def test_worried_patient_label_reaches_the_controller_only_and_the_phrase_only_the_translation_idr_006(kb):  # noqa: F811
+    with make_client(kb) as client:
+        sockets, (ctl, tv, review) = connect(client, "controller", "screen", "review")
+        try:
+            submit(ctl, "patient", "pa-IN", WORRIED_PA)
+            ctl_events = drain_until(ctl, "trust.update")
+            tv_events, review_events = drain_until(tv, "record.integrity"), drain_until(review, "record.integrity")
+        finally:
+            close(sockets)
+    # The controller still gets the emotion and manner as a label, in the analysis and the trust update.
+    analysis = payloads(ctl_events, "turn.analysis")[0]
+    assert analysis["emotion"] == "worried" and analysis["manner"] == "plain"
+    update = ctl_events[-1]["payload"]
+    assert update["speaker"] == "patient" and update["emotion"] == "worried" and update["manner"] == "plain"
+    # The shared screen and the patient's device get no manner or emotion label, and the phrase only in translation.
+    for events in (tv_events, review_events):
+        assert_public(events)
+        assert all(labels(e["payload"]) == [] for e in events)
+        caption = payloads(events, "turn.result")[0]
+        assert caption["manner"] is None and caption["translation"].count(WORRIED_PHRASE) == 1
+        assert [p for e in events for p in phrase_places(e["payload"])] == [".translation"]
+
+
+def test_speak_gate_speaks_the_worried_patient_relay_with_its_phrase_and_refuses_non_final_turns_idr_006(kb):  # noqa: F811
+    voice = FakeVoice()
+    model = ScriptedModel(
+        {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "trust": fake_model.trust}
+    )
+    with (
+        ConsentedClient(create_app(model=model, settings=SETTINGS, kb=kb, voice=voice)) as client,
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+    ):
+        ctl.receive_json()
+        submit(ctl, "patient", "pa-IN", WORRIED_PA)
+        caption = drain_until(ctl, "turn.result")[-1]["payload"]
+        assert caption["status"] == "final"
+        assert client.get(f"/api/speech/{caption['turnId']}").status_code == 200
+        assert voice.said == [(caption["translation"], "en-CA")]
+        assert caption["translation"].startswith(f"[en-CA] The patient says, {WORRIED_PHRASE}, ")
+        # Unclear, escalated, and blocked worried turns are refused as before, phrase or not.
+        for marker_ in (fake_model.UNCLEAR_MARKER, fake_model.TONE_MARKER, fake_model.MISMATCH_MARKER):
+            submit(ctl, "patient", "pa-IN", f"{WORRIED_PA} 2 {marker_}")
+            refused = drain_until(ctl, "turn.result")[-1]["payload"]
+            assert refused["status"] in {"unclear", "escalated", "blocked"}
+            assert client.get(f"/api/speech/{refused['turnId']}").status_code == 404
+    assert len(voice.said) == 1
+
+
+def test_patient_turn_in_the_physicians_language_is_relayed_to_the_patient_without_a_phrase_idr_006(kb):  # noqa: F811
+    """Review fix 4: the server tells the turn graph the relay is for the patient, so no phrase is spoken to them."""
+    model = ScriptedModel(
+        {"translate": fake_model.translate, "tone_check": fake_model.tone_check, "trust": fake_model.trust}
+    )
+    with (
+        ConsentedClient(create_app(model=model, settings=SETTINGS, kb=kb)) as client,
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+    ):
+        ctl.receive_json()
+        submit(ctl, "patient", "en-CA", "I am scared of the needle.")
+        caption = drain_until(ctl, "turn.result")[-1]["payload"]
+        assert caption["status"] == "final" and caption["targetLanguage"] == "pa-IN"
+        assert WORRIED_PHRASE not in caption["translation"] and " says, " not in caption["translation"]
+        user = next(u for purpose, u in model.calls if purpose == "translate")
+        assert fake_model.field(user, "listener") == "patient"
+        # The same speaker in their own language is relayed to the physician, with the phrase.
+        submit(ctl, "patient", "pa-IN", WORRIED_PA)
+        caption = drain_until(ctl, "turn.result")[-1]["payload"]
+        assert caption["targetLanguage"] == "en-CA" and WORRIED_PHRASE in caption["translation"]
+
+
 # ---------- companion turns (CDR-008) ----------
 
 
@@ -516,7 +610,7 @@ def test_ask_if_clear_says_one_line_in_two_languages_spoken_in_the_patients_only
             # The speak gate serves the patient's language only; the physician's copy is shown, never spoken.
             assert client.get(f"/api/speech/{line['lineId']}?language=pa-IN").status_code == 200
             assert client.get(f"/api/speech/{line['lineId']}?language=en-CA").status_code == 404
-            assert [(t, lang) for t, lang, _ in voice.said] == [(line["lines"][0]["text"], "pa-IN")]
+            assert voice.said == [(line["lines"][0]["text"], "pa-IN")]
             command(ctl, "voice.started", speechId=line["lineId"], language="en-CA")
             assert drain_until(ctl, "error")[-1]["payload"]["command"] == "voice.started"
             command(ctl, "voice.started", speechId=line["lineId"], language="pa-IN")

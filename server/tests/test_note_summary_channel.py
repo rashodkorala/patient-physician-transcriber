@@ -31,7 +31,9 @@ from visit_helpers import (
 )
 
 import fake_model
+from chains.note import SYSTEM as NOTE_SYSTEM
 from chains.note import DraftSection, DraftSentence, NoteDraft
+from chains.summary import SYSTEM as SUMMARY_SYSTEM
 from chains.summary import SummaryDraft
 from contracts import ClinicalNote, PatientSummary
 from fake_model import MISMATCH_MARKER
@@ -68,6 +70,52 @@ def generate_summary(ctl):
 
 
 # ---------- the note ----------
+
+
+WORRIED = ("ਮੈਨੂੰ ਸੂਈ ਤੋਂ ਬਹੁਤ ਡਰ ਲੱਗਦਾ ਹੈ।", None)
+
+
+def test_the_affect_phrase_never_reaches_the_note_or_the_summary_idr_006(kb):  # noqa: F811
+    """IDR-006 review fix 2: a worried patient turn is relayed with "sounding worried", and the chain keeps it as
+    spoken, but the note and summary sources leave it out, so neither can restate it as the patient's words."""
+    prompts: dict[str, list[str]] = {}
+
+    def recording(purpose, handler):
+        def record(user):
+            prompts.setdefault(purpose, []).append(user)
+            return handler(user)
+
+        return record
+
+    handlers = {
+        "clinical_note": recording("clinical_note", fake_model.clinical_note),
+        "patient_summary": recording("patient_summary", fake_model.patient_summary),
+    }
+    with make_client(kb, translate=translate, voice=FakeVoice(), handlers=handlers) as client:
+        sockets, (ctl,) = connect(client, "controller")
+        try:
+            speak_plan(ctl)
+            worried = patient_says(ctl, WORRIED)
+            assert worried["translation"] == f"[en-CA] The patient says, sounding worried, {WORRIED[0]}"
+            assert any("sounding worried" in (e["body"].get("translation") or "") for e in entries(client))
+            generate_note(ctl)
+            note = drain_until(ctl, "note.ready")[-1]["payload"]
+            generate_summary(ctl)
+            summary = drain_until(ctl, "summary.ready")[-1]["payload"]
+        finally:
+            close(sockets)
+    for purpose in ("clinical_note", "patient_summary"):
+        assert prompts[purpose] and all("sounding" not in user for user in prompts[purpose]), purpose
+    note_text = [sentence["text"] for section in note["sections"] for sentence in section["sentences"]]
+    assert f"[en-CA] The patient says {WORRIED[0]}" in note_text
+    assert not any("sounding" in text for text in note_text)
+    assert not any("sounding" in sentence["text"] for sentence in summary["sentences"])
+    # The prompts say the same, for whatever the deterministic step cannot see.
+    note_rule = " ".join(NOTE_SYSTEM.split())
+    assert "never restate it, or any reading of how a speaker sounded" in note_rule
+    assert "Leave how a speaker sounded out of the note." in note_rule
+    summary_rule = " ".join(SUMMARY_SYSTEM.split())
+    assert "Never say how the patient sounded or felt as the interpreter described it" in summary_rule
 
 
 def test_note_every_sentence_tagged_and_sourced_and_controller_only_cdr_007(client):
@@ -247,7 +295,7 @@ def test_a_passed_summary_is_public_chained_and_spoken_by_sentence_cdr_007(clien
             public_stages = [e["payload"] for e in seen if e["type"] == "summary.status"]
             assert [s["stage"] for s in public_stages] == ["generating", "checking", "ready"]
 
-        # The speak gate serves each sentence in the patient's language only, with the calm line delivery.
+        # The speak gate serves each sentence in the patient's language only, in the constant delivery (IDR-006).
         first = summary["sentences"][0]
         assert first["sentenceId"] == f"{summary['summaryId']}.0"
         assert client.get(f"/api/speech/{first['sentenceId']}", params={"language": "pa-IN"}).status_code == 200

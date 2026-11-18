@@ -14,6 +14,7 @@
 @implements ADR-011: Explain-back, note, and summary: frozen sources, model proposes, code checks provenance and values
 @implements MDD-005: Trust across the barrier
 @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
 @contract ws:/ws/visit
 @see openspec/tdr/adr/adr-007-in-memory-state-websocket.md
 @see openspec/tdr/cdr/cdr-006-record-entries-review-corrections-and-tamper.md
@@ -62,11 +63,13 @@ from contracts import (
     Speaker,
     SummaryCheck,
     TamperState,
+    TranscriptReview,
     TrustUpdate,
     TurnEntryBody,
     TurnResult,
     VisitStateController,
     VisitStatePublic,
+    VisitStateReview,
     VoiceSpeaking,
     to_caption,
 )
@@ -151,6 +154,7 @@ class Visit:
     nudges: list[EmpathyNudge] = field(default_factory=list)
     current_turn_id: str | None = None
     pending_readback: str | None = None
+    transcript_review: TranscriptReview | None = None
     physician_name: str | None = None
     patient_name: str | None = None
     introduction: IntroductionState = "pending"
@@ -295,10 +299,24 @@ class Visit:
         self.trust.insert(bisect.bisect_right(self.trust, key(update), key=key), update)
 
     def freeze(self) -> sources.Snapshot:
-        """ADR-011's frozen sources: the chain as stored now, and the interpreter's own lines."""
+        """ADR-011's frozen sources: the chain as stored now, and the interpreter's own lines.
+
+        IDR-006: each turn's and correction's affect phrase is handed over too, so the sources leave it out; it is
+        the interpreter's reading of how the speaker sounded, never something they said.
+        """
         return sources.freeze(
-            self.chain.head_hash, [e.payload for e in self.chain.entries], self.interpreter_lines.values()
+            self.chain.head_hash,
+            [e.payload for e in self.chain.entries],
+            self.interpreter_lines.values(),
+            affect_phrases=self.affect_phrases(),
         )
+
+    def affect_phrases(self) -> dict[str, str]:
+        """The affect phrase of every turn and applied correction that has one, by turn or amendment id."""
+        phrases = {turn_id: r.result.affect_phrase for turn_id, r in self.turns.items() if r.result}
+        for segment in self.segments.values():
+            phrases.update({a.amendment_id: a.analysis.affect_phrase for a in segment.amendments})
+        return {key: phrase for key, phrase in phrases.items() if phrase}
 
     def explain_back_open(self) -> bool:
         return self.explain_back is not None and self.explain_back.state in ("listening", "checking")
@@ -374,6 +392,7 @@ class Visit:
                 turns=[t.result for t in self.turns.values() if t.result is not None],
                 current_turn=current.result if current else None,
                 pending_readback=self.pending_readback,
+                transcript_review=self.transcript_review,
                 nudges=self.nudges,
                 integrity=self.integrity(),
                 physician_name=self.physician_name,
@@ -411,7 +430,7 @@ class Visit:
                     source_text=t.source_text,
                     stage=t.stage,
                 )
-        return VisitStatePublic(
+        public = VisitStatePublic(
             patient_language=self.patient_language,  # type: ignore[arg-type]
             physician_language=self.physician_language,  # type: ignore[arg-type]
             consent=self.consent,
@@ -435,7 +454,10 @@ class Visit:
             summary=self.summary,
             summary_stale=self.summary_stale,
             signals=self.signals,
-        ).wire()
+        )
+        if role == "review":
+            return VisitStateReview(**public.model_dump(), transcript_review=self.transcript_review).wire()
+        return public.wire()
 
 
 class Hub:
@@ -466,6 +488,8 @@ class Hub:
         ).wire()
 
     async def send_to(self, conn: Connection, event_type: str, payload: dict) -> None:
+        if event_type == "transcript.review_state" and conn.role == "screen":
+            return
         if event_type in CONTROLLER_ONLY_EVENTS and conn.role != "controller":
             return
         async with conn.lock:

@@ -42,6 +42,8 @@ import type {
   SegmentHistory,
   SegmentStatus,
   Speaker,
+  TranscriptReview,
+  TranscriptReviewState,
   TurnCaption,
   VisitStatePublic,
   VoiceSpeaking,
@@ -65,13 +67,13 @@ import Highlighted from "./Highlighted";
 import RecordBadge from "./RecordBadge";
 import styles from "./review.module.css";
 
-type ReviewState = VisitStatePublic;
+type ReviewState = VisitStatePublic & { transcriptReview?: TranscriptReview | null };
 
 const STATE_LABEL: Record<ConnectionState, string> = { open: "Connected", connecting: "Connecting", closed: "Reconnecting" };
 export const ENGLISH: Language = "en-CA";
 
 /** The commands this screen's own parts send; a refusal of any other command is left to the composing screen. */
-const REVIEW_COMMANDS = new Set(["consent.give", "segment.confirm", "segment.amend", "summary.read_aloud", "summary.stop"]);
+const REVIEW_COMMANDS = new Set(["consent.give", "segment.confirm", "segment.amend", "summary.read_aloud", "summary.stop", "transcript.review_resolve"]);
 
 /** command.refused carries a reason code only; each maps to a plain line in both languages. */
 export function refusalKey(reason: CommandRefused["reason"]): NoticeKey {
@@ -138,6 +140,7 @@ export function useReviewVisit(onExtra?: (event: Envelope) => void) {
   const [consentNotice, setConsentNotice] = useState<ConsentNotice | null>(null);
   const [consent, setConsent] = useState<ConsentState | null>(null);
   const [integrity, setIntegrity] = useState<RecordIntegrity | null>(null);
+  const [transcriptReview, setTranscriptReview] = useState<TranscriptReview | null>(null);
   const [paused, setPaused] = useState(false);
   const [pending, setPending] = useState<PendingTurn | null>(null);
   const [explainBack, setExplainBack] = useState<ExplainBackState | null>(null);
@@ -189,6 +192,7 @@ export function useReviewVisit(onExtra?: (event: Envelope) => void) {
           setConsent(state.consentState ?? null);
           setIntegrity(state.integrity);
           setPaused(state.paused);
+          setTranscriptReview(state.transcriptReview ?? null);
           setPending(state.currentTurn ? { turnId: state.currentTurn.turnId, speaker: state.currentTurn.speaker, stage: state.currentTurn.stage } : null);
           setExplainBack(state.explainBack ?? null);
           setSummary(state.summary ?? null);
@@ -196,6 +200,9 @@ export function useReviewVisit(onExtra?: (event: Envelope) => void) {
           setSpeaking(state.speaking ?? null);
           break;
         }
+        case "transcript.review_state":
+          setTranscriptReview((event.payload as TranscriptReviewState).review);
+          break;
         case "turn.started": {
           const started = event.payload as { turnId: string; speaker: Speaker };
           setPending({ turnId: started.turnId, speaker: started.speaker, stage: "listening" });
@@ -356,6 +363,7 @@ export function useReviewVisit(onExtra?: (event: Envelope) => void) {
     where,
     brokenTurn,
     paused,
+    transcriptReview,
     pending,
     explainBack,
     summary,

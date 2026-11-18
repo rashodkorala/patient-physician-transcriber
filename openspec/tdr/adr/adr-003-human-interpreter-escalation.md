@@ -71,3 +71,6 @@ Escalate node in the turn graph (ADR-004); escalation event in CDR-001; interpre
 - 2026-11-03, rashodkorala: Extended to the mediator-voice change. Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-12, rashodkorala: Amended: low confidence yields an unclear turn and a spoken request to say it again, twice; the third consecutive unclear turn from the same speaker escalates with reason low_confidence; tone failures escalate at once as before. Recorded by Claude (agent) at rashodkorala's explicit request under the blanket authorisation (see MDD-005).
+- 2026-11-16, rashodkorala: amended ("Deliver with a note"). A relay that still uses "he" or "she" for a patient or companion whose gender was never stated, after one retry, does not escalate: it is delivered, and the controller is told privately that the gender was not stated.
+  A guessed pronoun does not change a dose or an instruction, and escalation stays for a change of meaning (tone failure) and for repeated low confidence, as decided above.
+  Recorded by Claude (agent) at rashodkorala's explicit request. The status stays accepted.

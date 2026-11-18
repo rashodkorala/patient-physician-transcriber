@@ -1,10 +1,11 @@
 """The frozen source set and the shared deterministic checks (ADR-011, CDR-006, CDR-007)."""
 
 import pytest
-from chain_records import HEAD, SECRETS, WELCOME, amendment_entry, punjabi_visit
+from chain_records import HEAD, SECRETS, WELCOME, amendment_entry, punjabi_visit, turn_entry
 
 from chains.checks import DraftSource, allowed_tag, check_refs, knows_units, parse_value, values_in
 from chains.snapshot import freeze, render_sources
+from graph.turn_graph import without_affect_phrase
 
 
 def test_snapshot_holds_only_spoken_turns_and_lists_gaps_adr_011():
@@ -89,3 +90,44 @@ def test_value_parsing_and_unit_languages_adr_011():
     assert parse_value("medication", "Metformin", "en-CA").normalised == "metformin"
     assert knows_units("pa-IN") and knows_units("ta-LK") and knows_units("fr-CA")
     assert not knows_units("si-LK")
+
+
+def test_the_affect_phrase_is_left_out_of_every_source_idr_006():
+    """IDR-006 review fix 2: the interpreter's affect phrase is its reading, never what the patient said, so the
+    frozen sources leave it out of the turn and of a correction, while the chain keeps the text as spoken."""
+    worried = "The patient says, sounding worried, that they are scared of the needle."
+    corrected = "The patient says, sounding embarrassed, that they missed 2 doses."
+    entries = [
+        *punjabi_visit(),
+        turn_entry("w1", "patient", "pa-IN", "ਮੈਨੂੰ ਸੂਈ ਤੋਂ ਡਰ ਲੱਗਦਾ ਹੈ।", "en-CA", worried),
+        amendment_entry("w1", "am-w", "ਮੈਂ 2 ਖੁਰਾਕਾਂ ਛੱਡ ਦਿੱਤੀਆਂ।", corrected),
+        turn_entry("w2", "patient", "pa-IN", "ਮੈਨੂੰ ਡਰ ਹੈ।", "en-CA", "The patient says, sounding worried, I am scared."),
+    ]
+    snapshot = freeze(
+        HEAD, entries, [WELCOME], affect_phrases={"am-w": "sounding embarrassed", "w2": "sounding worried"}
+    )
+    assert snapshot.turn("w1").translation == "The patient says that they missed 2 doses."
+    assert snapshot.turn("w2").translation == "The patient says I am scared."
+    rendered = render_sources(snapshot.turns)
+    assert "sounding" not in rendered
+    # Without the phrase recorded, nothing is guessed: the source keeps the text as spoken.
+    assert freeze(HEAD, entries).turn("w2").translation.startswith("The patient says, sounding worried")
+
+
+@pytest.mark.parametrize(
+    ("translation", "phrase", "expected"),
+    [
+        ("The patient says, sounding worried, that it hurts.", "sounding worried", "The patient says that it hurts."),
+        (
+            "[en-CA] Harpreet says, sounding worried, I am scared.",
+            "sounding worried",
+            "[en-CA] Harpreet says I am scared.",
+        ),
+        ("The patient, sounding confused, says it hurts.", "sounding confused", "The patient says it hurts."),
+        ("Sounding relieved, the patient says thanks.", "Sounding relieved", "The patient says thanks."),
+        ("No phrase here.", "sounding worried", "No phrase here."),
+        ("The patient says it hurts.", "", "The patient says it hurts."),
+    ],
+)
+def test_without_affect_phrase_idr_006(translation, phrase, expected):
+    assert without_affect_phrase(translation, phrase) == expected

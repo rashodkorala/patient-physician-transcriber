@@ -62,7 +62,7 @@
 | 5.1 | Patient | "Doctor, will I need injections? I am very afraid of needles." | டாக்டர், எனக்கு ஊசி போட வேண்டுமா? எனக்கு ஊசி என்றால் மிகவும் பயம். |
 | 5.2 | Physician (nudge phrase) | "Many people worry about that. Right now you do not need injections. We will start with tablets." | (English, final) |
 
-- **Check:** the controller shows a private nudge about the fear of needles; the TV shows no emotion.
+- **Check:** the controller shows a private nudge about the fear of needles; the TV shows no emotion label; the patient's English translation may open with one hedged phrase in its frame, such as "sounding worried" (MDD-006).
 
 ### 6. Off-the-record pause and disclosure (Requirement: Off-the-record pause)
 

@@ -1,4 +1,4 @@
-// Trust view end-to-end check (trust-across-the-barrier task 4.2; MDD-005, CDR-008, IDR-005). A worried patient
+// Trust view end-to-end check (trust-across-the-barrier task 4.2, affect-in-words task 4.3; MDD-005, CDR-008, IDR-005, IDR-006). A worried patient
 // turn, a reassuring physician turn, and a calm patient turn mark reassurance as landed on /control; calm again
 // and a new worry carry no mark (it resets once landed); after a new reassurance, still worried marks it as not
 // yet landed;
@@ -142,11 +142,22 @@ for (const [who, wire] of [
   await check(!wire.includes("trust.update") && !/"(trust|reassuranceLanded|cue|emotion)"/.test(wire), `${who} carries no trust data`);
 }
 await check(!("trust" in late.state) && Array.isArray(late.state.signals), "a late snapshot has signals but no trust");
+// IDR-006: a worried patient's translation carries "sounding worried" in its frame, as spoken; past that, neither
+// screen names an emotion (no "sounds worried", no "Still worried", no label).
+const withoutPhrase = async (page) => (await page.locator("main").innerText()).toLowerCase().replaceAll("sounding worried", "");
+const occurrences = (text) => text.split("sounding worried").length - 1;
+const translations = await tv.locator('[data-testid="caption"] div[lang="en-CA"] p').allInnerTexts();
+const inTranslations = translations.reduce((n, text) => n + occurrences(text), 0);
+await check(inTranslations > 0, "/screen shows the affect phrase inside a caption's translation element");
 await check(
-  !(await patient.locator("main").innerText()).toLowerCase().includes("worried") &&
-    !(await tv.locator("main").innerText()).toLowerCase().includes("worried"),
-  "/screen and /patient show no emotion",
+  occurrences(await tv.locator("main").innerText()) === inTranslations,
+  "and nowhere else on /screen",
 );
+await check(
+  !(await withoutPhrase(patient)).includes("worried") && !(await withoutPhrase(tv)).includes("worried"),
+  "/screen and /patient show no emotion label",
+);
+await check((await tv.locator("[data-emotion]").count()) === 0 && (await patient.locator("[data-emotion]").count()) === 0, "and no emotion attribute");
 
 probe.ws.close();
 late.ws.close();

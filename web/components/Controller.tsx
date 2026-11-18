@@ -7,6 +7,8 @@
  * @implements IDR-001: Push-to-talk per speaker instead of diarisation
  * @implements IDR-004: Hands-free continuous listening, with the speaker found by spoken language
  * @implements ADR-003: Human interpreter escalation on low confidence and high-risk moments
+ * @implements CDR-009: Patient confirmation of a captured transcript before translation
+ * @implements IDR-008: Physician review of low-confidence speech before submission
  * @implements CDR-001: Visit WebSocket event contract
  * @implements CDR-002: Turn result schema
  * @implements CDR-003: Participant names and interpreter lines on the visit channel
@@ -69,6 +71,7 @@ import type {
   TurnResult,
   TurnStarted,
   TurnStatus,
+  TranscriptReviewState,
   VisitStateController,
 } from "@/lib/contracts";
 import { NAME_MAX } from "@/lib/contracts";
@@ -219,7 +222,7 @@ function ServicesLine({ services }: { services: Services }) {
   return (
     <p className={styles.services} data-testid="services">
       {services.translator === "claude" ? (
-        `${modelName(services.liveModel)} for turns, ${modelName(services.toneModel)} for checks, ` +
+        `${modelName(services.liveModel)} for turns, ${modelName(services.toneModel)} for trust cues, ` +
         `${modelName(services.recordModel)} for the note and summary.`
       ) : (
         <span className={styles.servicesWarn} data-state="fake">
@@ -241,6 +244,7 @@ function ServicesLine({ services }: { services: Services }) {
 const EMOTION_TEXT: Record<Emotion, string> = {
   calm: "sounds calm",
   worried: "sounds worried",
+  frightened: "sounds frightened",
   embarrassed: "sounds embarrassed",
   in_pain: "sounds in pain",
   relieved: "sounds relieved",
@@ -355,6 +359,8 @@ export default function Controller() {
   const [latency, setLatency] = useState<LatencyRow[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [recording, setRecording] = useState<Speaker | null>(null);
+  const [speechReview, setSpeechReview] = useState<{ speaker: Speaker; text: string; reviewId?: string } | null>(null);
+  const captureEpoch = useRef(0);
   const [typedSpeaker, setTypedSpeaker] = useState<Speaker>("patient");
   const [typedText, setTypedText] = useState("");
   const [visitId, setVisitId] = useState<string | null>(null);
@@ -482,18 +488,27 @@ export default function Controller() {
     if (!(error instanceof SpeechStopped)) setNotice(`Not spoken: ${error.message}`);
   }, []);
 
+  const clearSpeechCapture = useCallback(() => {
+    captureEpoch.current += 1;
+    const active = capture.current;
+    capture.current = null;
+    void active?.stop().catch(() => undefined);
+    setRecording(null);
+    setSpeechReview(null);
+  }, []);
+
   const onEvent = useCallback((event: Envelope) => {
     switch (event.type) {
       case "visit.state": {
         const state = event.payload as VisitStateController;
-        if (visitChanged(shownVisit, event.visitId)) {
+        const newVisit = visitChanged(shownVisit, event.visitId);
+        if (newVisit || state.paused || !state.consent) {
+          clearSpeechCapture();
+        }
+        if (newVisit) {
           // CDR-001 `visit.new`: everything kept only from live events goes, as if the page had just connected;
           // the snapshot below sets the rest. The saved default physician name is applied again for the new visit.
           stopSpeaking(() => true);
-          const active = capture.current;
-          capture.current = null;
-          void active?.stop().catch(() => undefined);
-          setRecording(null);
           setTypedText("");
           setOutcomes({});
           setDismissed(new Set());
@@ -515,6 +530,9 @@ export default function Controller() {
           setNotice("New visit started");
         }
         setPatientLanguage(state.patientLanguage);
+        const review = state.transcriptReview;
+        setSpeechReview((current) => review ? { speaker: "patient", text: review.text, reviewId: review.reviewId } :
+          current?.speaker === "patient" ? null : current);
         setTurns(state.turns);
         setPendingReadback(state.pendingReadback ?? null);
         setNudges(state.nudges);
@@ -664,13 +682,25 @@ export default function Controller() {
         }
         break;
       }
+      case "transcript.review_state": {
+        const { review } = event.payload as TranscriptReviewState;
+        setSpeechReview((current) => review ? { speaker: "patient", text: review.text, reviewId: review.reviewId } :
+          current?.speaker === "patient" ? null : current);
+        break;
+      }
       case "consent.changed": {
         const consent = event.payload as ConsentState;
         setConsentState(consent);
         if (consent.state === "withdrawn") {
+          clearSpeechCapture();
           setHandsFree(false);
           setNotice("Consent withdrawn. Nothing is captured until it is given again.");
-        } else setNotice(null);
+        } else {
+          // CDR-005: accepting the notice ends its current read-aloud, including any queued copy.
+          const notice = noticeRef.current;
+          if (notice?.noticeId === consent.noticeId) stopSpeaking((id) => id === notice.speechId);
+          setNotice(null);
+        }
         break;
       }
       case "consent.speak": {
@@ -694,6 +724,7 @@ export default function Controller() {
         break;
       }
       case "visit.paused":
+        clearSpeechCapture();
         setPaused(true);
         break;
       case "visit.resumed":
@@ -836,7 +867,7 @@ export default function Controller() {
         break;
       }
     }
-  }, [startCall, closeInterpreter, notSpoken, physicianLanguage]);
+  }, [startCall, closeInterpreter, notSpoken, physicianLanguage, clearSpeechCapture]);
 
   const { state, send } = useVisitSocket("controller", onEvent);
 
@@ -914,7 +945,7 @@ export default function Controller() {
   };
 
   const pressTalk = async (speaker: Speaker) => {
-    if (recording) return;
+    if (recording || speechReview) return;
     if (!consented) {
       setNotice("Consent is needed before the conversation starts.");
       return;
@@ -925,8 +956,14 @@ export default function Controller() {
     }
     setNotice(null);
     setRecording(speaker);
+    const epoch = captureEpoch.current;
     try {
-      capture.current = await startCapture(languageOf(speaker));
+      const active = await startCapture(languageOf(speaker));
+      if (epoch !== captureEpoch.current) {
+        void active.stop().catch(() => undefined);
+        return;
+      }
+      capture.current = active;
     } catch (error) {
       setRecording(null);
       setNotice(`Microphone or speech unavailable: ${(error as Error).message}. Use typed input.`);
@@ -939,8 +976,19 @@ export default function Controller() {
     capture.current = null;
     setRecording(null);
     if (!speaker || !active) return;
+    const epoch = captureEpoch.current;
     try {
       const heard = await active.stop();
+      if (epoch !== captureEpoch.current || paused || !consented) return;
+      // IDR-008: zero represents an unknown recognition score. Review only a known low score.
+      if (heard.text.trim() && heard.confidence > 0 && heard.confidence < 0.7) {
+        if (speaker === "patient") {
+          send("transcript.review_start", { text: heard.text.trim() });
+        } else {
+          setSpeechReview({ speaker, text: heard.text.trim() });
+        }
+        return;
+      }
       submit(speaker, heard.text, heard.confidence, heard.endOfSpeechAt);
     } catch (error) {
       const reason = (error as Error).message.replace(/[\s.]+$/, "");
@@ -1138,11 +1186,250 @@ export default function Controller() {
   const readbackTurn = turns.find((t) => t.turnId === pendingReadback);
   const nudge = [...nudges].reverse().find((n) => !dismissed.has(n.turnId));
 
+  const visitSetup = (
+    <section className={styles.section}>
+      <h2 className={styles.eyebrow}>Visit setup</h2>
+      <div className={styles.visit}>
+        <label className={styles.field}>
+          <span className={styles.fieldLabel}>Patient language</span>
+          <select
+            data-testid="patient-language"
+            value={patientLanguage}
+            disabled={turns.length > 0 || consented}
+            onChange={(e) =>
+              send("visit.set_languages", { patientLanguage: e.target.value, physicianLanguage: "en-CA" })
+            }
+          >
+            {ROADMAP.map(({ own, english, language, test }) => {
+              const selectable = Boolean(language) && (!test || testMode);
+              let note = "";
+              if (english === "English") note = "physician";
+              else if (!selectable) note = "coming soon";
+              else if (test) note = "test only";
+              return (
+                <option key={english} value={language ?? english} disabled={!selectable}>
+                  {own} ({english}){note && `, ${note}`}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+        <p className={styles.aside}>
+          {consented ? "With English. Fixed while consent is given." : "With English. Fixed once the first turn starts."}
+        </p>
+      </div>
+      <div className={styles.visit}>
+        {(["physician", "patient"] as const).map((role) => {
+          const draft = role === "physician" ? physicianDraft : patientDraft;
+          const setDraft = role === "physician" ? setPhysicianDraft : setPatientDraft;
+          return (
+            <label key={role} className={styles.field}>
+              <span className={styles.fieldLabel}>{role === "physician" ? "Physician name" : "Patient name"}</span>
+              <input
+                type="text"
+                data-testid={`name-${role}`}
+                value={draft}
+                maxLength={NAME_MAX}
+                autoComplete="off"
+                placeholder={role === "physician" ? "Dr. Thomas" : "Optional"}
+                onChange={(e) => setDraft(e.target.value)}
+                // Read the field itself: Enter can arrive before React re-renders with the last keystroke.
+                onBlur={(e) => commitName(role, e.currentTarget.value)}
+                onKeyDown={(e) => e.key === "Enter" && commitName(role, e.currentTarget.value)}
+              />
+            </label>
+          );
+        })}
+        <label className={styles.check}>
+          <input
+            type="checkbox"
+            data-testid="name-default"
+            checked={isDefault}
+            disabled={!isDefault && !tidy(physicianDraft)}
+            onChange={(e) => toggleDefault(e.target.checked)}
+          />
+          <span>Use this physician name for every visit on this device</span>
+        </label>
+        {defaultName && !isDefault && (
+          <p className={styles.aside} data-testid="name-default-note">
+            Saved default: {defaultName}
+          </p>
+        )}
+      </div>
+      {/* CDR-005: consent comes before anyone speaks, the introduction included. */}
+      <div
+        className={styles.consent}
+        data-testid="consent"
+        data-state={consentState?.state ?? "none"}
+        data-by={consented ? consentState?.by : undefined}
+      >
+        {consented && consentState ? (
+          <div className={styles.consentGiven}>
+            <p className={styles.consentStatus} data-testid="consent-status">
+              {/* One flex item, so the gap after the dot never opens a space before the comma. */}
+              <span>
+                Consent given {clock(consentState.at)}
+                <span className={styles.consentBy}>
+                  {consentState.by === "patient" ? ", by the patient" : ", on the patient’s behalf"}
+                </span>
+              </span>
+            </p>
+            <div className={styles.consentLinks}>
+              <button
+                className={styles.quiet}
+                data-testid="consent-read"
+                onClick={() => send("consent.read_aloud", {})}
+              >
+                Read notice again
+              </button>
+              <button className={styles.quiet} data-testid="consent-withdraw" onClick={() => send("consent.withdraw", {})}>
+                Withdraw consent
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className={styles.eyebrow}>
+              Consent
+              {consentState?.state === "withdrawn"
+                ? `: withdrawn ${clock(consentState.at)}, nothing is captured`
+                : ": needed before anyone speaks"}
+            </p>
+            {consentNotice ? (
+              <div className={styles.consentNotice} data-testid="consent-notice">
+                {consentNotice.lines.map(({ language, text }) => (
+                  <p key={language} lang={language}>
+                    {text}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className={styles.aside}>No consent notice for this language.</p>
+            )}
+            <div className={styles.actions}>
+              <button
+                className={styles.primary}
+                data-testid="consent-give"
+                disabled={state !== "open" || !consentNotice}
+                onClick={giveConsent}
+              >
+                Patient agrees
+              </button>
+              <button
+                className={styles.secondary}
+                data-testid="consent-read"
+                disabled={state !== "open" || !consentNotice}
+                onClick={() => send("consent.read_aloud", {})}
+              >
+                Read notice aloud
+              </button>
+            </div>
+            <p className={styles.aside}>
+              Read it aloud, then press when the patient agrees. It is recorded as given on their behalf.
+            </p>
+          </>
+        )}
+      </div>
+      <div className={styles.intro} data-testid="introduction" data-state={introSkipped ? "skipped" : introduction}>
+        {introduction === "pending" && turns.length === 0 && (
+          <>
+            <button
+              className={styles.secondary}
+              data-testid="intro-start"
+              disabled={state !== "open" || !consented}
+              onClick={() => send("visit.start_introduction", {})}
+            >
+              Start introduction
+            </button>
+            <p className={styles.aside}>
+              {consented
+                ? "The interpreter greets you both and asks for any name it does not know."
+                : "The interpreter introduces itself once the patient agrees."}
+            </p>
+          </>
+        )}
+        {introduction === "done" && turns.length === 0 && (
+          <p className={styles.aside}>Introduction done. Every relay now uses these names.</p>
+        )}
+        {askingRole && !proposed && (
+          <>
+            <p className={styles.introStatus}>
+              Asking the {askingRole} for their name. Hold {askingRole === "physician" ? "1" : "2"} to answer, or
+              type it above.
+            </p>
+            <button className={styles.quiet} data-testid="intro-skip" onClick={() => setIntroSkipped(true)}>
+              Skip and start the visit
+            </button>
+          </>
+        )}
+        {askingRole && proposed && (
+          <>
+            <p className={styles.introStatus} data-testid="intro-proposed">
+              Heard the {proposed.role}&rsquo;s name as <strong>{proposed.name}</strong>
+            </p>
+            <div className={styles.actions}>
+              <button
+                className={styles.primary}
+                data-testid="intro-confirm"
+                onClick={() => send("visit.name_confirm", { role: proposed.role })}
+              >
+                Use this name
+              </button>
+              <button
+                className={styles.secondary}
+                data-testid="intro-reject"
+                onClick={() => {
+                  setProposed(null);
+                  send("visit.name_reject", { role: proposed.role });
+                }}
+              >
+                Ask again
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+      {/* CDR-001 `visit.new`: a fresh visit on every screen without restarting the server; asks first. */}
+      {confirmingNew ? (
+        <div className={styles.newVisitConfirm} role="group" aria-label="Start a new visit">
+          <p className={styles.newVisitWarning}>This clears the current visit on every screen. The record is not kept.</p>
+          <div className={styles.actions}>
+            <button
+              className={styles.danger}
+              data-testid="new-visit-confirm"
+              disabled={state !== "open" || inGraph !== null}
+              onClick={() => {
+                setConfirmingNew(false);
+                send("visit.new", {});
+              }}
+            >
+              Start new visit
+            </button>
+            <button className={styles.secondary} data-testid="new-visit-cancel" onClick={() => setConfirmingNew(false)}>
+              Keep this visit
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.actions}>
+          <button
+            className={styles.secondary}
+            data-testid="new-visit"
+            disabled={state !== "open" || inGraph !== null}
+            title={inGraph !== null ? "Wait for the turn being interpreted to finish" : undefined}
+            onClick={() => setConfirmingNew(true)}
+          >
+            Start a new visit
+          </button>
+        </div>
+      )}
+    </section>
+  );
+
   return (
     <main className={styles.page}>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Demo night interpreter</p>
           <h1>Physician controller</h1>
           {services && <ServicesLine services={services} />}
         </div>
@@ -1164,243 +1451,44 @@ export default function Controller() {
       {/* Controls on the left; the turn log and latency, read rather than used, in a panel on the right. */}
       <div className={styles.layout}>
         <div className={styles.controls}>
-          <section className={styles.section}>
-            <h2 className={styles.eyebrow}>Visit</h2>
-            <div className={styles.visit}>
-              <label className={styles.field}>
-                <span className={styles.fieldLabel}>Patient language</span>
-                <select
-                  data-testid="patient-language"
-                  value={patientLanguage}
-                  disabled={turns.length > 0 || consented}
-                  onChange={(e) =>
-                    send("visit.set_languages", { patientLanguage: e.target.value, physicianLanguage: "en-CA" })
-                  }
-                >
-                  {ROADMAP.map(({ own, english, language, test }) => {
-                    const selectable = Boolean(language) && (!test || testMode);
-                    let note = "";
-                    if (english === "English") note = "physician";
-                    else if (!selectable) note = "coming soon";
-                    else if (test) note = "test only";
-                    return (
-                      <option key={english} value={language ?? english} disabled={!selectable}>
-                        {own} ({english}){note && `, ${note}`}
-                      </option>
-                    );
-                  })}
-                </select>
-              </label>
-              <p className={styles.aside}>
-                {consented ? "With English. Fixed while consent is given." : "With English. Fixed once the first turn starts."}
-              </p>
-            </div>
-            <div className={styles.visit}>
-              {(["physician", "patient"] as const).map((role) => {
-                const draft = role === "physician" ? physicianDraft : patientDraft;
-                const setDraft = role === "physician" ? setPhysicianDraft : setPatientDraft;
-                return (
-                  <label key={role} className={styles.field}>
-                    <span className={styles.fieldLabel}>{role === "physician" ? "Physician name" : "Patient name"}</span>
-                    <input
-                      type="text"
-                      data-testid={`name-${role}`}
-                      value={draft}
-                      maxLength={NAME_MAX}
-                      autoComplete="off"
-                      placeholder={role === "physician" ? "Dr. Thomas" : "Optional"}
-                      onChange={(e) => setDraft(e.target.value)}
-                      // Read the field itself: Enter can arrive before React re-renders with the last keystroke.
-                      onBlur={(e) => commitName(role, e.currentTarget.value)}
-                      onKeyDown={(e) => e.key === "Enter" && commitName(role, e.currentTarget.value)}
-                    />
-                  </label>
-                );
-              })}
-              <label className={styles.check}>
-                <input
-                  type="checkbox"
-                  data-testid="name-default"
-                  checked={isDefault}
-                  disabled={!isDefault && !tidy(physicianDraft)}
-                  onChange={(e) => toggleDefault(e.target.checked)}
+          {readbackTurn && (
+            <section className={styles.readback} data-testid="readback" aria-live="assertive">
+              <h2 className={styles.eyebrow}>Read-back: check the values before they are spoken</h2>
+              <p className={styles.readbackLine} lang={readbackTurn.sourceLanguage}>
+                <Highlighted
+                  text={readbackTurn.sourceText}
+                  values={readbackTurn.criticalValues.map((v) => v.source)}
+                  className={styles.value}
                 />
-                <span>Use this physician name for every visit on this device</span>
-              </label>
-              {defaultName && !isDefault && (
-                <p className={styles.aside} data-testid="name-default-note">
-                  Saved default: {defaultName}
-                </p>
-              )}
-            </div>
-            {/* CDR-005: consent comes before anyone speaks, the introduction included. */}
-            <div
-              className={styles.consent}
-              data-testid="consent"
-              data-state={consentState?.state ?? "none"}
-              data-by={consented ? consentState?.by : undefined}
-            >
-              {consented && consentState ? (
-                <div className={styles.consentGiven}>
-                  <p className={styles.consentStatus} data-testid="consent-status">
-                    {/* One flex item, so the gap after the dot never opens a space before the comma. */}
-                    <span>
-                      Consent given {clock(consentState.at)}
-                      <span className={styles.consentBy}>
-                        {consentState.by === "patient" ? ", by the patient" : ", on the patient’s behalf"}
-                      </span>
-                    </span>
-                  </p>
-                  <div className={styles.consentLinks}>
-                    <button
-                      className={styles.quiet}
-                      data-testid="consent-read"
-                      onClick={() => send("consent.read_aloud", {})}
-                    >
-                      Read notice again
-                    </button>
-                    <button className={styles.quiet} data-testid="consent-withdraw" onClick={() => send("consent.withdraw", {})}>
-                      Withdraw consent
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <p className={styles.eyebrow}>
-                    Consent
-                    {consentState?.state === "withdrawn"
-                      ? `: withdrawn ${clock(consentState.at)}, nothing is captured`
-                      : ": needed before anyone speaks"}
-                  </p>
-                  {consentNotice ? (
-                    <div className={styles.consentNotice} data-testid="consent-notice">
-                      {consentNotice.lines.map(({ language, text }) => (
-                        <p key={language} lang={language}>
-                          {text}
-                        </p>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className={styles.aside}>No consent notice for this language.</p>
-                  )}
-                  <div className={styles.actions}>
-                    <button
-                      className={styles.primary}
-                      data-testid="consent-give"
-                      disabled={state !== "open" || !consentNotice}
-                      onClick={giveConsent}
-                    >
-                      Patient agrees
-                    </button>
-                    <button
-                      className={styles.secondary}
-                      data-testid="consent-read"
-                      disabled={state !== "open" || !consentNotice}
-                      onClick={() => send("consent.read_aloud", {})}
-                    >
-                      Read notice aloud
-                    </button>
-                  </div>
-                  <p className={styles.aside}>
-                    Read it aloud, then press when the patient agrees. It is recorded as given on their behalf.
-                  </p>
-                </>
-              )}
-            </div>
-            <div className={styles.intro} data-testid="introduction" data-state={introSkipped ? "skipped" : introduction}>
-              {introduction === "pending" && turns.length === 0 && (
-                <>
-                  <button
-                    className={styles.secondary}
-                    data-testid="intro-start"
-                    disabled={state !== "open" || !consented}
-                    onClick={() => send("visit.start_introduction", {})}
-                  >
-                    Start introduction
-                  </button>
-                  <p className={styles.aside}>
-                    {consented
-                      ? "The interpreter greets you both and asks for any name it does not know."
-                      : "The interpreter introduces itself once the patient agrees."}
-                  </p>
-                </>
-              )}
-              {introduction === "done" && turns.length === 0 && (
-                <p className={styles.aside}>Introduction done. Every relay now uses these names.</p>
-              )}
-              {askingRole && !proposed && (
-                <>
-                  <p className={styles.introStatus}>
-                    Asking the {askingRole} for their name. Hold {askingRole === "physician" ? "1" : "2"} to answer, or
-                    type it above.
-                  </p>
-                  <button className={styles.quiet} data-testid="intro-skip" onClick={() => setIntroSkipped(true)}>
-                    Skip and start the visit
-                  </button>
-                </>
-              )}
-              {askingRole && proposed && (
-                <>
-                  <p className={styles.introStatus} data-testid="intro-proposed">
-                    Heard the {proposed.role}&rsquo;s name as <strong>{proposed.name}</strong>
-                  </p>
-                  <div className={styles.actions}>
-                    <button
-                      className={styles.primary}
-                      data-testid="intro-confirm"
-                      onClick={() => send("visit.name_confirm", { role: proposed.role })}
-                    >
-                      Use this name
-                    </button>
-                    <button
-                      className={styles.secondary}
-                      data-testid="intro-reject"
-                      onClick={() => {
-                        setProposed(null);
-                        send("visit.name_reject", { role: proposed.role });
-                      }}
-                    >
-                      Ask again
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-            {/* CDR-001 `visit.new`: a fresh visit on every screen without restarting the server; asks first. */}
-            {confirmingNew ? (
-              <div className={styles.newVisitConfirm} role="group" aria-label="Start a new visit">
-                <p className={styles.newVisitWarning}>This clears the current visit on every screen. The record is not kept.</p>
-                <div className={styles.actions}>
-                  <button
-                    className={styles.danger}
-                    data-testid="new-visit-confirm"
-                    disabled={state !== "open" || inGraph !== null}
-                    onClick={() => {
-                      setConfirmingNew(false);
-                      send("visit.new", {});
-                    }}
-                  >
-                    Start new visit
-                  </button>
-                  <button className={styles.secondary} data-testid="new-visit-cancel" onClick={() => setConfirmingNew(false)}>
-                    Keep this visit
-                  </button>
-                </div>
-              </div>
-            ) : (
+              </p>
+              <p className={styles.readbackLine} lang={readbackTurn.targetLanguage}>
+                <Highlighted
+                  text={readbackTurn.translation}
+                  values={readbackTurn.criticalValues.map((v) => v.translated)}
+                  className={styles.value}
+                />
+              </p>
+              <ValuesTable turn={readbackTurn} />
               <div className={styles.actions}>
                 <button
-                  className={styles.secondary}
-                  data-testid="new-visit"
-                  disabled={state !== "open" || inGraph !== null}
-                  title={inGraph !== null ? "Wait for the turn being interpreted to finish" : undefined}
-                  onClick={() => setConfirmingNew(true)}
+                  className={styles.primary}
+                  data-testid="readback-confirm"
+                  onClick={() => decideReadback(readbackTurn.turnId, true)}
                 >
-                  Start a new visit
+                  Confirm and speak
+                </button>
+                <button
+                  className={styles.secondary}
+                  data-testid="readback-reject"
+                  onClick={() => decideReadback(readbackTurn.turnId, false)}
+                >
+                  Reject and repeat
                 </button>
               </div>
-            )}
-          </section>
+            </section>
+          )}
+
+          {!consented && visitSetup}
 
           <section className={styles.section}>
             <div className={styles.speakHead}>
@@ -1420,6 +1508,44 @@ export default function Controller() {
                 Hands-free
               </label>
             </div>
+            {speechReview && (
+              <section className={styles.held} data-testid="speech-review" aria-labelledby="speech-review-title">
+                <h3 className={styles.eyebrow} id="speech-review-title">Review what we heard</h3>
+                <label className={styles.field}>
+                  <span>{SPEAKER_TEXT[speechReview.speaker]} ({LANGUAGE_LABELS[languageOf(speechReview.speaker)].own})</span>
+                  <textarea
+                    data-testid="speech-review-text"
+                    lang={languageOf(speechReview.speaker)}
+                    value={speechReview.text}
+                    onChange={(event) => setSpeechReview({ ...speechReview, text: event.target.value })}
+                  />
+                </label>
+                <div className={styles.actions}>
+                  <button
+                    className={styles.primary}
+                    data-testid="speech-review-confirm"
+                    disabled={state !== "open" || !speechReview.text.trim() || pendingReadback !== null}
+                    onClick={() => {
+                      if (speechReview.reviewId) {
+                        send("transcript.review_resolve", {
+                          reviewId: speechReview.reviewId, action: "confirm", text: speechReview.text,
+                        });
+                      } else {
+                        submit(speechReview.speaker, speechReview.text, 1, Date.now());
+                        setSpeechReview(null);
+                      }
+                    }}
+                  >
+                    Confirm and translate
+                  </button>
+                  <button className={styles.secondary} onClick={() => {
+                    if (speechReview.reviewId) {
+                      send("transcript.review_resolve", { reviewId: speechReview.reviewId, action: "repeat" });
+                    } else setSpeechReview(null);
+                  }}>Discard</button>
+                </div>
+              </section>
+            )}
             {handsFree && (
               <p
                 className={styles.listening}
@@ -1461,6 +1587,7 @@ export default function Controller() {
                   key={speaker}
                   className={`${styles.talkButton} ${styles[speaker]} ${recording === speaker ? styles.recording : ""}`}
                   data-testid={`speak-${speaker}`}
+                  disabled={speechReview !== null}
                   onPointerDown={() => void pressTalk(speaker)}
                   onPointerUp={() => void releaseTalk()}
                   onPointerLeave={() => recording === speaker && void releaseTalk()}
@@ -1579,43 +1706,6 @@ export default function Controller() {
             send={send}
           />
 
-          {readbackTurn && (
-            <section className={styles.readback} data-testid="readback" aria-live="assertive">
-              <h2 className={styles.eyebrow}>Read-back: check the values before they are spoken</h2>
-              <p className={styles.readbackLine} lang={readbackTurn.sourceLanguage}>
-                <Highlighted
-                  text={readbackTurn.sourceText}
-                  values={readbackTurn.criticalValues.map((v) => v.source)}
-                  className={styles.value}
-                />
-              </p>
-              <p className={styles.readbackLine} lang={readbackTurn.targetLanguage}>
-                <Highlighted
-                  text={readbackTurn.translation}
-                  values={readbackTurn.criticalValues.map((v) => v.translated)}
-                  className={styles.value}
-                />
-              </p>
-              <ValuesTable turn={readbackTurn} />
-              <div className={styles.actions}>
-                <button
-                  className={styles.primary}
-                  data-testid="readback-confirm"
-                  onClick={() => decideReadback(readbackTurn.turnId, true)}
-                >
-                  Confirm and speak
-                </button>
-                <button
-                  className={styles.secondary}
-                  data-testid="readback-reject"
-                  onClick={() => decideReadback(readbackTurn.turnId, false)}
-                >
-                  Reject and repeat
-                </button>
-              </div>
-            </section>
-          )}
-
           {nudge && (
             <section className={`${styles.section} ${styles.nudge}`} data-testid="nudge" aria-live="polite">
               <div className={styles.nudgeHead}>
@@ -1663,6 +1753,8 @@ export default function Controller() {
               </p>
             )}
           </section>
+
+          {consented && visitSetup}
 
           <NoteSummaryPanel
             open={state === "open"}
@@ -1764,28 +1856,6 @@ export default function Controller() {
         </div>
 
         <aside className={styles.panel} aria-label="Turn log and latency">
-          <section className={`${styles.section} ${styles.latency}`}>
-            <div>
-              <h2 className={styles.eyebrow}>Median end of speech to audio</h2>
-              <p className={styles.stat}>{medianMs === undefined ? "n/a" : `${(medianMs / 1000).toFixed(2)} s`}</p>
-              <p className={styles.aside}>
-                Over {measured.length} turn{measured.length === 1 ? "" : "s"}. Target under 3 s. Read-back decisions are
-                not counted.
-              </p>
-              <dl className={styles.breakdown} data-testid="latency-breakdown">
-                {breakdown.map(({ label, ms }) => (
-                  <div key={label}>
-                    <dt className={styles.eyebrow}>{label}</dt>
-                    <dd>{ms === undefined ? "n/a" : `${(ms / 1000).toFixed(2)} s`}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-            <button className={styles.secondary} onClick={downloadCsv} disabled={!latency.length}>
-              Download CSV
-            </button>
-          </section>
-
           {/* CDR-008 and MDD-005 rule 4: how the visit is landing, for the physician only; a quiet list, newest last. */}
           <section className={styles.section} data-testid="trust" aria-label="Trust, private to the physician">
             <h2 className={styles.eyebrow}>Trust, private to the physician</h2>
@@ -1957,6 +2027,30 @@ export default function Controller() {
               })}
             </ol>
           </section>
+          <details className={styles.presenter}>
+            <summary><span className={styles.eyebrow}>Timing and CSV</span></summary>
+            <section className={`${styles.section} ${styles.latency}`}>
+              <div>
+                <h2 className={styles.eyebrow}>Median end of speech to audio</h2>
+                <p className={styles.stat}>{medianMs === undefined ? "n/a" : `${(medianMs / 1000).toFixed(2)} s`}</p>
+                <p className={styles.aside}>
+                  Over {measured.length} turn{measured.length === 1 ? "" : "s"}. Target under 3 s. Read-back decisions are
+                  not counted.
+                </p>
+                <dl className={styles.breakdown} data-testid="latency-breakdown">
+                  {breakdown.map(({ label, ms }) => (
+                    <div key={label}>
+                      <dt className={styles.eyebrow}>{label}</dt>
+                      <dd>{ms === undefined ? "n/a" : `${(ms / 1000).toFixed(2)} s`}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+              <button className={styles.secondary} onClick={downloadCsv} disabled={!latency.length}>
+                Download CSV
+              </button>
+            </section>
+          </details>
         </aside>
       </div>
     </main>

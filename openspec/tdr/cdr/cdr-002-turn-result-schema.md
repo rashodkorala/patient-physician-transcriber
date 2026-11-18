@@ -10,7 +10,7 @@ proposed_by: agent
 category: api-contract
 related_decisions: [adr-002, adr-004, cdr-001]
 related_specs: []
-related_changes: [demo-night-mvp, mediator-voice, trust-across-the-barrier]
+related_changes: [demo-night-mvp, mediator-voice, trust-across-the-barrier, affect-in-words]
 ai_context:
   implementation_priorities:
     - "Single shape for every translated turn"
@@ -154,3 +154,11 @@ Code carries `@contract TurnResult` or `@contract TurnCaption` and `@implements 
 - 2026-11-10, rashodkorala: Extended to the trust-across-the-barrier change under the blanket authorisation given in session (see MDD-005). Recorded by Claude (agent) at rashodkorala's explicit request.
 - 2026-11-10, rashodkorala: Additive amendment by CDR-008 and IDR-005: `TurnResult` gains `manner` (every turn) and `TurnCaption` gains `manner` (a final physician turn only, otherwise null). `toneLabel` stays in the shape; screens now show the manner label instead. Recorded by Claude (agent) under the blanket authorisation given in session (see MDD-005).
 - 2026-11-12, rashodkorala: Amended by ADR-003: `TurnResult.status` and `TurnCaption.status` gain `unclear`, `TurnResult` gains the controller-only `unclearStreak`, `escalated` for low confidence now needs a third consecutive unclear turn from the same speaker, and the precedence becomes blocked, escalated, unclear, readback_required, final. The enum addition is made under the blanket authorisation given in session (see MDD-005) rather than a superseding record. Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-16, rashodkorala: amended ("yes to time of day and IDR-006"). For a `frequency` critical value the check compares how many times in the period, and also the time of day: when the source and the relay both name a time of day and they differ ("every morning" against "every night"), the value does not match and the turn retries or blocks; when only one side names a time of day ("daily" against "every morning"), the time of day is not compared and the count decides.
+  This answers the live run of 16 November 2026, where faithful turns were blocked on "daily" against "every morning".
+  Recorded by Claude (agent) at rashodkorala's explicit request. The status stays accepted.
+- 2026-11-16, rashodkorala: amended ("Yes, treat as same"). In the time-of-day comparison, evening, night, and bedtime count as the same time of day, so "every night" agrees with "chaque soir" and with "at bedtime"; morning and noon stay distinct from them and from each other, so morning against night still does not match.
+  Recorded by Claude (agent) at rashodkorala's explicit request. The status stays accepted.
+- 2026-11-16, rashodkorala: amended ("Yes, add the field"). A settled turn may carry private notes for the controller, as a list of short plain-text strings in a new controller-only field, for example that a relay was delivered although the speaker's gender was not stated (ADR-003).
+  The field goes to controller connections only, with the other controller-only turn analysis; it never reaches a screen or review connection, live or in `visit.state`, and it is not spoken, shown in a caption, or used as a source for the note or summary.
+  Recorded by Claude (agent) at rashodkorala's explicit request. The status stays accepted.

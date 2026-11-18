@@ -2,7 +2,7 @@
 
 After every spoken turn, one background call on the tone model, never on the turn's critical path:
 
-- a patient turn that sounds worried, embarrassed, in pain, or confused gets the empathy nudge as before (demo
+- a patient turn that sounds worried, frightened, embarrassed, in pain, or confused gets the empathy nudge (demo
   spec: Empathy nudge), a ready phrase from the reviewed empathy bank;
 - a physician turn gets a culture cue when the retrieved tone and culture guidance for the patient's language
   marks the topic sensitive, and nothing otherwise;
@@ -34,8 +34,8 @@ from llm import Model
 PURPOSE = "trust"
 
 # The emotions that get an empathy nudge, and the CDR-008 reassurance rule's worry: an earlier patient turn with
-# one of these emotions ...
-NUDGE_EMOTIONS: frozenset[str] = frozenset({"worried", "embarrassed", "in_pain", "confused"})
+# one of these emotions (frightened as worried, CDR-008 amended 2026-11-16 for MDD-006 decision 8) ...
+NUDGE_EMOTIONS: frozenset[str] = frozenset({"worried", "frightened", "embarrassed", "in_pain", "confused"})
 # ... a physician turn between them with one of these manners ...
 REASSURING_MANNERS: frozenset[str] = frozenset({"reassuring", "warm", "gentle", "encouraging"})
 # ... and this turn sounds like one of these: landed.
@@ -87,7 +87,7 @@ class SpokenTurn:
 
 def reassurance_landed(history: Iterable[SpokenTurn], speaker: str, emotion: str) -> bool | None:
     """CDR-008: set only on a patient turn that follows (a) an earlier patient turn whose emotion was worried,
-    embarrassed, in_pain, or confused and (b) a physician turn between them whose manner was reassuring, warm,
+    frightened, embarrassed, in_pain, or confused and (b) a physician turn between them whose manner was reassuring, warm,
     gentle, or encouraging: true when this turn sounds calm or relieved, otherwise false; null in every other case.
 
     `history` is the visit's spoken turns before this one, in the order they were spoken. A companion turn never

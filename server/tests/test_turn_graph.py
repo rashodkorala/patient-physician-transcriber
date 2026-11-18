@@ -1,7 +1,8 @@
 """Turn graph tests with a scripted model (task 2.3, ADR-004, CDR-002, EDR-002), and manner in the same call
-(IDR-005, trust-across-the-barrier 2.1)."""
+(IDR-005, trust-across-the-barrier 2.1), and the affect phrase in the frame (IDR-006, affect-in-words group 2)."""
 
 import asyncio
+import re
 
 import pytest
 
@@ -100,7 +101,9 @@ def test_mismatch_then_fixed_on_retry_cdr_002(kb):
     assert result.status == "readback_required" and result.attempts == 2
     assert "retrying" in stages
     retry_prompt = [u for p, u in m.calls if p == "translate"][1]
-    assert "Keep exactly: 0.4 milligrams" in field(retry_prompt, "fix_these")
+    # The lost value is named by its meaning, never as English words to copy into a Punjabi relay (group 9).
+    assert "Keep the dose the original states, 0.4 mg, in Punjabi" in field(retry_prompt, "fix_these")
+    assert "never copy a word of the original into the relay" in field(retry_prompt, "fix_these")
 
 
 def test_mismatch_twice_is_blocked_cdr_002(kb):
@@ -363,13 +366,317 @@ def test_prompts_define_manner_the_frame_rule_and_the_tone_check_allowance_idr_0
     assert "in every sentence, not only the first" in translate and 'never "I" or "we" anywhere' in translate
     assert "They will start you on a new medicine today." in translate
     tone = " ".join(TONE_SYSTEM.split())
-    assert "one manner adverb" in tone and "any such adverb in the frame is expected and never a problem" in tone
-    # The tone check stays lenient: it accepts every manner adverb, so a faithful relay is never escalated for
-    # one manner word, even one the translate prompt asks the model not to add.
+    assert "For a physician turn, the frame may also carry one manner adverb" in tone
+    assert "such an adverb in the frame is acceptable in itself, whichever manner it names" in tone
+    # The tone check stays lenient on a physician turn: it accepts every manner adverb, so a faithful relay is never
+    # escalated for one manner word, even one the translate prompt asks the model not to add.
     for adverb in ("gently", "reassuringly", "seriously", "urgently", "apologetically", "warmly", "encouragingly"):
         assert adverb in tone
     assert "reassuringly" not in translate
-    assert "seriousness or certainty changed still fails certainty_preserved" in tone
+    assert "A relay whose seriousness or certainty changed fails certainty_preserved" in tone
+
+
+# ---------- affect in words (IDR-006, MDD-006) ----------
+
+PHRASES = (
+    "sounding worried",
+    "sounding embarrassed",
+    "sounding as if in pain",
+    "sounding relieved",
+    "sounding confused",
+)
+WORRIED_DOSE = "I am worried, I take 0.4 milligrams of nitroglycerin."
+
+
+def phrases_in(text: str) -> list[str]:
+    return [p for p in PHRASES for _ in range(text.count(p))]
+
+
+def opening_frame(translation: str) -> str:
+    """Everything up to and including the frame's closing comma after its affect phrase."""
+    phrase = phrases_in(translation)[0]
+    return translation[: translation.index(phrase) + len(phrase) + 1]
+
+
+def test_prompts_define_the_affect_phrase_rule_idr_006():
+    translate = " ".join(TRANSLATE_SYSTEM.split())
+    assert "When the listener is the physician, it names the speaker's emotion" in translate
+    assert "once, as one hedged phrase in the target language's natural form" in translate
+    for emotion, phrase in (
+        ("worried", "sounding worried"),
+        ("embarrassed", "sounding embarrassed"),
+        ("in_pain", "sounding as if in pain"),
+        ("relieved", "sounding relieved"),
+        ("confused", "sounding confused"),
+    ):
+        assert f'{emotion} as "{phrase}"' in translate
+    assert '"The patient says, sounding worried, that ..."' in translate
+    assert "A calm turn gets no phrase, a physician turn never gets one" in translate
+    # Review fix 4: a turn relayed to the patient never carries the phrase.
+    assert "a turn whose listener is the patient never gets one: the phrase is only ever for the physician" in translate
+    assert "Never more than one phrase, never anywhere but the opening frame" in translate
+    assert "a certainty word, a number, or a medication" in translate
+    assert "affect_phrase is the affect phrase exactly as it appears in your translation" in translate
+    # The emotion the phrase follows is read from the words alone, calm unless they clearly carry a feeling.
+    assert "read from the words alone (calm is the default" in translate
+    # Review fix 3: the manner adverb is for physician turns only, and a patient frame carries no adverb.
+    assert "For a physician turn only, the frame may name the manner" in translate
+    assert "A patient or companion frame never carries a manner adverb." in translate
+    assert "(the patient's caption label carries those)" in translate and "the voice carries" not in translate
+    tone = " ".join(TONE_SYSTEM.split())
+    # Review fix 1: the tone check is told who spoke and to whom, and the allowance depends on it.
+    assert "You are told who spoke (speaker: physician, patient, or companion) and who the relay is for" in tone
+    assert "For a patient or companion turn whose listener is the physician, the frame may instead carry" in tone
+    assert "One such phrase in the frame is acceptable in itself." in tone
+    assert "never a problem" not in tone.split("Compare the original")[0].replace("never count them as a problem", "")
+    assert (
+        "a phrase about how the speaker sounded on a physician turn or on a turn whose listener is the patient" in tone
+    )
+    assert "a manner adverb on a patient or companion turn" in tone
+    # Review fix 5: an acceptable phrase still fails when it changes how certain or serious the statement sounds.
+    assert "still fails certainty_preserved when it makes the statement more or less certain or serious" in tone
+    # Group 9 (live run, T8): only when the speaker expressed no such feeling; a stated value elsewhere is no reason.
+    assert '"sounding confused" in front of a dose from a speaker who expressed no confusion at all' in tone
+    # Review fix 6: the same meaning in another language, or a close paraphrase, counts as the phrase.
+    assert 'The same meaning in any language, or a close paraphrase such as "sounding anxious"' in tone
+    assert "A relay whose seriousness or certainty changed fails certainty_preserved" in tone
+
+
+def test_worried_patient_turn_has_exactly_one_phrase_in_the_frame_idr_006(kb):
+    m = model()
+    result, reason, _ = run(kb, m, text="I am scared of the needle.", speaker="patient", source="pa-IN", target="en-CA")
+    assert [purpose for purpose, _ in m.calls] == ["translate", "tone_check"]  # no extra call
+    assert result.status == "final" and reason is None and result.emotion == "worried"
+    assert result.translation == "[en-CA] The patient says, sounding worried, I am scared of the needle."
+    assert phrases_in(result.translation) == ["sounding worried"]
+    assert to_caption(result).manner is None
+    named, _, _ = run(
+        kb, model(), text="I am scared.", speaker="patient", source="pa-IN", target="en-CA", patient_name="Harpreet"
+    )
+    assert named.translation == "[en-CA] Harpreet says, sounding worried, I am scared."
+
+
+def test_calm_patient_turn_has_no_phrase_idr_006(kb):
+    result, _, _ = run(kb, model(), text="ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਡਾਕਟਰ ਜੀ।", speaker="patient", source="pa-IN", target="en-CA")
+    assert result.emotion == "calm" and result.translation == "[en-CA] ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਡਾਕਟਰ ਜੀ।"
+    assert phrases_in(result.translation) == []
+
+
+def test_companion_turn_names_the_companion_and_carries_one_phrase_idr_006(kb):
+    result, _, _ = run(
+        kb, model(), text="I am embarrassed to say this.", speaker="companion", source="pa-IN", target="en-CA"
+    )
+    assert result.speaker == "companion" and result.emotion == "embarrassed"
+    assert result.translation.startswith("[en-CA] The patient's companion says, sounding embarrassed, ")
+    assert phrases_in(result.translation) == ["sounding embarrassed"]
+
+
+def test_physician_turn_never_gets_an_affect_phrase_idr_006(kb):
+    result, _, _ = run(kb, model(), text="I am worried about your blood pressure.", physician_name="Dr. Thomas")
+    assert result.emotion == "worried" and result.status == "final"
+    assert phrases_in(result.translation) == [] and " says, " not in result.translation
+
+
+def framed_relay(phrase, speaker_frame="The patient says", report=True):
+    """A faithful relay whose frame carries `phrase`, back-translated with the same frame. `report` says whether the
+    model reports the phrase as `affect_phrase`, as the prompt asks."""
+
+    def handler(user):
+        draft = fake_model.translate(user)
+        text = fake_model.field(user, "utterance")
+        frame = f"{speaker_frame}, {phrase}, "
+        return Draft(
+            **{
+                **draft.model_dump(),
+                "emotion": "worried",
+                "translation": f"[{fake_model.field(user, 'target_code')}] {frame}{text}",
+                "back_translation": f"{frame}{text}",
+                "affect_phrase": phrase if report else "",
+            }
+        )
+
+    return handler
+
+
+def framed_patient_relay(phrase):
+    return framed_relay(phrase)
+
+
+# A close paraphrase in the back-translation counts as the frame phrase (review fix 6).
+PARAPHRASES = ("sounding anxious", "seeming upset")
+CONFUSION = re.compile(r"confus|not sure|don't know|unsure", re.IGNORECASE)
+
+
+def judge(user):
+    """A tone check that follows TONE_SYSTEM: the frame and one hedged affect phrase (or a close paraphrase) are
+    acceptable in themselves; anything else added changes how certain or serious the relay sounds, and so does
+    "sounding confused" in front of a value the speaker stated plainly."""
+    original, back = field(user, "original"), field(user, "back_translation")
+    phrase = re.match(rf"^The patient says, ({'|'.join((*PHRASES, *PARAPHRASES))}), ", back)
+    relayed = back[phrase.end() :] if phrase else back
+    undermined = bool(
+        phrase
+        and phrase.group(1) == "sounding confused"
+        and re.search(r"\d", original)
+        and not CONFUSION.search(original)
+    )
+    same = relayed == original and not undermined
+    return ToneCheck(
+        meaning_preserved=True,
+        certainty_preserved=same,
+        warmth_preserved=True,
+        issue="" if same else "The frame makes the patient sound more or less certain than they were.",
+    )
+
+
+def test_frame_phrase_passes_the_tone_check_idr_006(kb):
+    m = model(translate=framed_patient_relay("sounding worried"), tone_check=judge)
+    result, reason, _ = run(kb, m, text="I am scared.", speaker="patient", source="pa-IN", target="en-CA")
+    assert result.status == "final" and reason is None and result.attempts == 1
+    tone_user = next(user for purpose, user in m.calls if purpose == "tone_check")
+    assert field(tone_user, "back_translation") == "The patient says, sounding worried, I am scared."
+
+
+def test_phrase_that_makes_the_statement_more_certain_fails_the_tone_check_idr_006(kb):
+    m = model(translate=framed_patient_relay("sounding sure it is nothing serious"), tone_check=judge)
+    result, reason, _ = run(
+        kb, m, text="I think it might be nothing.", speaker="patient", source="pa-IN", target="en-CA"
+    )
+    assert result.status == "escalated" and reason == "tone_failure" and result.attempts == 2
+    # The same turn with only the hedged phrase is not escalated: the phrase alone is never the failure.
+    hedged, reason, _ = run(
+        kb,
+        model(translate=framed_patient_relay("sounding worried"), tone_check=judge),
+        text="I think it might be nothing.",
+        speaker="patient",
+        source="pa-IN",
+        target="en-CA",
+    )
+    assert hedged.status == "final" and reason is None
+
+
+def test_worried_patient_dose_keeps_its_value_and_the_check_still_blocks_a_change_idr_006(kb):
+    result, reason, _ = run(kb, model(), text=WORRIED_DOSE, speaker="patient", source="pa-IN", target="en-CA")
+    assert result.status == "final" and reason is None and result.attempts == 1
+    assert "0.4" in result.translation and result.critical_values
+    assert all(v.matched for v in result.critical_values)
+    assert phrases_in(result.translation) == ["sounding worried"]
+    assert "0.4" not in opening_frame(result.translation)  # the phrase sits in the frame, before the value
+    changed, _, _ = run(
+        kb, model(translate=mistranslate_dose(2)), text=WORRIED_DOSE, speaker="patient", source="pa-IN", target="en-CA"
+    )
+    assert changed.status == "blocked" and "sounding worried" in changed.translation
+    assert not all(v.matched for v in changed.critical_values)
+
+
+def test_listed_phrase_that_undermines_a_stated_dose_fails_the_tone_check_idr_006(kb):
+    """Review fix 5: "sounding confused" is acceptable in itself, but not in front of a dose stated plainly."""
+    stated = "I take 0.4 milligrams of nitroglycerin."
+    m = model(translate=framed_patient_relay("sounding confused"), tone_check=judge)
+    result, reason, _ = run(kb, m, text=stated, speaker="patient", source="pa-IN", target="en-CA")
+    assert result.status == "escalated" and reason == "tone_failure" and result.attempts == 2
+    worried, reason, _ = run(
+        kb,
+        model(translate=framed_patient_relay("sounding worried"), tone_check=judge),
+        text=stated,
+        speaker="patient",
+        source="pa-IN",
+        target="en-CA",
+    )
+    assert worried.status == "final" and reason is None and worried.attempts == 1
+    unsure = "I am not sure, maybe 0.4 milligrams."
+    confused, reason, _ = run(
+        kb,
+        model(translate=framed_patient_relay("sounding confused"), tone_check=judge),
+        text=unsure,
+        speaker="patient",
+        source="pa-IN",
+        target="en-CA",
+    )
+    assert confused.status == "final" and reason is None
+
+
+def test_close_paraphrase_counts_as_the_frame_phrase_idr_006(kb):
+    """Review fix 6: "sounding anxious" in the back-translation counts as the one frame phrase."""
+    m = model(translate=framed_patient_relay("sounding anxious"), tone_check=judge)
+    result, reason, _ = run(kb, m, text="I am scared.", speaker="patient", source="pa-IN", target="en-CA")
+    assert result.status == "final" and reason is None and result.attempts == 1
+
+
+@pytest.mark.parametrize("report", [True, False])
+def test_affect_phrase_on_a_physician_relay_is_never_final_idr_006(kb, report):
+    """Review fix 1: a lenient tone check passes it, but code fails the frame, retries, then escalates."""
+    m = model(translate=framed_relay("sounding worried", "Dr. Thomas is saying", report=report))
+    result, reason, _ = run(kb, m, text="Your blood pressure is high.", physician_name="Dr. Thomas")
+    assert result.status == "escalated" and reason == "tone_failure" and result.attempts == 2
+    tone_users = [user for purpose, user in m.calls if purpose == "tone_check"]
+    assert all(field(u, "speaker") == "physician" and field(u, "listener") == "patient" for u in tone_users)
+    # The retry is told why.
+    retry = [user for purpose, user in m.calls if purpose == "translate"][1]
+    assert "remove it" in field(retry, "fix_these")
+
+
+def test_physician_who_says_sounding_is_not_mistaken_for_an_affect_phrase_idr_006(kb):
+    result, reason, _ = run(kb, model(), text="Your breathing is sounding better today.", physician_name="Dr. Thomas")
+    assert result.status == "final" and reason is None
+
+
+def test_reported_phrase_must_appear_once_and_not_on_a_calm_turn_idr_006(kb):
+    def missing(user):
+        draft = fake_model.translate(user)
+        return Draft(**{**draft.model_dump(), "affect_phrase": "sounding uneasy"})
+
+    result, reason, _ = run(
+        kb, model(translate=missing), text="I am scared.", speaker="patient", source="pa-IN", target="en-CA"
+    )
+    assert result.status == "escalated" and reason == "tone_failure"
+    calm, reason, _ = run(
+        kb,
+        model(translate=framed_relay("sounding worried")),
+        text="ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਡਾਕਟਰ ਜੀ।",
+        speaker="patient",
+        source="pa-IN",
+        target="en-CA",
+    )
+    assert calm.status == "final"  # the relay says worried and so does the read: consistent
+
+    def calm_with_phrase(user):
+        draft = framed_relay("sounding worried")(user)
+        return Draft(**{**draft.model_dump(), "emotion": "calm"})
+
+    inconsistent, reason, _ = run(
+        kb, model(translate=calm_with_phrase), text="Hello.", speaker="patient", source="pa-IN", target="en-CA"
+    )
+    assert inconsistent.status == "escalated" and reason == "tone_failure"
+
+
+def test_patient_turn_relayed_to_the_patient_carries_no_phrase_idr_006(kb):
+    """Review fix 4: a patient turn in the physician's language is relayed to the patient, never with a phrase."""
+    m = model()
+    result, reason, _ = run(
+        kb, m, text="I am scared of the needle.", speaker="patient", source="en-CA", target="pa-IN", listener="patient"
+    )
+    assert result.status == "final" and reason is None and result.emotion == "worried"
+    assert result.translation == "[pa-IN] I am scared of the needle." and result.affect_phrase == ""
+    assert field(translate_prompt(m), "listener") == "patient"
+    forced, reason, _ = run(
+        kb,
+        model(translate=framed_relay("sounding worried")),
+        text="I am scared of the needle.",
+        speaker="patient",
+        source="en-CA",
+        target="pa-IN",
+        listener="patient",
+    )
+    assert forced.status == "escalated" and reason == "tone_failure"
+
+
+def test_turn_result_keeps_the_phrase_off_the_wire_idr_006(kb):
+    result, _, _ = run(kb, model(), text="I am scared.", speaker="patient", source="pa-IN", target="en-CA")
+    assert result.affect_phrase == "sounding worried"
+    assert "affectPhrase" not in result.wire() and "affect_phrase" not in result.model_dump()
+    assert "affectPhrase" not in to_caption(result).wire()
+    assert result.model_copy(update={"status": "final"}).affect_phrase == "sounding worried"
 
 
 # ---------- presenter mismatch control (TDM-002, task 5.1) ----------
@@ -412,7 +719,9 @@ def test_injection_multiplies_the_first_dose_by_ten_on_both_attempts_and_blocks_
     assert dose.matched is False
     # The model translated faithfully both times; the control changed the number after it, on both attempts.
     assert [p for p, _ in m.calls] == ["translate", "tone_check", "translate", "tone_check"]
-    assert "Keep exactly: 0.4 milligrams" in field([u for p, u in m.calls if p == "translate"][1], "fix_these")
+    assert "Keep the dose the original states, 0.4 mg" in field(
+        [u for p, u in m.calls if p == "translate"][1], "fix_these"
+    )
     assert arming.claims == 1 and arming.armed is False
 
 

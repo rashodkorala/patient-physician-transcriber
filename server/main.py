@@ -22,6 +22,8 @@ Run with the app factory so nothing loads on import: uvicorn main:create_app --f
 @implements MDD-005: Trust across the barrier
 @implements CDR-008: Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel
 @implements IDR-005: Manner vocabulary and voice delivery
+@implements MDD-006: Affect in words
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
 @contract ws:/ws/visit
 @contract http:GET /api/speech/{speech_id}
 @see openspec/tdr/adr/adr-001-system-architecture.md
@@ -96,6 +98,10 @@ from contracts import (
     SummarySpeak,
     TamperRecord,
     TamperState,
+    TranscriptReview,
+    TranscriptReviewResolve,
+    TranscriptReviewStart,
+    TranscriptReviewState,
     TrustUpdate,
     TurnRef,
     TurnStarted,
@@ -128,12 +134,9 @@ from visit_store import Connection, Hub, SegmentRecord, Speech, TurnRecord, Visi
 from voice import (
     DEFAULT_MODEL,
     DEFAULT_VOICE,
-    LINE_DELIVERY,
-    Delivery,
     ElevenLabsVoice,
     Voice,
     VoiceUnavailable,
-    delivery_for_turn,
 )
 
 # uvicorn prints this logger, so timing lines and errors show in the dev.sh output.
@@ -200,7 +203,7 @@ def services(settings: Settings, voice: Voice | None, embedder: Embedder) -> dic
 def describe(used: dict[str, str], test_languages: bool) -> str:
     """One start-up line saying what this run will use, so a fake run is never mistaken for live."""
     translator = (
-        f"Claude ({used['liveModel']}, tone check {used['toneModel']}, note and summary {used['recordModel']})"
+        f"Claude ({used['liveModel']}, trust cues {used['toneModel']}, note and summary {used['recordModel']})"
         if used["translator"] == "claude"
         else "fake model (no AI calls)"
     )
@@ -221,6 +224,8 @@ def create_app(
     voice: Voice | None = None,
     voice_ceiling_s: float = VOICE_CEILING_S,
     signal_hold_s: float = SIGNAL_HOLD_S,
+    *,
+    model_tone_check: bool = False,
 ) -> FastAPI:
     settings = settings or load_settings()
     model = model or make_model(settings)
@@ -228,7 +233,7 @@ def create_app(
     kb = kb or KnowledgeBase(make_embedder())
     used = services(settings, voice, kb.embedder)
     log.info(describe(used, settings.test_languages))
-    pipeline = TurnPipeline(model, kb)
+    pipeline = TurnPipeline(model, kb, model_tone_check=model_tone_check)
     advisor = TrustAdvisor(model, kb)
 
     app = FastAPI(title="Demo night server")
@@ -272,9 +277,10 @@ def create_app(
         except SpeechNotConfigured as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    def speakable(speech_id: str, language: Language | None) -> tuple[str, Language, Delivery] | None:
+    def speakable(speech_id: str, language: Language | None) -> tuple[str, Language] | None:
         """What an id may say aloud: a settled final turn, a confirmed read-back, an interpreter line, or the
         visit's current consent notice in the patient's language (CDR-005), whether or not consent is given.
+        Each is said in the voice's one constant delivery (IDR-006), so only the text and language are returned.
 
         Blocked, unclear, escalated, rejected, and unsettled turns, other notices, and unknown ids are never spoken.
         An `ask_to_repeat` line (ADR-003) has one text, in the unclear turn's speaker's language, so it is served in
@@ -285,23 +291,22 @@ def create_app(
         if notice and speech_id == notice.speech_id:
             if language != notice.language:
                 return None
-            return notice.lines[0].text, notice.language, LINE_DELIVERY
-        # CDR-007: `{summaryId}.{n}`, a sentence of the current passed summary only, in its language only, with
-        # the calm interpreter-line delivery. A refused or replaced summary is never held, so never served.
+            return notice.lines[0].text, notice.language
+        # CDR-007: `{summaryId}.{n}`, a sentence of the current passed summary only, in its language only. A
+        # refused or replaced summary is never held, so never served.
         summary = visit.summary
         if summary and speech_id.startswith(f"{summary.summary_id}."):
             sentence = next((s for s in summary.sentences if s.sentence_id == speech_id), None)
             if sentence is None or language != summary.language:
                 return None
-            return sentence.text, summary.language, LINE_DELIVERY
+            return sentence.text, summary.language
         record = visit.turns.get(speech_id)
         if record and record.result:
             result = record.result
             if (record.settled and result.status == "final") or record.readback_confirmed:
-                # IDR-005: a physician turn is said in the physician's manner; a patient or companion turn conveys
-                # the speaker's emotion to the physician.
-                delivery = delivery_for_turn(result.speaker, result.manner, result.emotion, result.certainty)
-                return result.translation, result.target_language, delivery
+                # IDR-006: the settled translation, frame phrase and all, in the constant delivery; manner, emotion,
+                # and certainty no longer change how it is said.
+                return result.translation, result.target_language
             return None
         line = visit.interpreter_lines.get(speech_id)
         if line:
@@ -310,7 +315,7 @@ def create_app(
             parts = line.lines[:1] if line.purpose == "ask_if_clear" else line.lines
             for part in parts:
                 if part.language == language:
-                    return part.text, part.language, LINE_DELIVERY
+                    return part.text, part.language
         return None
 
     @app.get("/api/speech/{speech_id}")
@@ -319,11 +324,11 @@ def create_app(
         found = speakable(speech_id, language)
         if found is None:
             raise HTTPException(status_code=404, detail="Nothing to speak for that id")
-        text, target, delivery = found
+        text, target = found
         if voice is None or not voice.supports(target):
             raise HTTPException(status_code=503, detail=f"No server voice for {target}")
         try:
-            audio = await voice.stream(text, target, delivery)
+            audio = await voice.stream(text, target)
         except VoiceUnavailable as exc:
             log.warning("server voice failed for %s, browser falls back to Azure: %s", speech_id, exc)
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -462,6 +467,7 @@ def create_app(
         visit.consent_epoch += 1
         reason = " ".join((cmd.reason or "").split()) or None
         await change_consent("withdrawn", consent_by(conn), notice, reason)
+        await clear_transcript_review(visit)
         if visit.pending_readback:
             # Discarded unspoken, exactly as turn.readback_reject.
             turn_id, visit.pending_readback = visit.pending_readback, None
@@ -621,6 +627,64 @@ def create_app(
         visit.add_trust(update)
         await hub.publish("trust.update", update.wire())
 
+    # @implements CDR-009: Patient confirmation of a captured transcript before translation
+    async def publish_transcript_review(visit: Visit) -> None:
+        await hub.publish("transcript.review_state", TranscriptReviewState(review=visit.transcript_review).wire())
+
+    async def clear_transcript_review(visit: Visit) -> None:
+        if visit.transcript_review is not None:
+            visit.transcript_review = None
+            await publish_transcript_review(visit)
+
+    async def start_transcript_review(conn: Connection, payload: dict) -> None:
+        command = "transcript.review_start"
+        cmd = TranscriptReviewStart.model_validate(payload)
+        visit = hub.visit
+        if await refuse_without_consent(conn, command) or await refuse_while_paused(conn, command):
+            return
+        text = cmd.text.strip()
+        if not text:
+            await error(conn, "The transcript is empty", command)
+            return
+        if visit.transcript_review is not None:
+            await error(conn, "A transcript is already waiting for review", command, "busy")
+            return
+        visit.transcript_review = TranscriptReview(
+            review_id=uuid.uuid4().hex, text=text, language=visit.patient_language
+        )
+        await publish_transcript_review(visit)
+
+    async def resolve_transcript_review(conn: Connection, payload: dict) -> None:
+        command = "transcript.review_resolve"
+        cmd = TranscriptReviewResolve.model_validate(payload)
+        visit = hub.visit
+        if await refuse_without_consent(conn, command) or await refuse_while_paused(conn, command):
+            return
+        review = visit.transcript_review
+        if review is None or review.review_id != cmd.review_id:
+            await error(conn, "That transcript is no longer waiting for review", command, "not_found")
+            return
+        if cmd.text is not None and (conn.role != "controller" or cmd.action != "confirm"):
+            await error(conn, "Only the physician can confirm edited text", command, "not_allowed")
+            return
+        text = review.text if cmd.text is None else cmd.text.strip()
+        if cmd.action == "confirm" and (not text or visit.pending_readback):
+            await error(conn, "A nonempty transcript and a settled dose check are required", command, "busy")
+            return
+        epoch = visit.consent_epoch
+        await clear_transcript_review(visit)
+        if cmd.action == "repeat":
+            return
+
+        async def submit_reviewed() -> None:
+            if live(visit, epoch) and not visit.paused:
+                await submit_turn(
+                    conn,
+                    TurnSubmit(speaker="patient", language=review.language, text=text, recognition_confidence=1).wire(),
+                )
+
+        spawn(submit_reviewed())
+
     async def submit_turn(conn: Connection, payload: dict) -> None:
         cmd = TurnSubmit.model_validate(payload)
         visit = hub.visit
@@ -683,6 +747,9 @@ def create_app(
                 patient_name=visit.patient_name,
                 emit=lambda stage: status(turn_id, stage),
                 claim_injection=claim_injection if cmd.speaker == "physician" else None,
+                # IDR-006: a patient or companion turn in the physician's language is relayed to the patient, so it
+                # carries no affect phrase; the phrase is only ever for the physician.
+                listener="physician" if target == physician else "patient",
             )
         except Exception as exc:  # refusal or API failure: nothing is spoken
             log.exception("turn pipeline failed")
@@ -816,6 +883,8 @@ def create_app(
             await error(conn, "The visit is already paused" if paused else "The visit is not paused", command)
             return
         hub.visit.paused = paused
+        if paused:
+            await clear_transcript_review(hub.visit)
         await hub.publish("visit.paused" if paused else "visit.resumed", {})
 
     async def request_interpreter(conn: Connection, payload: dict) -> None:
@@ -1368,6 +1437,8 @@ def create_app(
         "visit.name_confirm": lambda conn, payload: name_decision(conn, payload, True),
         "visit.name_reject": lambda conn, payload: name_decision(conn, payload, False),
         "turn.submit": submit_turn,
+        "transcript.review_start": start_transcript_review,
+        "transcript.review_resolve": resolve_transcript_review,
         "turn.readback_confirm": lambda conn, payload: readback(conn, payload, True),
         "turn.readback_reject": lambda conn, payload: readback(conn, payload, False),
         "voice.started": voice_started,

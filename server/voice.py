@@ -2,24 +2,23 @@
 
 The browser never sends text to speak. It asks for a turn or line by id, and the server decides
 whether that id may be spoken (see main.py), so a failed check can never reach the speaker.
-Delivery follows fixed tables, never a model's words: a physician turn is said in the physician's manner,
-and a patient or companion turn conveys the speaker's emotion to the physician (IDR-005); certainty adds
-steadiness to both.
+Every turn, in both directions, and every interpreter line is said in one constant delivery (IDR-006): tone
+tags did not carry affect, so a patient's affect is carried in the words instead, as one hedged phrase in the
+relay's reporting frame, and certainty is carried by the words only.
 
 @implements ADR-010: Voice output: ElevenLabs Eleven v4 replaces OpenAI text-to-speech; Azure stays fallback
 @implements CDR-003: Participant names and interpreter lines on the visit channel
-@implements IDR-005: Manner vocabulary and voice delivery
-@implements MDD-005: Trust across the barrier
+@implements MDD-006: Affect in words
+@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery
 @see openspec/tdr/adr/adr-010-elevenlabs-voice-output.md
-@see openspec/tdr/idr/idr-005-manner-vocabulary-and-voice-delivery.md
+@see openspec/tdr/idr/idr-006-affect-phrase-in-the-frame-and-constant-voice.md
 """
 
 import asyncio
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
-from typing import Protocol, get_args
+from typing import Protocol
 
-from contracts import Certainty, Emotion, Language, Manner
+from contracts import Language
 
 # Sarah, an account voice: library voices need a paid plan through the API.
 DEFAULT_VOICE = "EXAVITQu4vr4xnSDxMaL"
@@ -33,66 +32,13 @@ DEFAULT_CONCURRENCY = 2
 LANGUAGE_CODES: dict[str, str] = {"pa-IN": "pa", "fr-CA": "fr", "en-CA": "en", "ta-LK": "ta"}
 
 
-@dataclass(frozen=True)
-class Delivery:
-    """How a line is said: an audio tag the model performs (never speaks) and a stability value."""
-
-    tag: str
-    stability: float
+# IDR-006: the same stability applies to every line, regardless of speaker or emotion.
+DELIVERY_STABILITY = 0.55
 
 
-# IDR-005: a physician turn is said in the manner the physician's words carried, so the patient hears the care
-# in them. plain is the default and sounds like an interpreter at work.
-MANNER_DELIVERY: dict[str, Delivery] = {
-    "plain": Delivery("[calm]", 0.55),
-    "warm": Delivery("[warmly]", 0.45),
-    "reassuring": Delivery("[reassuringly]", 0.5),
-    "gentle": Delivery("[gently]", 0.6),
-    "serious": Delivery("[seriously]", 0.65),
-    "urgent": Delivery("[urgently]", 0.35),
-    "apologetic": Delivery("[apologetically]", 0.5),
-    "encouraging": Delivery("[encouragingly]", 0.45),
-}
-# IDR-005: a patient or companion turn conveys the speaker's emotion to the physician, as a human interpreter
-# would, rather than answering it: the physician should hear that the patient is worried, not be soothed.
-EMOTION_DELIVERY: dict[str, Delivery] = {
-    "calm": Delivery("[calm]", 0.5),
-    "worried": Delivery("[concerned]", 0.6),
-    "embarrassed": Delivery("[softly]", 0.6),
-    "in_pain": Delivery("[gently]", 0.65),
-    "relieved": Delivery("[warmly]", 0.45),
-    "confused": Delivery("[hesitantly]", 0.6),
-}
-# Certain content is said steadily; uncertain content keeps the emotion's own setting, since an
-# interpreter never sounds unsure on the speaker's behalf.
-CERTAINTY_STEADINESS: dict[str, float] = {"high": 0.1, "medium": 0.0, "low": 0.0}
-# The interpreter's own lines (introduction, name questions, welcome, signals, the closing check).
-LINE_DELIVERY = Delivery("[warmly]", 0.5)
-
-assert set(MANNER_DELIVERY) == set(get_args(Manner)), "every manner needs a delivery"
-assert set(EMOTION_DELIVERY) == set(get_args(Emotion)), "every emotion needs a delivery"
-assert set(CERTAINTY_STEADINESS) == set(get_args(Certainty)), "every certainty needs a steadiness"
-
-
-def _steadied(base: Delivery, certainty: str) -> Delivery:
-    return Delivery(base.tag, min(1.0, base.stability + CERTAINTY_STEADINESS[certainty]))
-
-
-def delivery_for(emotion: str, certainty: str) -> Delivery:
-    """A patient or companion turn's delivery: the speaker's emotion, conveyed, steadied by certainty."""
-    return _steadied(EMOTION_DELIVERY[emotion], certainty)
-
-
-def delivery_for_turn(speaker: str, manner: str, emotion: str, certainty: str) -> Delivery:
-    """How a turn is said (IDR-005): a physician turn by its manner, any other turn by its speaker's emotion."""
-    if speaker == "physician":
-        return _steadied(MANNER_DELIVERY[manner], certainty)
-    return delivery_for(emotion, certainty)
-
-
-def spoken_text(text: str, delivery: Delivery) -> str:
-    """The tag goes first; square brackets in the text itself would be read as tags, so they become round."""
-    return f"{delivery.tag} {text.replace('[', '(').replace(']', ')')}"
+def spoken_text(text: str) -> str:
+    """Keep brackets in the source text from being interpreted as performance tags."""
+    return text.replace("[", "(").replace("]", ")")
 
 
 class VoiceUnavailable(Exception):
@@ -104,8 +50,8 @@ class Voice(Protocol):
 
     def supports(self, language: Language) -> bool: ...
 
-    async def stream(self, text: str, language: Language, delivery: Delivery) -> AsyncIterator[bytes]:
-        """Audio chunks; raises VoiceUnavailable before the first chunk if the vendor fails."""
+    async def stream(self, text: str, language: Language) -> AsyncIterator[bytes]:
+        """Audio chunks in the constant delivery; raises VoiceUnavailable before the first chunk if the vendor fails."""
         ...
 
 
@@ -131,7 +77,7 @@ class ElevenLabsVoice:
     def supports(self, language: Language) -> bool:
         return language in LANGUAGE_CODES
 
-    async def stream(self, text: str, language: Language, delivery: Delivery) -> AsyncIterator[bytes]:
+    async def stream(self, text: str, language: Language) -> AsyncIterator[bytes]:
         from elevenlabs import VoiceSettings
 
         if not self.supports(language):
@@ -139,10 +85,10 @@ class ElevenLabsVoice:
         await self.slots.acquire()
         chunks = self.tts.stream(
             self.voice_id,
-            text=spoken_text(text, delivery),
+            text=spoken_text(text),
             model_id=self.model,
             language_code=LANGUAGE_CODES[language],
-            voice_settings=VoiceSettings(stability=delivery.stability),
+            voice_settings=VoiceSettings(stability=DELIVERY_STABILITY),
             output_format=OUTPUT_FORMAT,
         )
         # Pull the first chunk here, so a vendor failure is a clean error the browser can fall back

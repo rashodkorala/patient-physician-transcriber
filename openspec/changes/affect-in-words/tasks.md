@@ -1,0 +1,141 @@
+# Tasks
+
+## 0. Human decision review gate
+
+TDRs: MDD-006, IDR-006
+
+- [x] 0.1 Project lead reviews MDD-006 and IDR-006 and sets each to accepted or rejected, and decides whether IDR-005, ADR-010, and MDD-005 are amended by a review note or superseded; verify `python3 scripts/check_tdr.py` no longer lists MDD-006 or IDR-006 as awaiting review
+  Done 2026-11-16: rashodkorala accepted both in session and decided IDR-005, ADR-010, and MDD-005 are amended by reference, not superseded; recorded by an agent at his request.
+- [x] 0.2 Project lead adds `affect-in-words` to `related_changes` of MDD-004, MDD-005, ADR-004, ADR-006, ADR-010, CDR-002, CDR-008, IDR-005, and EDR-002, or drafts replacements; verify each record lists the change
+  Done 2026-11-16: added at rashodkorala's request, with amendment notes in MDD-005, IDR-005, and ADR-010.
+- [x] 0.3 Project lead answers the design's Open Questions (phrase visible in the caption text, interpreter lines, certainty steadiness, emotion or manner as the source); verify the answers are recorded in the Review Notes of MDD-006 or IDR-006
+  Done 2026-11-16: rashodkorala's four answers are recorded in the Review Notes of both records and in the design's Resolved decisions.
+
+## 1. Constant voice
+
+TDRs: MDD-006, IDR-006, ADR-010, EDR-002
+
+- [x] 1.1 Replace the per-manner, per-emotion, and certainty deliveries in `server/voice.py` with one fixed delivery for turn relays and interpreter lines (removing `LINE_DELIVERY`) and use it in the speak gate in `server/main.py`; verify `server/tests/test_voice.py` has a test named for IDR-006 that every speaker, manner, emotion, and certainty gets the identical delivery, and that an interpreter line (introduction, name question, signal line) gets that identical delivery too
+  Done 2026-11-16: `server/voice.py` has one `DELIVERY` (`[calm]`, 0.55); the tables, `delivery_for`, `delivery_for_turn`, the steadiness, and `LINE_DELIVERY` are gone, and `Voice.stream` no longer takes a delivery, so the speak gate in `server/main.py` returns only text and language. `test_every_turn_and_interpreter_line_gets_the_one_constant_delivery_idr_006` drives every manner, emotion, and certainty for each speaker, an introduction, a name question, and a signal line through the speak gate into the ElevenLabs adapter, and checks every vendor call has the same tag and stability.
+- [x] 1.2 Remove the tests and assertions that required a delivery per manner and per emotion (`test_every_manner_has_a_delivery_and_physician_turns_follow_it_idr_005`, `test_patient_and_companion_turns_convey_the_speakers_emotion_idr_005`, `test_patient_turn_is_spoken_conveying_the_patients_emotion_idr_005`, and `test_every_emotion_and_certainty_has_a_delivery`) or rewrite them to the constant behaviour; verify the full server suite passes with `python3 -m pytest server/tests`
+  Done 2026-11-16: the four table tests and the certainty steadiness test are removed, and the speak gate tests in `test_voice.py`, `test_trust_channel.py`, `test_unclear_turns.py`, and `test_consent.py` now expect text and language only. The suite passes with `uv run pytest` from `server/` (545 passed at the group 1 commit, before later groups added tests; the final count is in task 8.9; `python3 -m pytest` has no pytest outside the project environment).
+
+## 2. Affect phrase in the frame
+
+TDRs: MDD-006, IDR-006, ADR-004, ADR-006, CDR-002, EDR-002
+
+- [x] 2.1 Add the affect-phrase rule for patient and companion turns to the translate prompt in `server/graph/turn_graph.py`: one hedged phrase in the opening frame when the emotion is clearly not calm, none for calm, never on a physician turn; verify `test_prompts_define_the_affect_phrase_rule_idr_006` in `server/tests/test_turn_graph.py` checks the prompt text
+  Done 2026-11-16: the translate prompt names the emotion in the frame for patient and companion turns only, with the suggested phrase per emotion, none for calm or a physician turn, one at most, frame only, and reads emotion from the words alone with calm as the default; `test_prompts_define_the_affect_phrase_rule_idr_006` checks the text. The manner rule's "(the voice carries those)" now reads "(the caption label carries those)", since the voice no longer carries manner.
+- [x] 2.2 Teach the fake model in `server/fake_model.py` to write the phrase from the emotion it reads, in the frame only; verify graph tests with the mocked model cover a worried patient turn with exactly one phrase in the frame, a calm patient turn with none, a companion turn with the companion named and one phrase, and a physician turn with none
+  Done 2026-11-16: the fake model opens a non-calm patient or companion relay with "<Speaker> says, <phrase>, " (and reads embarrassed from the words); tests for a worried patient (one phrase, frame only, named or not), a calm patient (none), a companion (named, one phrase), and a worried physician (none) pass.
+- [x] 2.3 Tell the tone check the frame may carry one hedged affect phrase for a patient turn; verify a mocked-model test passes a relay that adds only "sounding worried" and a second test fails a relay whose phrase makes the statement more certain, and neither turn is escalated for the phrase alone
+  Done 2026-11-16: the tone-check prompt accepts one hedged affect phrase in a patient or companion frame. With a mocked tone check that follows that rule, a relay adding only "sounding worried" is final at the first attempt, and one whose frame says "sounding sure it is nothing serious" escalates as `tone_failure`, while the same turn with only the hedged phrase does not.
+- [x] 2.4 Verify the critical value check is unchanged: a mocked-model test has a worried patient state a medication dose, the relay keeps the exact value, the check passes as before, and the same relay with the value changed is still blocked
+  Done 2026-11-16: `test_worried_patient_dose_keeps_its_value_and_the_check_still_blocks_a_change_idr_006`: the worried patient's 0.4 milligrams is kept and matched with the phrase before it in the frame, and the same relay with the value changed on both attempts is blocked; `critical_values.py` is unchanged.
+
+## 3. Privacy
+
+TDRs: MDD-006, IDR-006, CDR-008, CDR-002, ADR-007
+
+- [x] 3.1 Verify no new wire field exists: a contract test asserts `TurnResult`, `TurnCaption`, and a trust update have the same field sets as before, and `npm run check:contracts` passes
+  Done 2026-11-16: `test_affect_in_words_adds_no_wire_field_idr_006` in `server/tests/test_contracts.py` pins the field sets of `TurnResult`, `TurnCaption`, and `TrustUpdate` as they were before this change; `npm run check:contracts` passes and leaves `web/lib/generated/contract-fixtures.ts` unchanged.
+- [x] 3.2 Verify in `server/tests/test_trust_channel.py` that for a worried patient turn the controller still receives manner and emotion as a label, and the shared screen and patient device projections carry no `manner` or `emotion` field or label, with the phrase present only inside `translation`
+  Done 2026-11-16: `test_worried_patient_label_reaches_the_controller_only_and_the_phrase_only_the_translation_idr_006`: the controller's `turn.analysis` and `trust.update` carry emotion worried and manner plain; every event the screen and the review device receive up to the turn's `record.integrity` has no manner or emotion value, and "sounding worried" appears once, only at `.translation`.
+- [x] 3.3 Verify the speak gate speaks the settled translation text, including the frame phrase, in the physician's language only; a channel test shows the speak-by-id text for a worried patient turn contains the phrase and is refused for any non-final turn as before
+  Done 2026-11-16: `test_speak_gate_speaks_the_worried_patient_relay_with_its_phrase_and_refuses_non_final_turns_idr_006`: the speak gate hands the voice the settled translation, phrase included, in `en-CA` only, and returns 404 for unclear, escalated, and blocked worried turns.
+
+## 4. End to end
+
+TDRs: MDD-006, IDR-006, CDR-008, EDR-002
+
+- [x] 4.1 Update `web/e2e/screen-manner.mjs`: keep the physician manner-label checks; change the patient section so a worried patient turn shows no manner or emotion label on `/screen`, and the caption's translation carries exactly one affect phrase inside its opening frame; a plain patient turn shows none; verify `node e2e/screen-manner.mjs` passes on a fresh fake-model stack
+  Done 2026-11-16: the physician label checks are kept; a worried patient caption has no manner or emotion on the wire or on `/screen`, its translation carries exactly one affect phrase, at the start of its opening frame, shown on `/screen` as spoken, with no emotion word outside the translation; a plain patient caption has none. `node e2e/screen-manner.mjs` passes on a fresh fake-model stack (server :8620, web build :3620).
+- [x] 4.2 Check `web/e2e/week2.mjs`, `web/e2e/patient-voice.mjs`, `web/e2e/trust-view.mjs`, and `web/e2e/week1.mjs` for any assertion that depends on a per-emotion voice or on the old patient caption text, and adjust; verify each passes on the fake-model stack, with ports checked first and only own processes stopped
+  Done 2026-11-16: `week1.mjs`, `week2.mjs`, and `patient-voice.mjs` needed no change (their patient turns are calm, or their checks do not read the patient caption's text); `trust-view.mjs`'s check that `/screen` and `/patient` show no "worried" now allows the phrase inside a translation and also checks for no `data-emotion` attribute. All four pass on a fresh fake-model stack, with ports 8620 and 3620 checked free first and only this run's own processes stopped.
+- [x] 4.3 Check that the controller still shows the patient's emotion label in `web/e2e/trust-view.mjs` and that `/screen` and `/patient` still carry no emotion label there; verify the script passes
+  Done 2026-11-16: `trust-view.mjs` still checks that the controller's trust view reads the patient as worried and "sounds worried", and now that `/screen` shows the phrase only inside a translation and neither `/screen` nor `/patient` shows an emotion label or attribute; it passes.
+
+## 5. Known gaps and documents
+
+TDRs: MDD-006
+
+- [x] 5.1 Write `docs/known-gaps.md`, one sentence per line: (a) affect is inferred from the words only, not the audio, so neutral words in a worried voice read as plain, which is why the wording is hedged; (b) the product uses hosted APIs (Claude, ElevenLabs, Azure) rather than its own models hosted on AWS and trained on real consultation data; (c) the voice is not expressive; and the privacy note that the frame phrase is spoken in the room; verify the file exists and links from `README.md`'s document list
+  Done 2026-11-16: `docs/known-gaps.md` records the words-only reading, the hosted APIs, the voice that is not expressive, the phrase spoken and shown in the room, and the pending native-speaker review, one sentence per line; `README.md` links it from its document list and its trust section now says the voice is constant and affect travels as one hedged phrase.
+- [x] 5.2 Update any document that describes the voice as carrying tone, such as `docs/voice-test.md` and `docs/demo-script.md`; verify a search for "tone" and "emotion" in `docs/` shows no claim that the voice conveys affect
+  Done 2026-11-16: `docs/demo-script.md` and the Tamil and Sinhala test scripts now say no emotion label is shown and the patient's translation may open with the phrase; `docs/voice-test.md` keeps its dated run but notes the delivery table no longer exists and the tags did not carry. A search for "tone" and "emotion" in `docs/` finds no claim that the voice conveys affect.
+- [ ] 5.3 On sync or archive, update the `manner-in-relay` main spec's Purpose to the wording in this change's delta; verify `openspec validate affect-in-words` and `openspec validate manner-in-relay --specs` pass
+
+## 6. Annotations and traceability
+
+TDRs: MDD-006, IDR-006
+
+- [x] 6.1 Annotate the changed code with `@implements IDR-006: Affect phrase in the reporting frame, and one constant voice delivery` and update the superseded `@implements IDR-005` voice-delivery notes; verify `python3 scripts/check_tdr.py` passes with no annotation pointing to a non-accepted record
+  Done 2026-11-16: `server/voice.py`, `server/main.py`, `server/graph/turn_graph.py`, and `server/fake_model.py` carry `@implements IDR-006` (and the first three `@implements MDD-006`); the `@implements IDR-005` and `MDD-005` notes in `server/voice.py` are replaced, since the voice no longer follows manner or emotion. `python3 scripts/check_tdr.py` prints OK.
+- [x] 6.2 Fill `implementation_refs` and `test_refs` in MDD-006 and IDR-006 before archiving; verify the lists name real files and tests
+  Done 2026-11-16: `implementation_refs` and `test_refs` are filled in MDD-006 and IDR-006, and every listed file and test was checked to exist; the two removed voice-delivery tests in the test refs of IDR-005 and MDD-005 are replaced by the IDR-006 constant-delivery test.
+
+## 7. End of project (deferred, run only when the project lead asks)
+
+TDRs: MDD-006
+
+- [ ] 7.1 Native speakers review how the affect phrase reads in the physician's language and in the reporting frames used for each patient language pair; verify a reviewer's sign-off is recorded in `docs/known-gaps.md`
+
+## 8. Review fixes
+
+TDRs: MDD-006, IDR-006, ADR-004, ADR-006, ADR-011, CDR-002, CDR-007, EDR-002
+
+- [x] 8.1 Tell the tone check who spoke and who the relay is for, allow the affect phrase only on a patient or companion turn relayed to the physician, and add a deterministic frame check that fails a physician relay carrying a phrase without flagging a physician who says "sounding"; verify a scripted physician relay with "sounding worried" (reported or not) retries and escalates even with a lenient tone check, and a physician saying "sounding better" stays final
+  Done 2026-11-16: the tone-check input now carries `speaker` and `listener`; `frame_problem` in `server/graph/turn_graph.py` fails a reported phrase where none is allowed, on a calm turn, or not found exactly once, and, where no phrase is allowed, a back-translation with more "sounding" than the original. `test_affect_phrase_on_a_physician_relay_is_never_final_idr_006` (both cases) and `test_physician_who_says_sounding_is_not_mistaken_for_an_affect_phrase_idr_006` pass.
+- [x] 8.2 Keep the affect phrase out of the clinical note and the patient summary: the translate call reports the phrase, the turn result keeps it as a private server-only attribute, the frozen sources take it out of each turn's and correction's translation, and the note and summary prompts say to leave how a speaker sounded out; verify with a unit test of the sources and a channel test with a worried patient turn among the note and summary sources
+  Done 2026-11-16: `test_the_affect_phrase_is_left_out_of_every_source_idr_006`, `test_without_affect_phrase_idr_006`, and `test_the_affect_phrase_never_reaches_the_note_or_the_summary_idr_006` pass; neither prompt nor any note or summary sentence contains "sounding", and the chain keeps the spoken text. Spec scenarios, `design.md`, and `docs/known-gaps.md` are updated. ADR-011 and CDR-007 govern these files but do not list `affect-in-words` in `related_changes`; the project lead needs to add it or say otherwise.
+- [x] 8.3 Make the manner-adverb rule physician-only, say a patient or companion frame carries at most the one affect phrase and no adverb, and make the tone check agree; verify the prompt-text tests
+  Done 2026-11-16: `test_prompts_define_the_affect_phrase_rule_idr_006` and `test_prompts_define_manner_the_frame_rule_and_the_tone_check_allowance_idr_005` check the new wording, including "(the patient's caption label carries those)".
+- [x] 8.4 Tell the translate call who the listener is, so a patient or companion turn in the physician's language, relayed to the patient, carries no phrase, and have the fake model follow the same rule; verify with a turn graph test and a channel test of that path, and a spec scenario
+  Done 2026-11-16: `server/main.py` passes the listener to the pipeline; `test_patient_turn_relayed_to_the_patient_carries_no_phrase_idr_006` (including a forced phrase that escalates) and `test_patient_turn_in_the_physicians_language_is_relayed_to_the_patient_without_a_phrase_idr_006` pass.
+- [x] 8.5 Reword the tone check so a listed phrase is acceptable in itself but still fails when it makes the statement more or less certain or serious; verify a mocked tone check fails "sounding confused" before a plainly stated dose, passes it on an unsure statement, and still passes "sounding worried" alone
+  Done 2026-11-16: `test_listed_phrase_that_undermines_a_stated_dose_fails_the_tone_check_idr_006` passes, alongside the earlier group 2 tests.
+- [x] 8.6 Tell the tone check that the same meaning in any language, or a close paraphrase such as "sounding anxious", counts as the frame phrase, and record in `docs/known-gaps.md` that this is unverified with a live model; verify the prompt-text test and a mocked paraphrase test
+  Done 2026-11-16: `test_close_paraphrase_counts_as_the_frame_phrase_idr_006` passes and the known-gaps note is written.
+- [x] 8.7 Make `web/e2e/trust-view.mjs` check the phrase sits inside a caption's translation element and nowhere else on `/screen`; verify the script passes on a fresh fake-model stack
+  Done 2026-11-16: it passes on the fake-model stack (server :8620, web :3620).
+- [x] 8.8 Add the new files and tests to `implementation_refs` and `test_refs` of MDD-006 and IDR-006; verify every listed file and test exists
+  Done 2026-11-16: checked by script; IDR-005 and MDD-005 prose is unchanged.
+- [x] 8.9 Re-run every check; verify the full server suite, ruff, web lint, typecheck, `npm run check:contracts`, `npm test`, every e2e script run before, `python3 scripts/check_tdr.py`, and `openspec validate affect-in-words` pass
+  Done 2026-11-16: 573 server tests passed, and every other check and the 21 e2e runs passed.
+
+## 9. Live-run fixes
+
+TDRs: MDD-006, IDR-006, MDD-004, ADR-004, ADR-006, ADR-011, CDR-002, CDR-007, EDR-002
+
+From the findings of the live run of 16 November 2026 (`docs/voice-test.md`, "Affect in words run, 16 November 2026").
+
+- [x] 9.1 Stop a feeling the speaker states in their own words being read as an added affect phrase (T15, the first attempt of T1); verify the tone prompt says such a feeling is content to keep on every turn and for every listener, the tone check is given the phrase the interpreter added (or none), and a live re-run of T15 is not escalated
+  Done 2026-11-16: `TONE_SYSTEM` says a feeling in the speaker's own words is never an affect phrase, that the frame may name the speaker by name or role in any script, and that a word of the same strength ("very worried" for "really worried") is no change; the tone input carries `interpreter_affect_phrase`; `ToneCheck` now puts `issue` before the verdicts, because live the tone check failed a faithful relay while its issue said nothing was wrong. Tests in `server/tests/test_affect_live_findings.py`. Live, with the final wording: T15 was final at the first attempt in 2 of 3 runs, and the third was unclear on the translate call's own confidence (0.6) while both its tone checks passed; before the issue-first order, one run escalated with a tone check whose issue found no problem.
+- [x] 9.2 Allow "sounding confused" before a plainly stated dose when the speaker said they were confused about something in the turn (T8); verify the prompt-text test, a mocked tone check that passes it and still fails the phrase where no confusion was expressed, and a live re-run of T8
+  Done 2026-11-16: the tone prompt fails a phrase only when it names a feeling the speaker never expressed; a stated feeling keeps its phrase even beside a plainly stated value. Live: T8 final at the first attempt twice, with 500 mg, the frequency, and metformin matched.
+- [x] 9.3 Make the back-translation come back in the source language, and never let a turn be final when it did not (T1, T2, T17, T19, P2); verify the translate input names `back_translation_language`, and a back-translation with no letter of the source's script is retried, is never sent to the tone check, and escalates if it persists
+  Done 2026-11-16: `back_translation_problem` in `server/graph/turn_graph.py`; a romanised original is left to the tone check, since code reads only the script. Live: every Tamil and Punjabi back-translation came back in its source script, and T2, T19, and P2 were final at the first attempt with the daily frequency matched (through the back-translation).
+- [x] 9.4 Stop source-script text being pasted into a relay after a retry hint (T8, T17, T19, P2); verify a lost value in another script is hinted by its meaning ("1 time per day", "500 mg") with a ban on copying, never as "Keep exactly", and a relay that still copies the original's words for that value is not final even though the critical value check matches it
+  Done 2026-11-16: `keep_value_hint` and `copied_words`; the translate prompt forbids copying a word of the original into the relay. A relay with no retry is not checked for copied words, because the fake model echoes the original into every relay (see the note below). No live turn needed a value retry, so no paste could occur.
+- [x] 9.5 Never guess gender from a name, in a relay or in the clinical note (T19, the note); verify an English relay that says "he" or "she" with no word in it stating that gender is retried, a note sentence that does so with no cited source stating it is retried and then refused, and the note and summary prompts say so
+  Done 2026-11-16: `gender_problem` and `unstated_gender` in `server/graph/turn_graph.py`, `_gender_problems` in `server/chains/note.py`, and the summary prompt; tests in `server/tests/test_affect_live_findings.py` and `server/tests/test_gender_in_record.py`. The tone check is not asked about gender: live, a gender-neutral Tamil relay came back as "she" only in its English back-translation, which is no error in what the listener hears. Live: no relay and no note sentence used "he" or "she"; the note said "the patient" throughout.
+
+Note: a general check that no relay carries any letter of the source script would be stronger than 9.4's, but the fake model in `server/fake_model.py` echoes the original into every relay, so it would fail the fake-model stack; it needs a fake that writes target-script relays first.
+
+## 10. Affect phrase refinements (MDD-006 decision 8)
+
+TDRs: MDD-006, IDR-006, CDR-002, CDR-008, MDD-004, ADR-004, ADR-006, EDR-002
+
+Decision 8, accepted by rashodkorala on 2026-11-16: (a) no affect phrase when the speaker's own words already state the feeling; (b) "sounding frightened" for fear. CDR-008 was amended the same day so that frightened is treated as worried for the empathy nudge and the reassurance mark.
+
+- [x] 10.1 Leave the phrase out when the speaker's own words state the feeling, and fail a doubled relay (T1, T16, T18, P1); verify the translate and tone prompt-text tests, and a mocked tone check that fails "sounding worried, that they are very worried" and passes the same relay without the phrase, with the controller label still worried
+  Done 2026-11-16: the translate prompt says to relay the words and add no phrase, keeping the emotion read; the tone prompt fails a phrase beside the speaker's own words as doubled and passes the relay without it, consistent with 9.1. Tests in `server/tests/test_affect_refinements.py`. Live: T1, T3, and P1 carried no phrase in every run (5 runs), and the controller label still read worried or frightened.
+- [x] 10.2 Add `frightened` as an emotion with the phrase "sounding frightened" (T3); verify the emotion is in `server/contracts.py` and `web/lib/contracts.ts`, the controller shows "sounds frightened", the label reaches `turn.analysis` only and no caption field, and `npm run check:contracts` leaves the generated fixtures unchanged
+  Done 2026-11-16: `Emotion` gains `frightened` on the server and in the web mirror, the prompts read fear as frightened and name its phrase, and `EMOTION_TEXT` in `web/components/Controller.tsx` gains one line; no wire field is added. Live: a turn asking "will I die like my mother?" without saying "afraid" was relayed "The patient says, sounding frightened, ...", and T3, whose words say "very scared", was read as frightened and carried no phrase.
+- [x] 10.3 Stop the tone check reading a reported pronoun in the back-translation as "you"; verify the prompt-text test
+  Done 2026-11-16: found in the live check of this group, where faithful T1 and T3 relays escalated because the tone check read Tamil "தாங்கள்" (they themselves, or the honorific you) as the listener. The tone prompt says a pronoun referring back to the speaker in reported speech means the speaker, and the translate prompt asks the back-translation to avoid a word that can also mean "you". Live after the fix: T1 and T3 final, both tone checks passing.
+- [x] 10.4 Treat a frightened patient as worried for the empathy nudge and the reassurance mark (CDR-008, amended 2026-11-16); verify a frightened turn gets the nudge, and frightened, then a reassuring physician, then calm gives `reassuranceLanded: true`
+  Done 2026-11-16: `frightened` is in `NUDGE_EMOTIONS` in `server/trust.py`; `server/tests/test_trust_frightened.py`. The reviewed empathy bank (`server/kb/content/empathy/*.yaml`) has no entry tagged frightened, but retrieval is by meaning and not filtered by emotion, so the advisor always gets candidates (the nearest are the worried entries); a reviewed frightened entry per language is still to be written by a speaker.
+- [ ] 10.5 Add a deterministic check that fails a doubled relay, after the fake model stops doubling; verify a scripted relay "The patient says, sounding worried, that they are very worried" is never final even with a lenient tone check, and the same relay without the phrase is final
+  What to build: in `frame_problem` in `server/graph/turn_graph.py`, for a patient or companion turn relayed to the physician (always English, `en-CA`), when the reported `affect_phrase` is in the translation and the translation with the phrase removed still contains an English word for a feeling (worried, worry, anxious, scared, afraid, frightened, terrified, embarrassed, ashamed, relieved, confused, and the like), fail it as doubled with a retry hint to drop the phrase. Leave pain words out, since a pain the patient describes is a symptom, not the phrase's feeling.
+  Why it waits: `server/fake_model.py` reads emotion only from feeling words in the text and then adds the phrase, so every fake phrase is doubled and the check would fail the fake-model stack. The fake must first write no phrase when the text states the feeling, and give a phrase only for a turn read from words that do not state it (for example a fear read from "Will I die like my mother?"). Then `web/e2e/screen-manner.mjs` and `web/e2e/trust-view.mjs`, whose worried patient turns say "scared" or "worried", must use such a turn to still see a phrase, and `screen-manner.mjs`'s `AFFECT` pattern must add "sounding frightened". Agent C's branch changes the fake and is under review; build this after it merges.

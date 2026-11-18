@@ -1,4 +1,7 @@
 {
+  "transcriptReviewTitle": "ඔබ කිව්වේ මේකද?",
+  "transcriptReviewConfirm": "ඔව්, මම කිව්වේ මේකයි",
+  "transcriptReviewRepeat": "මම ආයෙත් කියන්නම්",
   "_reviewer": "pending",
   "checkingDose": "මාත්‍රාව පරීක්ෂා කරමින්",
   "pleaseRepeat": "කරුණාකර නැවත කියන්න",

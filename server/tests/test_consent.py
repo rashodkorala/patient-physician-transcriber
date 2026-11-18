@@ -401,7 +401,7 @@ def test_the_speak_gate_serves_the_current_notice_in_the_patients_language_only_
     voice = FakeVoice()
     with make_client(kb, voice=voice, consent=False) as client:
         assert client.get("/api/speech/consent-pa-IN-v1?language=pa-IN").status_code == 200
-        assert voice.said[-1][:2] == (PA.lines[0].text, "pa-IN")
+        assert voice.said[-1] == (PA.lines[0].text, "pa-IN")
         for path in [
             "/api/speech/consent-pa-IN-v1?language=en-CA",
             "/api/speech/consent-pa-IN-v1",

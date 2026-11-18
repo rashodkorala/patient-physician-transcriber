@@ -10,7 +10,7 @@ proposed_by: agent
 category: implementation
 related_decisions: [mdd-004, mdd-005, adr-002, adr-004, adr-010, cdr-002, cdr-008]
 related_specs: [manner-in-relay]
-related_changes: [trust-across-the-barrier]
+related_changes: [trust-across-the-barrier, affect-in-words]
 ai_context:
   implementation_priorities:
     - "The translate call reads manner alongside emotion and certainty; no extra model call"
@@ -42,8 +42,7 @@ test_refs:
   - server/tests/test_turn_graph.py::test_manner_is_read_in_the_translate_call_and_labels_a_physician_turn_idr_005
   - server/tests/test_turn_graph.py::test_patient_turn_has_a_private_manner_and_no_caption_label_idr_005
   - server/tests/test_turn_graph.py::test_prompts_define_manner_the_frame_rule_and_the_tone_check_allowance_idr_005
-  - server/tests/test_voice.py::test_every_manner_has_a_delivery_and_physician_turns_follow_it_idr_005
-  - server/tests/test_voice.py::test_patient_and_companion_turns_convey_the_speakers_emotion_idr_005
+  - server/tests/test_voice.py::test_every_turn_and_interpreter_line_gets_the_one_constant_delivery_idr_006
   - server/tests/test_trust_channel.py::test_physician_caption_carries_manner_and_patient_caption_never_does_cdr_008
   - web/lib/i18n.test.mjs
   - web/e2e/screen-manner.mjs
@@ -121,3 +120,5 @@ Code carries `@implements IDR-005: Manner vocabulary and voice delivery`.
 - 2026-11-10, rashodkorala: Blanket authorisation given in session (see MDD-005). Recorded as accepted by Claude (agent) at rashodkorala's explicit request; rashodkorala reviews the built result.
 - 2026-11-11, rashodkorala: amended after the live run under the blanket authorisation (see MDD-005); recorded by Claude (agent). The frame adverb is now only for gentle, serious, urgent, and apologetic (reassuring's frame adverb is none, since the live model added "reassuringly" where the words already carried it), and the relay keeps indirect speech through every sentence.
 - 2026-11-11, rashodkorala: Accepted after reviewing the built result ("accept all four, record the verdicts"). Recorded by Claude (agent) at rashodkorala's explicit request.
+- 2026-11-16, rashodkorala: Amended by reference by MDD-006 and IDR-006 as to voice delivery (one constant delivery for every turn and every interpreter line, affect carried in words); this record is not superseded and stays accepted.
+  Recorded by Claude (agent) at rashodkorala's explicit request.

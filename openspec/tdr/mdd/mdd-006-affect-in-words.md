@@ -1,0 +1,149 @@
+---
+id: mdd-006
+title: "Affect in words: a constant interpreter voice, with the patient's affect carried as one hedged phrase in the reporting frame"
+status: accepted
+date: 2026-11-16
+authors: ["Claude (agent)"]
+reviewers: ["rashodkorala"]
+decision_owner: "rashodkorala (project lead)"
+proposed_by: agent
+category: strategy
+related_decisions: [mdd-004, mdd-005, idr-005, idr-006, adr-010, cdr-008]
+related_specs: [manner-in-relay]
+related_changes: [affect-in-words]
+ai_context:
+  implementation_priorities:
+    - "The interpreter's voice is the same for every turn in both directions; no delivery varies by manner, emotion, or certainty"
+    - "For a patient or companion turn whose affect is clearly not plain, the relay to the physician carries exactly one hedged affect phrase, inside the reporting frame only"
+    - "Physician turns keep the existing frame adverb and the existing caption manner label for the patient"
+    - "The patient's manner and emotion still reach the physician's controller as a label, and never appear as a label on the shared screen or the patient's device"
+    - "Record the known gaps plainly in docs/known-gaps.md; do not try to fix them here"
+  framework_hints:
+    - "Mechanics: IDR-006; the earlier voice-delivery decisions it amends are IDR-005 and ADR-010"
+  validation_rules:
+    - "The affect phrase appears once, inside the opening frame, and never changes an instruction, a certainty word, or a critical value"
+    - "A plain or calm turn gets no phrase"
+    - "The critical value check and the tone check behave as before; the tone check accepts the frame phrase"
+    - "No wire field for manner or emotion is added to any public projection"
+affects: [server/, web/e2e/, docs/]
+implementation_refs:
+  - server/voice.py
+  - server/main.py
+  - server/graph/turn_graph.py
+  - server/fake_model.py
+  - server/contracts.py
+  - server/visit_store.py
+  - server/chains/snapshot.py
+  - server/chains/note.py
+  - server/chains/summary.py
+  - docs/known-gaps.md
+test_refs:
+  - server/tests/test_voice.py::test_every_turn_and_interpreter_line_gets_the_one_constant_delivery_idr_006
+  - server/tests/test_voice.py::test_tag_leads_and_text_brackets_cannot_act_as_tags
+  - server/tests/test_turn_graph.py::test_prompts_define_the_affect_phrase_rule_idr_006
+  - server/tests/test_turn_graph.py::test_worried_patient_turn_has_exactly_one_phrase_in_the_frame_idr_006
+  - server/tests/test_turn_graph.py::test_calm_patient_turn_has_no_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_companion_turn_names_the_companion_and_carries_one_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_physician_turn_never_gets_an_affect_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_frame_phrase_passes_the_tone_check_idr_006
+  - server/tests/test_turn_graph.py::test_phrase_that_makes_the_statement_more_certain_fails_the_tone_check_idr_006
+  - server/tests/test_turn_graph.py::test_worried_patient_dose_keeps_its_value_and_the_check_still_blocks_a_change_idr_006
+  - server/tests/test_contracts.py::test_affect_in_words_adds_no_wire_field_idr_006
+  - server/tests/test_trust_channel.py::test_worried_patient_label_reaches_the_controller_only_and_the_phrase_only_the_translation_idr_006
+  - server/tests/test_trust_channel.py::test_speak_gate_speaks_the_worried_patient_relay_with_its_phrase_and_refuses_non_final_turns_idr_006
+  - server/tests/test_turn_graph.py::test_listed_phrase_that_undermines_a_stated_dose_fails_the_tone_check_idr_006
+  - server/tests/test_turn_graph.py::test_close_paraphrase_counts_as_the_frame_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_affect_phrase_on_a_physician_relay_is_never_final_idr_006
+  - server/tests/test_turn_graph.py::test_physician_who_says_sounding_is_not_mistaken_for_an_affect_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_reported_phrase_must_appear_once_and_not_on_a_calm_turn_idr_006
+  - server/tests/test_turn_graph.py::test_patient_turn_relayed_to_the_patient_carries_no_phrase_idr_006
+  - server/tests/test_turn_graph.py::test_turn_result_keeps_the_phrase_off_the_wire_idr_006
+  - server/tests/test_grounded_checks.py::test_the_affect_phrase_is_left_out_of_every_source_idr_006
+  - server/tests/test_grounded_checks.py::test_without_affect_phrase_idr_006
+  - server/tests/test_note_summary_channel.py::test_the_affect_phrase_never_reaches_the_note_or_the_summary_idr_006
+  - server/tests/test_trust_channel.py::test_patient_turn_in_the_physicians_language_is_relayed_to_the_patient_without_a_phrase_idr_006
+  - web/e2e/screen-manner.mjs
+  - web/e2e/trust-view.mjs
+---
+
+# MDD-006: Affect in words: a constant interpreter voice, with the patient's affect carried as one hedged phrase in the reporting frame
+
+> Major Design Decision. Only a human may set `status: accepted`.
+
+## Summary
+
+After testing, varying the ElevenLabs voice by tone does not work: a worried patient is relayed in a voice that does not carry it.
+The interpreter's voice is now constant for every turn, and affect is expressed in words.
+For a patient or companion turn whose affect is clearly not plain, the spoken relay to the physician carries one hedged affect phrase inside the reporting frame, for example "The patient says, sounding worried, ...".
+
+## Context
+
+- **Business Context**: Rashod's direction on 2026-11-16, after testing the live voice.
+  MDD-005 decided that the patient's affect is conveyed to the physician through the voice (decision 3) and that the physician's manner is carried in the voice, the frame, and a label (decision 2).
+  The voice half of that does not work with the chosen voice, so the words must do the job.
+- **Strategic Drivers**: the physician should still hear that a patient is worried, and a human interpreter would say so.
+  Words are checkable offline; voice tags are not.
+- **Constraints**: demo night prototype.
+  Affect is inferred from the words only (no prosody), the product uses hosted models and voices, and compliance and data concerns are explicitly not weighed yet (project lead).
+
+## Decision
+
+1. **The voice is constant.** The interpreter speaks every turn, physician, patient, and companion, and every interpreter line (introduction, name questions, signal lines), in one fixed delivery.
+   No delivery varies by manner, emotion, certainty, or kind of line.
+   Certainty is carried by the words only.
+2. **Affect is expressed in words for patient and companion turns.**
+   When the speaker's affect is clearly not plain, the relay to the physician carries one hedged affect phrase inside the reporting frame only, for example "The patient says, sounding worried, ...", "The patient's companion says, sounding embarrassed, ...".
+   A plain turn gets no phrase.
+   The phrase is hedged ("sounding", "seeming") because affect is inferred from the words alone.
+3. **Physician turns are unchanged in words.** The frame adverb (gently, seriously, urgently, apologetically) and the caption manner label for the patient stay as IDR-005 decided.
+   Only the voice delivery for physician turns is removed.
+4. **Privacy.** The patient's manner and emotion still go to the physician's controller as a label, and no manner or emotion label appears on the shared screen or the patient's device.
+   The one change: the frame phrase is part of the spoken relay, so it is now spoken aloud in the room in the physician's language, and, because a caption shows the same translation text that is spoken, it also appears inside that translation text wherever the translation is shown.
+5. **Meaning never changes.** One affect phrase, frame only.
+   Instructions, certainty, and critical values are unchanged, and the critical value check and the tone check behave as before and accept the frame phrase.
+6. **Known gaps, recorded and not fixed here**, in `docs/known-gaps.md`:
+   (a) affect is inferred from the words only, not from the audio, so neutral words said in a worried voice read as plain, which is why the wording is hedged;
+   (b) the product uses hosted APIs (Claude, ElevenLabs, Azure) rather than its own models hosted on AWS and trained on real consultation data;
+   (c) the voice is not expressive.
+7. **Phrase source and visibility (project lead's answers, 2026-11-16).**
+   For patient and companion turns the phrase is driven by `emotion`, not `manner`.
+   The phrase stays visible in the caption translation text: spoken text and shown text are the same, with no public and private text split.
+8. **Refinements after the live run (project lead's verdict, 2026-11-16).**
+   (a) When the speaker's own words already state the feeling, the relay carries no affect phrase: the words carry the feeling, and a phrase beside them doubles it ("sounding worried, that they are very worried").
+   (b) "Sounding frightened" joins the phrases, for a patient or companion whose emotion is fear, so that fear is not weakened to "sounding worried".
+   Decision 2 stands otherwise: at most one hedged phrase, in the reporting frame only.
+
+## Alternatives Considered
+
+| Option | Pros | Cons | Why not chosen |
+|---|---|---|---|
+| Keep tone variation in the voice (MDD-005, IDR-005) | Already built | Tested with the chosen voice and it does not carry affect | The project lead's test result |
+| Tune the tags and stability further | No wording change | Tag-following is unreliable and cannot be checked offline | Words are reviewable and testable |
+| Affect from audio (prosody) | Truer to delivery | No prosody from recognition; unreliable across languages | Revisit with owned models (gap b) |
+| No affect conveyed at all | Simplest and fully private | The physician loses what a human interpreter would pass on | Rashod wants affect carried |
+| Put the phrase on the controller only | Keeps affect fully private | The physician is looking at the patient, not the laptop, which is why the voice carried it | Spoken is the point |
+
+## Consequences
+
+- **Positive**: affect survives the tone failure; a single voice is simpler and more predictable; everything stays checkable with the mocked model.
+- **Negative**: affect is now audible in the room and readable in the translation text; the physician hears a model's guess about how the patient feels; the phrase must be reviewed in five languages' reporting frames before any real use.
+- **Risks and mitigations**: a wrong or over-read phrase could mislead the physician, mitigated by hedged wording, the plain default, and the controller label still showing the model's read; a phrase could drift into meaning, mitigated by the frame-only rule and the existing checks.
+
+## Implementation
+
+The `affect-in-words` OpenSpec change, with IDR-006 for the mechanics.
+It amends, and does not supersede, MDD-005 decisions 2 and 3, IDR-005's voice delivery, and ADR-010's tone-by-emotion rule.
+Code carries `@implements MDD-006: Affect in words`.
+
+## Review Notes
+
+- 2026-11-16, Claude (agent): Drafted from rashodkorala's direction in session.
+  Awaiting human review; do not implement until accepted.
+  No existing record's status has been changed; whether MDD-005, IDR-005, or ADR-010 are amended by annotation or superseded is the project lead's decision.
+- 2026-11-16, rashodkorala: Accepted in session ("Accept both"), together with IDR-006.
+  Recorded by Claude (agent) at rashodkorala's explicit request.
+  His answers to the design's Open Questions: (1) the affect phrase stays visible in the caption translation text, so spoken and shown text are the same and there is no public and private text split; (2) for patient and companion turns the phrase is driven by `emotion`, not `manner`; (3) certainty steadiness in the voice is removed too, so certainty is carried by the words only; (4) interpreter lines do not keep a separate warm delivery and use the same single constant delivery as turn relays, so there is one delivery everywhere.
+  He also decided that MDD-005, IDR-005, and ADR-010 are amended by reference and not superseded; their status stays accepted.
+- 2026-11-16, rashodkorala: Accepted two refinements from the live run of 16 November 2026 ("accept both affect phrase refinements"), now decision 8: no affect phrase when the speaker's own words already state the feeling, and "sounding frightened" added to the phrases.
+  Recorded by Claude (agent) at rashodkorala's explicit request.
+  The status stays accepted; IDR-006's phrase mechanics follow this decision and are to be brought in line when the refinements are built.

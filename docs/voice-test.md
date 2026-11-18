@@ -171,7 +171,8 @@ Manner is the physician's manner read from the words; for patient and companion 
 
 ### Voice fetches
 
-The server log does not print the delivery; the delivery below is what `delivery_for_turn` in `server/voice.py` gives for each turn's manner, emotion, and certainty.
+The server log does not print the delivery; the delivery below is what `delivery_for_turn` in `server/voice.py` gave at the time for each turn's manner, emotion, and certainty.
+Since 16 November 2026 there is no such table: every turn and every interpreter line is spoken in one constant delivery (`[calm]`, stability 0.55), because the varied deliveries did not carry the tone, and a patient's affect is now carried in words instead (MDD-006, IDR-006).
 
 | Speech | Language | HTTP | Bytes | Audio | Delivery | Fetch seconds |
 |---|---|---|---|---|---|---|
@@ -192,6 +193,7 @@ Matched IDR-005:
 - Manner is read in the translate call with no extra model call: `warm` for the greeting, `reassuring` for the reassurance, `plain` for the alcohol question and the 911 instruction.
 - Physician captions carry the manner; patient and companion captions never do.
 - The reassuring turn is voiced `[reassuringly]` and the worried patient turn `[concerned]`, conveying the patient's worry to the physician rather than soothing it.
+  Later listening found the voice did not carry these tags; since 16 November 2026 the voice is constant, and the worried turn would instead open with a phrase such as "Gurpreet Singh is asking, sounding worried, ..." (MDD-006, IDR-006).
 - The frame took the adverb once, inside the frame ("ਕਹਿ ਰਹੇ ਹਨ, ਤਸੱਲੀ ਨਾਲ," / "is saying, reassuringly,"), and the tone check passed it.
   It is debatable whether the words alone ("Your heart tests were reassuring") already carried it, which IDR-005 says should leave the adverb out.
 
@@ -211,3 +213,74 @@ Did not match, or needs a look:
 - Turn 2's relay adds "you think" ("whether you think they will also have a heart attack"), which the patient did not say; the back-translation drops it again, so the check cannot see it.
 - Turn 3's relay frames only its first sentence; the rest is direct speech, with "we have found this early" in the first person, as in the earlier runs.
 - The 911 instruction is `plain`, not `urgent`; as a conditional safety instruction rather than a call to act now, that reading fits IDR-005, but the speakers may want it said more firmly.
+
+## Affect in words run, 16 November 2026 (MDD-006, IDR-006)
+
+- Server: the real app on port 8620 with `server/.env` and `.env.local` loaded, as `scripts/dev.sh` does.
+  `/api/health` reported Claude (claude-sonnet-5-5, tone check claude-haiku-5-5, note and summary claude-opus-5-5), voice ElevenLabs `eleven_v4`, and E5 embeddings.
+- Runner: a scratch Python script with one controller WebSocket, as in the trust layer run; turns were typed with recognition confidence 1.0, and nothing was spoken or played.
+  A scratch wrapper around the app logged each model call, `frame_problem`, and the reported `affect_phrase`, which is not on the wire.
+  It also stubbed the trust advisor to save model calls; the advisor is off the turn's critical path and never touches a relay.
+- Visits: Tamil (ta-LK) with Dr Patel and Meena Rajaratnam, then a new visit in Punjabi (pa-IN) with Dr Patel and Gurpreet Singh; all content is fictional.
+- Calls: 64 to Claude (31 translate, 31 tone checks, 1 note, and 1 summary).
+
+### Turns
+
+Seconds run from `turn.submit` to `turn.analysis` on the controller.
+Phrase is the `affect_phrase` the model reported; in every turn that has one it appears exactly once, in the opening frame.
+
+| # | Case | Speaker | Said | Relay | Emotion | Manner | Phrase | Outcome (attempts) | Seconds |
+|---|---|---|---|---|---|---|---|---|---|
+| T1 | worried, run 1 | patient | டாக்டர், எனக்கு மிகவும் கவலையாக இருக்கிறது. இந்த நெஞ்சு வலி இதயப் பிரச்சினையாக இருக்குமோ என்று யோசித்துக்கொண்டே இருக்கிறேன். | The patient says, sounding worried, that they are very worried. They keep wondering whether this chest pain could be a heart problem. | worried | plain | sounding worried | final (2), first attempt failed the tone check | 12.1 |
+| T16 | worried, run 2 | patient | as T1 | The patient, Meena Rajaratnam, says, sounding worried, that they are very worried. They keep wondering whether this chest pain could be a heart problem. | worried | plain | sounding worried | final (1) | 5.0 |
+| T18 | worried, run 3 | patient | as T1 | Meena Rajaratnam says, sounding worried, that they are very worried. They keep wondering if this chest pain could be a heart problem. | worried | plain | sounding worried | final (1) | 3.7 |
+| T2 | calm, run 1 | patient | நான் பள்ளியில் ஆசிரியராக வேலை செய்கிறேன். தினமும் காலையில் நடக்கிறேன். புகை பிடிப்பதில்லை. | The patient says they work as a teacher at a school. They walk every morning (தினமும்). They do not smoke. | calm | plain | none | blocked (2), தினமும் not matched | 9.1 |
+| T17 | calm, run 2 | patient | as T2 | The patient says they work as a teacher at a school. They walk every morning (தினமும்). They do not smoke. | calm | plain | none | final (2), matched only by the pasted Tamil word | 7.1 |
+| T19 | calm, run 3 | patient | as T2 | The patient says they work as a teacher at a school. They walk every morning (தினமும் காலையில்). They do not smoke. | calm | plain | none | blocked (2), தினமும் not matched | 6.5 |
+| T3 | frightened | patient | எனக்கு மிகவும் பயமாக இருக்கிறது டாக்டர். என் அம்மா இதே நோயால் இறந்துபோனார். நானும் அப்படி இறந்துவிடுவேனா? | The patient says, sounding worried, that they are very scared. Their mother died of this same illness. They are asking whether they will die like that too. | worried | plain | sounding worried | final (1) | 4.2 |
+| T4 | in pain | patient | ஐயோ, வயிறு இப்போது கூட கடுமையாக வலிக்கிறது. நேற்று இரவு முழுவதும் தூங்கவே முடியவில்லை. | The patient says, sounding as if in pain, that their stomach is hurting badly even now. They say they could not sleep at all all through last night. | in_pain | plain | sounding as if in pain | final (1) | 5.7 |
+| T5 | embarrassed | patient | இதைச் சொல்ல எனக்கு வெட்கமாக இருக்கிறது, ஆனால் சில நேரம் சிறுநீரை அடக்க முடியவில்லை. | The patient says, sounding embarrassed, that they feel ashamed to say this, but sometimes they are not able to hold their urine. | embarrassed | plain | sounding embarrassed | final (1) | 3.3 |
+| T6 | worried, dose | patient | டாக்டர், நான் என் மாத்திரையை தினமும் ஒரு முறை 0.4 மில்லிகிராம் எடுக்கிறேன். ஆனால் அது போதுமா என்று எனக்கு மிகவும் கவலையாக இருக்கிறது. | The patient says, sounding worried, that they take their pill once a day, 0.4 mg. But they are very worried about whether that is enough. | worried | plain | sounding worried | final (1), 0.4 mg and once a day matched | 3.6 |
+| T7 | unsure of dose | patient | என் இரத்த அழுத்த மாத்திரை எத்தனை மில்லிகிராம் என்று சரியாகத் தெரியவில்லை. ஐந்தோ பத்தோ என்று நினைக்கிறேன். | The patient says they don't know exactly how many milligrams their blood pressure pill is. They think it is either 5 or 10. | calm (certainty low) | plain | none | blocked (2), 5 and 10 not matched | 6.8 |
+| T8 | plain dose, muddled elsewhere | patient | நான் தினமும் காலையில் 500 மில்லிகிராம் மெட்ஃபோர்மின் எடுக்கிறேன். ஆனால் கண் டாக்டரிடம் எப்போது போக வேண்டும் என்று எனக்குக் குழப்பமாக இருக்கிறது, அவர்கள் சொன்னது புரியவில்லை. | The patient says, sounding confused, that they take 500 mg of metformin தினமும் in the morning. But they are confused about when they should go to the eye doctor, and they did not understand what they were told. | confused | plain | sounding confused | blocked (2), தினமும் not matched; the second tone check also failed certainty | 9.8 |
+| T9 | companion | companion | அம்மாவுக்கு இரவில் மூச்சு விட முடியாமல் போகிறது, டாக்டர். நாங்கள் எல்லோரும் மிகவும் பயந்துபோயிருக்கிறோம். | The patient's companion says, sounding worried, that the patient, their mother, can't breathe at night. They say they are all very frightened. | worried | plain | sounding worried | final (1) | 4.1 |
+| T10 | neutral words | patient | நேற்று இரவு நெஞ்சில் வலி வந்தது. கொஞ்ச நேரத்தில் போய்விட்டது. | The patient says they had pain in their chest last night. It went away after a short while. | calm | plain | none | final (1) | 3.0 |
+| T11 | relieved | patient | அப்பாடா, அது புற்றுநோய் இல்லை என்று கேட்டதும் நிம்மதியாக இருக்கிறது. | The patient says, sounding relieved, that after hearing it is not cancer, they feel at ease. | relieved | plain | sounding relieved | final (1) | 5.9 |
+| T12 | physician, words of worry | physician | I am worried about your blood pressure. It has been high at every visit this year. | டாக்டர் படேல் சொல்கிறார், அவர் உங்கள் இரத்த அழுத்தத்தைப் பற்றி கவலைப்படுகிறார். இந்த ஆண்டு நீங்கள் வந்த ஒவ்வொரு முறையும் உங்கள் இரத்த அழுத்தம் அதிகமாக இருந்தது என்றும் சொல்கிறார். | worried | serious | none | final (1) | 4.8 |
+| T13 | physician, gentle | physician | I know this is hard to hear. The scan shows a small growth, and we will look after you through every step. | டாக்டர் படேல் மென்மையாகச் சொல்கிறார், இதைக் கேட்பது கடினம் என்று அவர் அறிவார். ஸ்கேனில் ஒரு சிறிய வளர்ச்சி தெரிகிறது என்றும், ஒவ்வொரு கட்டத்திலும் அவர்கள் உங்களைக் கவனித்துக்கொள்வார்கள் என்றும் சொல்கிறார். | calm | gentle (adverb in the frame) | none | final (1) | 4.8 |
+| T14 | physician, urgent with dose | physician | Chew 300 milligrams of aspirin right now, and call 911 if the pain gets worse. | டாக்டர் பட்டேல் சொல்வது என்னவென்றால், நீங்கள் இப்போதே 300 மில்லிகிராம் ஆஸ்பிரின் மாத்திரையை மென்று சாப்பிட வேண்டும். வலி அதிகமானால் நீங்கள் 911-ஐ அழைக்க வேண்டும் என்றும் அவர் சொல்கிறார். | calm | urgent (no adverb) | none | readback_required (1), confirmed; 300 mg, 911, and aspirin matched | 5.8 |
+| T15 | patient in English | patient | I am really worried that the new tablets are making me dizzy. | மீனா ராஜரத்தினம் சொல்வது, புதிய மாத்திரைகள்தான் தனக்கு மயக்கம் வரச் செய்கின்றன என்று தான் மிகவும் கவலைப்படுவதாக. | worried | plain | none | escalated (2), tone_failure | 9.3 |
+| P1 | worried | patient | ਡਾਕਟਰ ਜੀ, ਮੈਨੂੰ ਬਹੁਤ ਫ਼ਿਕਰ ਹੈ ਕਿ ਮੇਰੀ ਸ਼ੂਗਰ ਕਾਬੂ ਵਿੱਚ ਨਹੀਂ ਆ ਰਹੀ। | Gurpreet Singh says, sounding worried, that they are very worried that their sugar (diabetes) is not coming under control. | worried | plain | sounding worried | final (1) | 4.5 |
+| P2 | calm | patient | ਮੈਂ ਹਰ ਰੋਜ਼ ਸਵੇਰੇ ਸੈਰ ਕਰਦਾ ਹਾਂ ਅਤੇ ਸਿਗਰਟ ਨਹੀਂ ਪੀਂਦਾ। | The patient, Gurpreet Singh, is saying they go for a walk every morning ਹਰ ਰੋਜ਼ and they do not smoke. | calm | plain | none | final (2), matched only by the pasted Punjabi words | 9.8 |
+| P3 | in pain | patient | ਹਾਏ, ਮੇਰੇ ਗੋਡੇ ਵਿੱਚ ਬਹੁਤ ਦਰਦ ਹੋ ਰਿਹਾ ਹੈ, ਤੁਰਿਆ ਨਹੀਂ ਜਾਂਦਾ। | Gurpreet Singh says, sounding as if in pain, that they have a lot of pain in their knee right now, and they can't walk. | in_pain | plain | sounding as if in pain | final (1) | 4.2 |
+| P4 | companion | companion | ਡਾਕਟਰ ਜੀ, ਇਹ ਰਾਤ ਨੂੰ ਬਹੁਤ ਖੰਘਦੇ ਹਨ, ਅਸੀਂ ਸਾਰੇ ਬਹੁਤ ਪਰੇਸ਼ਾਨ ਹਾਂ। | The patient's companion says, sounding worried, that the patient coughs a lot at night, and that they are all very upset. | worried | plain | sounding worried | final (1) | 3.8 |
+
+- 23 turns: 13 phrases expected and 13 written, all reported, each once and in the frame; no phrase on a calm, physician, or patient-bound turn, and none written but not reported.
+- The three worried runs and the three calm runs agreed on emotion and phrase every time.
+- Median 5.0 s, worst 12.1 s (T1, a retry); first-attempt turns had a median of 4.2 s and a worst of 5.9 s.
+
+### Note and summary
+
+- Both were generated from the Tamil visit and passed; neither source text contained "sounding".
+- Neither restates how the patient sounded.
+  The note keeps worry only where the patient said it in words ("is worried whether that is enough", "felt at ease after hearing it is not cancer").
+- The note calls the patient "she" and "her" throughout, though no gender was given and every relay uses "they".
+
+### Voice
+
+- `/api/health` reported ElevenLabs, but every fetch through the speak gate got 503: ElevenLabs answered 401, the account's quota is spent (30 credits left, 118 to 212 needed per clip).
+  So no audio was saved: T1 (worried, en-CA), T13 (gentle physician, ta-LK), and the closing check line (ta-LK) all fell back to the browser's Azure voice.
+- T2 (calm) got 404, correctly, because it was blocked; no other calm turn was fetched.
+
+### Findings
+
+- T15 is a false escalation of a faithful turn: an English patient turn relayed to the patient kept "really worried" from the patient's own words, and the tone check twice read those words as an added affect phrase.
+- The first attempt of T1 was a false tone failure: given a Tamil back-translation, the tone check counted the name in the frame as added and "very worried" as a second phrase.
+- T8 opens with "sounding confused" before a plainly stated 500 mg dose: the first tone check passed it and the second failed it, so the tone check is not consistent on the case it names as its example.
+- Every relay whose words already say the feeling doubles it ("sounding worried, that they are very worried"), which is unnatural English (T1, T16, T18, P1).
+- The critical value check does not read தினமும் or ਹਰ ਰੋਜ਼ in "every morning", so faithful calm turns were blocked (T2, T19, and T8); on retry the model pasted the source word into the English relay, and T17 and P2 passed only because of that.
+- T7, a patient unsure of their dose, was blocked because ஐந்தோ பத்தோ ("five or ten", with the clitic ஓ) is not read as 5 and 10.
+- T3, a frightened patient, is "sounding worried": the five phrases have no frightened, which the physician hears as weaker.
+- The first attempt of T19 called the patient "she", and the tone check passed it.
+- Back-translations of Tamil turns often came back in English, a copy of the relay, which the tone check cannot use as a check.
+- T10, neutral words, got no phrase, as the known gaps record.
