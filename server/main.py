@@ -98,6 +98,10 @@ from contracts import (
     SummarySpeak,
     TamperRecord,
     TamperState,
+    TranscriptReview,
+    TranscriptReviewResolve,
+    TranscriptReviewStart,
+    TranscriptReviewState,
     TrustUpdate,
     TurnRef,
     TurnStarted,
@@ -199,7 +203,7 @@ def services(settings: Settings, voice: Voice | None, embedder: Embedder) -> dic
 def describe(used: dict[str, str], test_languages: bool) -> str:
     """One start-up line saying what this run will use, so a fake run is never mistaken for live."""
     translator = (
-        f"Claude ({used['liveModel']}, tone check {used['toneModel']}, note and summary {used['recordModel']})"
+        f"Claude ({used['liveModel']}, trust cues {used['toneModel']}, note and summary {used['recordModel']})"
         if used["translator"] == "claude"
         else "fake model (no AI calls)"
     )
@@ -220,6 +224,8 @@ def create_app(
     voice: Voice | None = None,
     voice_ceiling_s: float = VOICE_CEILING_S,
     signal_hold_s: float = SIGNAL_HOLD_S,
+    *,
+    model_tone_check: bool = False,
 ) -> FastAPI:
     settings = settings or load_settings()
     model = model or make_model(settings)
@@ -227,7 +233,7 @@ def create_app(
     kb = kb or KnowledgeBase(make_embedder())
     used = services(settings, voice, kb.embedder)
     log.info(describe(used, settings.test_languages))
-    pipeline = TurnPipeline(model, kb)
+    pipeline = TurnPipeline(model, kb, model_tone_check=model_tone_check)
     advisor = TrustAdvisor(model, kb)
 
     app = FastAPI(title="Demo night server")
@@ -461,6 +467,7 @@ def create_app(
         visit.consent_epoch += 1
         reason = " ".join((cmd.reason or "").split()) or None
         await change_consent("withdrawn", consent_by(conn), notice, reason)
+        await clear_transcript_review(visit)
         if visit.pending_readback:
             # Discarded unspoken, exactly as turn.readback_reject.
             turn_id, visit.pending_readback = visit.pending_readback, None
@@ -619,6 +626,64 @@ def create_app(
         )
         visit.add_trust(update)
         await hub.publish("trust.update", update.wire())
+
+    # @implements CDR-009: Patient confirmation of a captured transcript before translation
+    async def publish_transcript_review(visit: Visit) -> None:
+        await hub.publish("transcript.review_state", TranscriptReviewState(review=visit.transcript_review).wire())
+
+    async def clear_transcript_review(visit: Visit) -> None:
+        if visit.transcript_review is not None:
+            visit.transcript_review = None
+            await publish_transcript_review(visit)
+
+    async def start_transcript_review(conn: Connection, payload: dict) -> None:
+        command = "transcript.review_start"
+        cmd = TranscriptReviewStart.model_validate(payload)
+        visit = hub.visit
+        if await refuse_without_consent(conn, command) or await refuse_while_paused(conn, command):
+            return
+        text = cmd.text.strip()
+        if not text:
+            await error(conn, "The transcript is empty", command)
+            return
+        if visit.transcript_review is not None:
+            await error(conn, "A transcript is already waiting for review", command, "busy")
+            return
+        visit.transcript_review = TranscriptReview(
+            review_id=uuid.uuid4().hex, text=text, language=visit.patient_language
+        )
+        await publish_transcript_review(visit)
+
+    async def resolve_transcript_review(conn: Connection, payload: dict) -> None:
+        command = "transcript.review_resolve"
+        cmd = TranscriptReviewResolve.model_validate(payload)
+        visit = hub.visit
+        if await refuse_without_consent(conn, command) or await refuse_while_paused(conn, command):
+            return
+        review = visit.transcript_review
+        if review is None or review.review_id != cmd.review_id:
+            await error(conn, "That transcript is no longer waiting for review", command, "not_found")
+            return
+        if cmd.text is not None and (conn.role != "controller" or cmd.action != "confirm"):
+            await error(conn, "Only the physician can confirm edited text", command, "not_allowed")
+            return
+        text = review.text if cmd.text is None else cmd.text.strip()
+        if cmd.action == "confirm" and (not text or visit.pending_readback):
+            await error(conn, "A nonempty transcript and a settled dose check are required", command, "busy")
+            return
+        epoch = visit.consent_epoch
+        await clear_transcript_review(visit)
+        if cmd.action == "repeat":
+            return
+
+        async def submit_reviewed() -> None:
+            if live(visit, epoch) and not visit.paused:
+                await submit_turn(
+                    conn,
+                    TurnSubmit(speaker="patient", language=review.language, text=text, recognition_confidence=1).wire(),
+                )
+
+        spawn(submit_reviewed())
 
     async def submit_turn(conn: Connection, payload: dict) -> None:
         cmd = TurnSubmit.model_validate(payload)
@@ -818,6 +883,8 @@ def create_app(
             await error(conn, "The visit is already paused" if paused else "The visit is not paused", command)
             return
         hub.visit.paused = paused
+        if paused:
+            await clear_transcript_review(hub.visit)
         await hub.publish("visit.paused" if paused else "visit.resumed", {})
 
     async def request_interpreter(conn: Connection, payload: dict) -> None:
@@ -1370,6 +1437,8 @@ def create_app(
         "visit.name_confirm": lambda conn, payload: name_decision(conn, payload, True),
         "visit.name_reject": lambda conn, payload: name_decision(conn, payload, False),
         "turn.submit": submit_turn,
+        "transcript.review_start": start_transcript_review,
+        "transcript.review_resolve": resolve_transcript_review,
         "turn.readback_confirm": lambda conn, payload: readback(conn, payload, True),
         "turn.readback_reject": lambda conn, payload: readback(conn, payload, False),
         "voice.started": voice_started,

@@ -18,6 +18,9 @@ import si from "@/i18n/si.json";
 import ta from "@/i18n/ta.json";
 
 export type NoticeKey =
+  | "transcriptReviewTitle"
+  | "transcriptReviewConfirm"
+  | "transcriptReviewRepeat"
   | "checkingDose"
   | "pleaseRepeat"
   // ADR-003: beneath an unclear turn's original, in both languages; the turn is never spoken.

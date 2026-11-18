@@ -38,7 +38,7 @@ implementation_refs:
   - server/chains/summary.py
 test_refs:
   - server/tests/test_voice.py::test_every_turn_and_interpreter_line_gets_the_one_constant_delivery_idr_006
-  - server/tests/test_voice.py::test_tag_leads_and_text_brackets_cannot_act_as_tags
+  - server/tests/test_voice.py::test_text_brackets_cannot_act_as_performance_tags_idr_006
   - server/tests/test_turn_graph.py::test_prompts_define_the_affect_phrase_rule_idr_006
   - server/tests/test_turn_graph.py::test_worried_patient_turn_has_exactly_one_phrase_in_the_frame_idr_006
   - server/tests/test_turn_graph.py::test_calm_patient_turn_has_no_phrase_idr_006
@@ -85,7 +85,8 @@ This implements MDD-006 and amends the voice-delivery parts of IDR-005 and ADR-0
 - **Constant delivery.** `server/voice.py` keeps one `Delivery` for turn relays.
   `MANNER_DELIVERY`, `EMOTION_DELIVERY`, `delivery_for`, `delivery_for_turn`, and the certainty steadiness are removed, with their completeness assertions.
   `LINE_DELIVERY` and its warm "[warmly]" tag are removed too: interpreter lines (introduction, name questions, signal lines) use the same single constant delivery as turn relays, so there is one delivery everywhere (project lead, 2026-11-16).
-  The constant value is chosen in implementation from the current plain setting (`[calm]`, stability 0.55) unless the project lead says otherwise.
+  The project lead approved removing the `[calm]` performance tag after hearing breathy playback during the demo rehearsal.
+  All lines use stability 0.55 and the same configured voice without performance tags.
 - **Frame phrase.** For a patient or companion turn the translate prompt tells the model: when the speaker's emotion is clearly not calm, add one hedged phrase naming it inside the opening frame, in the target language's natural form ("The patient says, sounding worried, that ..."), once, never anywhere else, and never in a way that changes an instruction, a certainty word, a number, or a medication.
   A calm turn gets no phrase.
   The model's `emotion` read decides, so the phrase and the controller label agree.

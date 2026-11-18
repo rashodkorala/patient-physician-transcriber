@@ -17,6 +17,7 @@
  * @implements ADR-012: Clinic design system
  * @implements CDR-005: Consent and explain-back on the visit channel
  * @implements CDR-006: Record chain entries, review corrections, interpreter dismissal, and presenter controls
+ * @implements CDR-009: Patient confirmation of a captured transcript before translation
  * @implements CDR-007: Clinical note with provenance and patient summary on the visit channel
  * @contract ws:/ws/visit
  * @contract TurnCaption
@@ -112,7 +113,7 @@ export default function PatientScreen() {
   }, []);
 
   const visit = useReviewVisit(onSignalEvent);
-  const { patient, captions, consented, open, paused, pending, send } = visit;
+  const { patient, captions, consented, open, paused, pending, send, transcriptReview } = visit;
 
   const signal = (which: PatientSignal) => {
     asked.current = which;
@@ -141,6 +142,24 @@ export default function PatientScreen() {
       {consented && (
         <>
           <PausedNotice visit={visit} />
+          {transcriptReview && !paused && (
+            <section className={styles.controls} data-testid="patient-transcript-review" aria-labelledby="patient-transcript-title">
+              <h2 className={review.heading} id="patient-transcript-title">
+                <Bi k="transcriptReviewTitle" patient={patient} />
+              </h2>
+              <p className={styles.saidText} lang={transcriptReview.language}>{transcriptReview.text}</p>
+              <div className={styles.grid}>
+                <button className={`${styles.control} ${styles.clarify}`} disabled={!open} data-testid="patient-transcript-confirm"
+                  onClick={() => send("transcript.review_resolve", { reviewId: transcriptReview.reviewId, action: "confirm" })}>
+                  <Bi k="transcriptReviewConfirm" patient={patient} />
+                </button>
+                <button className={styles.control} disabled={!open} data-testid="patient-transcript-repeat"
+                  onClick={() => send("transcript.review_resolve", { reviewId: transcriptReview.reviewId, action: "repeat" })}>
+                  <Bi k="transcriptReviewRepeat" patient={patient} />
+                </button>
+              </div>
+            </section>
+          )}
 
           {/* IDR-005: the translation large, with how the doctor said it beneath; never the patient's own manner. */}
           <section className={styles.latest} data-testid="patient-latest" data-turn-id={latest?.turnId}>
@@ -201,7 +220,7 @@ export default function PatientScreen() {
               {SIGNALS.map(({ signal: which, testId }) => (
                 <button
                   key={which}
-                  className={styles.control}
+                  className={`${styles.control} ${which === "not_understood" ? styles.clarify : ""}`}
                   data-testid={testId}
                   data-signal={which}
                   disabled={controlsOff}

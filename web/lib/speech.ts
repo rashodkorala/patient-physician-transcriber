@@ -279,7 +279,11 @@ export function speak(text: string, language: Language, speechId: string): Promi
       // Stopped while its audio was on the way: never fall back to another voice.
       if (ticket.stopped) throw new SpeechStopped();
       const item = { speechId, language };
-      return await (response ? playStream(response, item) : speakWithAzure(text, item));
+      const { signal } = ticket.abort;
+      return await (response ? playStream(response, item, signal) : speakWithAzure(text, item, signal));
+    } catch (error) {
+      if (ticket.stopped) throw new SpeechStopped();
+      throw error;
     } finally {
       waiting.delete(ticket);
     }
@@ -355,12 +359,14 @@ async function serverSpeech(speechId: string, language: Language, signal: AbortS
   return null; // 503: no server voice for this language, or the vendor failed before any audio
 }
 
-async function playStream(response: Response, item: Speaking): Promise<{ startedAt: number }> {
+async function playStream(response: Response, item: Speaking, signal: AbortSignal): Promise<{ startedAt: number }> {
+  if (signal.aborted) throw new SpeechStopped();
   const streams = response.body && typeof MediaSource !== "undefined" && MediaSource.isTypeSupported("audio/mpeg");
   const url = streams ? streamUrl(response.body!) : URL.createObjectURL(await response.blob());
   const audio = new Audio(url);
   let ended: (() => void) | undefined;
   try {
+    if (signal.aborted) throw new SpeechStopped();
     return await new Promise((resolve, reject) => {
       let startedAt = 0;
       audio.onplaying = () => {
@@ -410,7 +416,7 @@ function streamUrl(body: ReadableStream<Uint8Array<ArrayBuffer>>): string {
   return URL.createObjectURL(source);
 }
 
-async function speakWithAzure(text: string, item: Speaking): Promise<{ startedAt: number }> {
+async function speakWithAzure(text: string, item: Speaking, signal: AbortSignal): Promise<{ startedAt: number }> {
   const { language } = item;
   const sdk = await loadSdk();
   let synthesizer: Synthesizer;
@@ -420,6 +426,7 @@ async function speakWithAzure(text: string, item: Speaking): Promise<{ startedAt
   } catch (error) {
     throw error instanceof SpeechUnavailable ? error : new SpeechUnavailable(String(error));
   }
+  if (signal.aborted) throw new SpeechStopped();
 
   // Chunks reach the player as Azure makes them, so speech starts before synthesis finishes.
   let firstChunk: () => void;
@@ -456,5 +463,5 @@ async function speakWithAzure(text: string, item: Speaking): Promise<{ startedAt
   });
   // A failure before any audio keeps its own reason, instead of a generic playback error.
   await audible;
-  return playStream(new Response(body, { headers: { "Content-Type": "audio/mpeg" } }), item);
+  return playStream(new Response(body, { headers: { "Content-Type": "audio/mpeg" } }), item, signal);
 }

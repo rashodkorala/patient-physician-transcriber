@@ -1,4 +1,7 @@
 {
+  "transcriptReviewTitle": "Is this what you said?",
+  "transcriptReviewConfirm": "Yes, that’s what I said",
+  "transcriptReviewRepeat": "Let me say it again",
   "_reviewer": "pending",
   "checkingDose": "Checking the dose",
   "pleaseRepeat": "Please repeat",

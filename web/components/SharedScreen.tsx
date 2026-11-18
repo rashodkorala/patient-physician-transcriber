@@ -96,12 +96,14 @@ function Original({
   speaker,
   name,
   language,
+  caption = false,
   tag,
   children,
 }: {
   speaker: Speaker;
   name?: string | null;
   language?: Language;
+  caption?: boolean;
   tag?: ReactNode;
   children: ReactNode;
 }) {
@@ -114,6 +116,7 @@ function Original({
             {name}
           </span>
         )}
+        {caption && <span className={styles.columnLabel} lang="en-CA">Original</span>}
         {language && <span className={styles.lang}>{LANGUAGE_LABELS[language].own}</span>}
         {tag}
       </div>
@@ -356,7 +359,7 @@ function SignalRow({
       {bilingual(SIGNAL_KEY[entry.signal].notice, patient, physician).map(({ lang, text }) => (
         <div key={lang} className={styles.side} lang={lang}>
           <div className={styles.meta}>
-            <span className={styles.speaker}>{SPEAKER_LABEL.patient}</span>
+            <span className={styles.speaker} lang="en-CA">Patient request</span>
             {name && <span className={styles.name}>{name}</span>}
             <span className={styles.lang}>{LANGUAGE_LABELS[lang].own}</span>
           </div>
@@ -404,6 +407,7 @@ function Caption({ c, names, broken, patient }: { c: TurnCaption; names: Names; 
         speaker={c.speaker}
         name={nameOf(c.speaker, names)}
         language={c.sourceLanguage}
+        caption
         tag={
           // CDR-006: the turn record.integrity names, and never a word about how it was altered.
           broken && (
@@ -417,8 +421,9 @@ function Caption({ c, names, broken, patient }: { c: TurnCaption; names: Names; 
           <Highlighted text={c.sourceText} values={c.criticalValues.map((v) => v.source)} className={styles.value} />
         </p>
       </Original>
-      <div className={styles.side} lang={spoken ? c.targetLanguage : undefined}>
+      <div className={spoken ? styles.side : `${styles.side} ${styles.heldBack}`} lang={spoken ? c.targetLanguage : undefined}>
         <div className={styles.meta}>
+          <span className={styles.columnLabel} lang="en-CA">Translation</span>
           <span className={styles.lang}>{LANGUAGE_LABELS[c.targetLanguage].own}</span>
           {!spoken && <NotSpoken />}
         </div>
@@ -500,7 +505,7 @@ function PendingTurn({ p, names, other }: { p: Pending; names: Names; other: (la
         )}
       </Original>
       {notice && source && (
-        <div className={styles.side}>
+        <div className={`${styles.side} ${notice === "checkingDose" ? styles.checking : styles.heldBack}`}>
           <div className={styles.meta}>
             <span className={styles.lang}>{LANGUAGE_LABELS[other(source)].own}</span>
             {notice === "pleaseRepeat" && <NotSpoken />}
@@ -513,6 +518,7 @@ function PendingTurn({ p, names, other }: { p: Pending; names: Names; other: (la
 }
 
 export default function SharedScreen() {
+  const [focusLatest, setFocusLatest] = useState(false);
   const [captions, setCaptions] = useState<TurnCaption[]>([]);
   const [pending, setPending] = useState<Pending | null>(null);
   const [languages, setLanguages] = useState<{ patient: Language; physician: Language }>({
@@ -745,6 +751,7 @@ export default function SharedScreen() {
   // The introduction shows before the first caption; a line said during the visit shows after the captions.
   const introductionLines = lines.filter((l) => !MID_VISIT_LINES.has(l.purpose));
   const midVisitLines = lines.filter((l) => MID_VISIT_LINES.has(l.purpose));
+  const visibleCaptions = captions.slice(focusLatest ? -1 : -6);
 
   return (
     <main className={styles.screen}>
@@ -754,6 +761,14 @@ export default function SharedScreen() {
           {LANGUAGE_LABELS[languages.patient].own} / {LANGUAGE_LABELS[languages.physician].own}
         </span>
         <div className={styles.barEnd}>
+          <button
+            type="button"
+            className={styles.focusToggle}
+            aria-pressed={focusLatest}
+            onClick={() => setFocusLatest((active) => !active)}
+          >
+            Focus latest
+          </button>
           <RecordBadge
             integrity={integrity}
             where={where}
@@ -770,8 +785,8 @@ export default function SharedScreen() {
           <Resting notice="paused" testId="paused" languages={languages} />
         ) : (
           <>
-            {captions.length === 0 && introductionLines.slice(-3).map((line) => <Line key={line.lineId} line={line} />)}
-            {captions.slice(-6).map((c) => (
+            {captions.length === 0 && introductionLines.slice(focusLatest ? -1 : -3).map((line) => <Line key={line.lineId} line={line} />)}
+            {visibleCaptions.map((c) => (
               <Caption
                 key={c.turnId}
                 c={c}

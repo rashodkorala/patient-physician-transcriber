@@ -161,7 +161,19 @@ export interface EmpathyNudge {
   phraseLanguage: Language;
 }
 
+/** CDR-009: private to the controller and patient review connections. */
+export interface TranscriptReview {
+  reviewId: string;
+  text: string;
+  language: PatientLanguage;
+}
+
+export interface TranscriptReviewState {
+  review: TranscriptReview | null;
+}
+
 export interface VisitStateController {
+  transcriptReview?: TranscriptReview | null;
   patientLanguage: PatientLanguage;
   physicianLanguage: Language;
   consent: string | null;

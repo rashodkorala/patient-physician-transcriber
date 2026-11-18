@@ -16,7 +16,7 @@ from kb.embeddings import HashingEmbedder
 from kb.store import KnowledgeBase
 from llm import ScriptedModel
 from main import create_app
-from voice import DELIVERY, ElevenLabsVoice, VoiceUnavailable, describe_error, spoken_text
+from voice import ElevenLabsVoice, VoiceUnavailable, describe_error, spoken_text
 
 
 class FakeVoice:
@@ -57,7 +57,10 @@ def make_client(kb, voice=None, translate=None, tone_check=None, settings=SETTIN
             "name_extract": fake_model.name_extract,
         }
     )
-    return ConsentedClient(create_app(model=model, settings=settings, kb=kb, voice=voice), language=language)
+    return ConsentedClient(
+        create_app(model=model, settings=settings, kb=kb, voice=voice, model_tone_check=tone_check is not None),
+        language=language,
+    )
 
 
 def final_turn(client, text="Hello, how are you feeling today?"):
@@ -255,13 +258,12 @@ def test_every_turn_and_interpreter_line_gets_the_one_constant_delivery_idr_006(
         speak_lines(client, [line])
     assert len(tts.calls) == len(spoken) == 3 * len(combos) + 4
     for call, text in zip(tts.calls, spoken, strict=True):
-        assert call["text"] == spoken_text(text) and call["text"].startswith(f"{DELIVERY.tag} ")
-        assert call["voice_settings"].stability == DELIVERY.stability
-    assert DELIVERY.tag == "[calm]" and DELIVERY.stability == pytest.approx(0.55)
+        assert call["text"] == spoken_text(text)
+        assert call["voice_settings"].stability == pytest.approx(0.55)
 
 
-def test_tag_leads_and_text_brackets_cannot_act_as_tags():
-    assert spoken_text("Take [two] tablets") == "[calm] Take (two) tablets"
+def test_text_brackets_cannot_act_as_performance_tags_idr_006():
+    assert spoken_text("Take [two] tablets") == "Take (two) tablets"
 
 
 @pytest.mark.anyio
@@ -271,7 +273,7 @@ async def test_adapter_sends_language_tag_and_stability():
     assert await collect(audio) == b"onetwo"
     call = tts.calls[0]
     assert call["voice_id"] == "voice-1" and call["model_id"] == "eleven_v4" and call["language_code"] == "fr"
-    assert call["text"] == "[calm] Bonjour"
+    assert call["text"] == "Bonjour"
     assert call["voice_settings"].stability == pytest.approx(0.55)
 
 

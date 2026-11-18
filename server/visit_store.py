@@ -63,11 +63,13 @@ from contracts import (
     Speaker,
     SummaryCheck,
     TamperState,
+    TranscriptReview,
     TrustUpdate,
     TurnEntryBody,
     TurnResult,
     VisitStateController,
     VisitStatePublic,
+    VisitStateReview,
     VoiceSpeaking,
     to_caption,
 )
@@ -152,6 +154,7 @@ class Visit:
     nudges: list[EmpathyNudge] = field(default_factory=list)
     current_turn_id: str | None = None
     pending_readback: str | None = None
+    transcript_review: TranscriptReview | None = None
     physician_name: str | None = None
     patient_name: str | None = None
     introduction: IntroductionState = "pending"
@@ -389,6 +392,7 @@ class Visit:
                 turns=[t.result for t in self.turns.values() if t.result is not None],
                 current_turn=current.result if current else None,
                 pending_readback=self.pending_readback,
+                transcript_review=self.transcript_review,
                 nudges=self.nudges,
                 integrity=self.integrity(),
                 physician_name=self.physician_name,
@@ -426,7 +430,7 @@ class Visit:
                     source_text=t.source_text,
                     stage=t.stage,
                 )
-        return VisitStatePublic(
+        public = VisitStatePublic(
             patient_language=self.patient_language,  # type: ignore[arg-type]
             physician_language=self.physician_language,  # type: ignore[arg-type]
             consent=self.consent,
@@ -450,7 +454,10 @@ class Visit:
             summary=self.summary,
             summary_stale=self.summary_stale,
             signals=self.signals,
-        ).wire()
+        )
+        if role == "review":
+            return VisitStateReview(**public.model_dump(), transcript_review=self.transcript_review).wire()
+        return public.wire()
 
 
 class Hub:
@@ -481,6 +488,8 @@ class Hub:
         ).wire()
 
     async def send_to(self, conn: Connection, event_type: str, payload: dict) -> None:
+        if event_type == "transcript.review_state" and conn.role == "screen":
+            return
         if event_type in CONTROLLER_ONLY_EVENTS and conn.role != "controller":
             return
         async with conn.lock:

@@ -32,6 +32,7 @@ Only a human decides a status; an agent may record an explicit human verdict (ED
 | [CDR-006](cdr/cdr-006-record-entries-review-corrections-and-tamper.md) | Record chain entries, review corrections, interpreter dismissal, and presenter controls | CDR | accepted | rashodkorala | demo-night-mvp, trust-across-the-barrier |
 | [CDR-007](cdr/cdr-007-clinical-note-and-patient-summary.md) | Clinical note with provenance and patient summary on the visit channel | CDR | accepted | rashodkorala | affect-in-words, demo-night-mvp, trust-across-the-barrier |
 | [CDR-008](cdr/cdr-008-patient-voice-manner-and-trust-events.md) | Patient signals, manner, trust updates, companion turns, and the closing check on the visit channel | CDR | accepted | rashodkorala | affect-in-words, trust-across-the-barrier |
+| [CDR-009](cdr/cdr-009-patient-transcript-review.md) | Patient confirmation of a captured transcript before translation | CDR | accepted | rashodkorala | demo-night-mvp |
 | [EDR-001](edr/edr-001-agent-working-rules.md) | Agent working rules: TDR gates, annotations, commits, and reviews | EDR | accepted | rashodkorala | add-multilingual-medical-consultation, demo-night-mvp |
 | [EDR-002](edr/edr-002-testing-strategy.md) | Testing: pytest with mocked LLM, speaker-rated tone set, latency check | EDR | accepted | rashodkorala | affect-in-words, demo-night-mvp, mediator-voice, trust-across-the-barrier |
 | [IDR-001](idr/idr-001-push-to-talk-turns.md) | Push-to-talk per speaker instead of diarisation | IDR | accepted | rashodkorala | demo-night-mvp, mediator-voice, trust-across-the-barrier |
@@ -40,6 +41,8 @@ Only a human decides a status; an agent may record an explicit human verdict (ED
 | [IDR-004](idr/idr-004-continuous-listening-by-language.md) | Hands-free continuous listening, with the speaker found by spoken language | IDR | accepted | rashodkorala | continuous-listening, trust-across-the-barrier |
 | [IDR-005](idr/idr-005-manner-vocabulary-and-voice-delivery.md) | Manner: an eight-word vocabulary read from the words, carried into the voice, the frame, and the caption label | IDR | accepted | rashodkorala | affect-in-words, trust-across-the-barrier |
 | [IDR-006](idr/idr-006-affect-phrase-in-the-frame-and-constant-voice.md) | Affect phrase in the reporting frame, and one constant voice delivery | IDR | accepted | rashodkorala | affect-in-words |
+| [IDR-007](idr/idr-007-remove-model-tone-check.md) | Remove the separate model tone check for demo turns | IDR | accepted | rashodkorala | demo-night-mvp, affect-in-words |
+| [IDR-008](idr/idr-008-review-low-confidence-speech.md) | Physician review of low-confidence speech before submission | IDR | accepted | rashodkorala | demo-night-mvp |
 | [TDM-001](tdm/tdm-001-replay-mode-safety-net.md) | Replay mode and backup video as demo safety net | TDM | accepted | rashodkorala | demo-night-mvp |
 | [TDM-002](tdm/tdm-002-presenter-mismatch-control.md) | Presenter mismatch control for the blocked-dose beat | TDM | accepted | rashodkorala | demo-night-mvp |
 | [TDM-003](tdm/tdm-003-sinhala-tamil-test-languages.md) | Sinhala and Tamil as test-only languages before demo night | TDM | accepted | rashodkorala | demo-night-mvp |

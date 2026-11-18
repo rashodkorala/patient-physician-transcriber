@@ -892,11 +892,33 @@ class CurrentTurnPublic(Wire):
     stage: str
 
 
+# @contract Transcript review (CDR-009)
+class TranscriptReviewStart(Wire):
+    text: str = Field(min_length=1)
+
+
+class TranscriptReview(Wire):
+    review_id: str
+    text: str
+    language: PatientLanguage
+
+
+class TranscriptReviewState(Wire):
+    review: TranscriptReview | None
+
+
+class TranscriptReviewResolve(Wire):
+    review_id: str
+    action: Literal["confirm", "repeat"]
+    text: str | None = None
+
+
 class VisitStateController(Wire):
     patient_language: PatientLanguage
     physician_language: Language
     consent: str | None
     paused: bool
+    transcript_review: TranscriptReview | None = None
     turns: list[TurnResult]
     current_turn: TurnResult | None = None
     pending_readback: str | None = None
@@ -960,6 +982,10 @@ class VisitStatePublic(Wire):
     summary_stale: bool = False
     # CDR-008: the patient's signals; never the trust timeline.
     signals: list[PatientSignalEntry] = Field(default_factory=list)
+
+
+class VisitStateReview(VisitStatePublic):
+    transcript_review: TranscriptReview | None = None
 
 
 # ---------- CDR-001 commands ----------
@@ -1084,6 +1110,7 @@ CONTROLLER_COMMANDS = frozenset(
         "visit.name_confirm",
         "visit.name_reject",
         "turn.submit",
+        "transcript.review_start",
         "turn.readback_confirm",
         "turn.readback_reject",
         "voice.started",
@@ -1110,7 +1137,14 @@ CONTROLLER_COMMANDS = frozenset(
 # CDR-005: commands the patient's review screen or the controller may send; a screen's copy is dropped.
 # CDR-007 adds the summary's read-aloud and stop.
 REVIEW_OR_CONTROLLER_COMMANDS = frozenset(
-    {"consent.give", "consent.withdraw", "consent.read_aloud", "summary.read_aloud", "summary.stop"}
+    {
+        "consent.give",
+        "consent.withdraw",
+        "consent.read_aloud",
+        "summary.read_aloud",
+        "summary.stop",
+        "transcript.review_resolve",
+    }
 )
 
 # CDR-006: commands only the patient's review screen may send; a controller copy is refused with `error`,

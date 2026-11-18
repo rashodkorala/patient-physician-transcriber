@@ -79,6 +79,7 @@ def make_client(
             **(handlers or {}),
         }
     )
+    app_options.setdefault("model_tone_check", tone_check is not None)
     app = create_app(model=model, settings=settings or SETTINGS, kb=kb, **app_options)
     return ConsentedClient(app, consent=consent, language=language)
 
@@ -130,6 +131,27 @@ def types(events):
 
 
 # ---------- routing and snapshots ----------
+
+
+def test_french_demo_turn_skips_the_model_tone_check_idr_007(kb):
+    def unexpected_tone_check(_user):
+        pytest.fail("The demo must not make a tone-check model request")
+
+    def translate(user):
+        draft = fake_model.translate(user)
+        return draft.model_copy(update={"translation": "The patient says they feel tired."})
+
+    with (
+        make_client(
+            kb, translate=translate, language="fr-CA", handlers={"tone_check": unexpected_tone_check}
+        ) as client,
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        submit(ctl, "patient", "fr-CA", "Je me sens fatigué.")
+        caption = drain_until(tv, "turn.result")[-1]["payload"]
+        assert caption["status"] == "final"
+        assert caption["translation"] == "The patient says they feel tired."
 
 
 def test_connect_sends_role_filtered_state(client):
@@ -760,3 +782,46 @@ def test_screen_connecting_mid_speech_sees_it_in_its_snapshot(client):
     with client.websocket_connect("/ws/visit?role=screen") as after:
         # The controller that started it has gone, so the speech ended with it.
         assert after.receive_json()["payload"]["speaking"]["speaking"] is False
+
+
+def test_patient_transcript_review_is_private_and_resolves_once_cdr_009(kb):
+    with (
+        make_client(kb, language="fr-CA") as client,
+        client.websocket_connect("/ws/visit?role=controller") as ctl,
+        client.websocket_connect("/ws/visit?role=review") as patient,
+        client.websocket_connect("/ws/visit?role=screen") as tv,
+    ):
+        for socket in (ctl, patient, tv):
+            socket.receive_json()
+
+        def start(text):
+            ctl.send_json({"type": "transcript.review_start", "payload": {"text": text}})
+            return drain_until(patient, "transcript.review_state")[-1]["payload"]["review"]
+
+        def resolve(review, action):
+            patient.send_json(
+                {"type": "transcript.review_resolve", "payload": {"reviewId": review["reviewId"], "action": action}}
+            )
+
+        discarded = start("Cette phrase sera répétée.")
+        resolve(discarded, "repeat")
+        assert drain_until(patient, "transcript.review_state")[-1]["payload"]["review"] is None
+        pending = start("Je me sens fatiguée.")
+        with (
+            client.websocket_connect("/ws/visit?role=review") as reloaded,
+            client.websocket_connect("/ws/visit?role=screen") as late_tv,
+        ):
+            assert reloaded.receive_json()["payload"]["transcriptReview"] == pending
+            assert "transcriptReview" not in late_tv.receive_json()["payload"]
+
+        resolve(discarded, "confirm")
+        assert drain_until(patient, "command.refused")[-1]["payload"]["reason"] == "not_found"
+        resolve(pending, "confirm")
+        resolve(pending, "confirm")
+        assert drain_until(patient, "command.refused")[-1]["payload"]["reason"] == "not_found"
+        events = drain_until(tv, "turn.result")
+        assert "transcript.review_state" not in types(events)
+        assert types(events).count("turn.started") == 1
+        caption = events[-1]["payload"]
+        assert caption["sourceText"] == pending["text"]
+        assert caption["sourceLanguage"] == "fr-CA" and caption["targetLanguage"] == "en-CA"

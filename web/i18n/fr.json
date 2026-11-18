@@ -1,4 +1,7 @@
 {
+  "transcriptReviewTitle": "Est-ce bien ce que vous avez dit ?",
+  "transcriptReviewConfirm": "Oui, c’est bien ce que j’ai dit",
+  "transcriptReviewRepeat": "Je vais le redire",
   "_reviewer": "pending",
   "checkingDose": "Vérification de la dose",
   "pleaseRepeat": "Veuillez répéter",

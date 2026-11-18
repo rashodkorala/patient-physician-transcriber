@@ -60,45 +60,13 @@ The system SHALL keep every instruction, certainty, and critical value unchanged
 - **WHEN** the physician gently gives a dose of 0.4 milligrams
 - **THEN** the relay keeps 0.4 milligrams, the critical value check passes as before, and any manner word sits only in the opening frame
 
-#### Scenario: Frame adverb accepted by the tone check
-- **WHEN** a relay adds only "gently" to the reporting frame of an otherwise faithful translation
-- **THEN** the tone check passes and the turn is not escalated
-
-#### Scenario: Frame phrase accepted by the tone check
-- **WHEN** a patient relay adds only "sounding worried" to the reporting frame of an otherwise faithful translation
-- **THEN** the tone check passes and the turn is not escalated
-
-#### Scenario: Patient states a value with an affect phrase
-- **WHEN** a worried patient says they take 0.4 milligrams
-- **THEN** the relay keeps 0.4 milligrams, the critical value check passes as before, and the affect phrase sits only in the opening frame
-
-#### Scenario: Phrase that changes meaning
-- **WHEN** a relay's affect phrase makes the patient's statement sound more or less certain or serious than it was said
-- **THEN** the tone check fails the relay as it would for any change of certainty
-
-#### Scenario: Listed phrase that undermines a stated value
-- **WHEN** a patient states a dose plainly and the relay's frame says "sounding confused"
-- **THEN** the tone check fails the relay, although the same phrase is acceptable on a turn where the patient said they were unsure
-
-#### Scenario: Listed phrase beside a plainly stated value
-- **WHEN** a patient says they are confused about one thing and states a dose plainly in the same turn, and the relay's frame says "sounding confused"
-- **THEN** the tone check passes the relay, and the dose stays as plain as it was said
+#### Scenario: Faithful reporting frame
+- **WHEN** a relay adds an allowed manner adverb or affect phrase to an otherwise faithful translation
+- **THEN** the relay keeps the speaker's meaning, certainty, and any critical values
 
 #### Scenario: Feeling stated in the speaker's own words
-- **WHEN** a patient's own words state a feeling, such as "I am really worried", and the relay keeps those words
-- **THEN** the tone check treats them as part of what the patient said, never as an added affect phrase, and a turn relayed to the patient that keeps them is not escalated for them
-
-#### Scenario: Doubled feeling
-- **WHEN** a relay's frame carries an affect phrase and the relay also keeps the patient's own words for the feeling, as in "sounding worried, that they are very worried"
-- **THEN** the tone check fails the relay as doubled, and the same relay without the phrase passes
-
-#### Scenario: Paraphrased or translated phrase
-- **WHEN** the back-translation of a patient relay to the physician carries one close paraphrase of an affect phrase, such as "sounding anxious", or the same meaning in another language
-- **THEN** the tone check treats it as the one frame phrase and passes an otherwise faithful relay
-
-#### Scenario: Manner adverb on a patient turn
-- **WHEN** a patient or companion relay carries a manner adverb in its frame
-- **THEN** the tone check fails the relay
+- **WHEN** a patient's words state a feeling, such as "I am really worried"
+- **THEN** the relay preserves those words without adding a second phrase for the same feeling
 
 ### Requirement: Manner is private for the patient
 The system SHALL send a patient or companion turn's manner and emotion to the physician's controller as a label only, and SHALL show no manner or emotion label on any shared screen or on the patient's device.

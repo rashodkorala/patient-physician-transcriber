@@ -10,6 +10,13 @@ Record every speech check on the demo laptop. ADR-005: switch to Google Speech i
 | | fr-CA (French) | | | |
 | | en-CA (English) | | | |
 
+## English push-to-talk smoke test
+
+On 17 November 2026, Chrome fed a synthetic English sentence through its microphone input to Azure Speech using the app's `/control` push-to-talk button.
+The speech-token endpoint returned 200 and the recognised sentence appeared as the English original on `/screen`.
+The fixture looped while the button was held, so the caption contained repeated copies of the sentence.
+This run used the fake translator and did not check a physical microphone, Punjabi or French recognition, translation accuracy, or spoken playback.
+
 ## Task 1.4: Punjabi accuracy with the speaker
 
 Use the patient lines from `docs/demo-script.md` (Run 1), spoken naturally by the Punjabi speaker, three times each.

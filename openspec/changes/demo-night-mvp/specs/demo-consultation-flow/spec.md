@@ -39,6 +39,19 @@ The system SHALL capture each utterance through a speaker-specific control, so e
 - **WHEN** the physician presses the patient control and the patient speaks Punjabi
 - **THEN** the turn is recorded with speaker patient and language Punjabi
 
+#### Scenario: Physician reviews a low-confidence capture
+- **WHEN** push-to-talk returns speech text with a known recognition score below 0.70
+- **THEN** the text is shown privately to the physician for editing, confirmation, or discard before translation
+- **AND** confirmed text is submitted for the original speaker and goes through the existing translation and critical-value checks
+- **AND** pausing, withdrawing consent, or starting a new visit clears the unconfirmed text
+
+#### Scenario: Patient reviews their own capture
+- **WHEN** a low-confidence patient turn is waiting for review
+- **THEN** the patient sees the captured words privately and can confirm them or choose to say them again in their own language
+- **AND** the shared screen receives no unconfirmed text
+- **AND** confirming submits the captured words once through the existing translation checks
+- **AND** choosing to say them again clears the capture without submitting it
+
 ### Requirement: Bilingual captions on the shared screen
 The system SHALL show each spoken turn on the shared screen with the speaker label, the original text, and the translation side by side, readable from across the room. A translation SHALL appear on the shared screen only once it is spoken.
 
@@ -116,10 +129,10 @@ The system SHALL, on any turn, re-translate once when a critical value in the tr
 - **THEN** the translation is not spoken, the controller shows the mismatched values in both languages, the speaker is asked to repeat or rephrase, and the shared screen shows only the original and a repeat notice, never the mismatched translation
 
 ### Requirement: Turn outcome precedence
-The system SHALL give each turn exactly one outcome, choosing in this order: blocked, then escalated, then unclear, then read-back, then final. A turn whose critical values match but whose tone check still fails SHALL be escalated, and one whose confidence check still fails SHALL be escalated or unclear, never read back or spoken. (Amended 2026-11-12 by ADR-003 and CDR-002: `unclear` is added to the order.)
+The system SHALL give each turn exactly one outcome, choosing in this order: blocked, then escalated, then unclear, then read-back, then final. A turn whose critical values match but whose deterministic translation checks still fail SHALL be escalated, and one whose confidence check still fails SHALL be escalated or unclear, never read back or spoken. (Amended 2026-11-12 by ADR-003 and CDR-002: `unclear` is added to the order.)
 
-#### Scenario: Matched dose with failed tone check
-- **WHEN** a dose matches after verification but the tone check fails on both attempts
+#### Scenario: Matched dose with failed translation checks
+- **WHEN** a dose matches after verification but a deterministic translation check fails on both attempts
 - **THEN** the turn is escalated, the dose is not offered for read-back, and nothing is spoken
 
 ### Requirement: Explain-back check
@@ -139,14 +152,14 @@ The system SHALL let either party pause capture, SHALL show a paused notice in b
 (The patient's own device is specified by the `trust-across-the-barrier` change, capability `patient-voice`, 2026-11-10.)
 
 ### Requirement: Human interpreter offer
-The system SHALL offer a human interpreter when a turn still fails its tone check after one retry, when the same speaker has had three consecutive unclear turns, or when the physician marks a moment as high risk, and SHALL let either party request one at any time, showing a connecting state in both languages. A turn that still fails its confidence check after one retry SHALL be marked unclear and the speaker asked to say it again, rather than escalated at once. Critical value mismatches are blocked instead (see Critical value mismatch blocks speech). (Amended 2026-11-12 by ADR-003 and CDR-002: low confidence yields an unclear turn, and a human is offered only after the same speaker's third consecutive unclear turn; tone failures still escalate at once.)
+The system SHALL offer a human interpreter when a turn still fails a deterministic translation check after one retry, when the same speaker has had three consecutive unclear turns, or when the physician marks a moment as high risk, and SHALL let either party request one at any time, showing a connecting state in both languages. A turn that still fails its confidence check after one retry SHALL be marked unclear and the speaker asked to say it again, rather than escalated at once. Critical value mismatches are blocked instead (see Critical value mismatch blocks speech). (Amended 2026-11-12 by ADR-003 and CDR-002: low confidence yields an unclear turn, and a human is offered only after the same speaker's third consecutive unclear turn; deterministic translation failures still escalate at once.)
 
 #### Scenario: Low confidence
 - **WHEN** a translation fails its confidence check on the first attempt and again on the retry
 - **THEN** the turn is marked unclear, not spoken, its translation is not shown on the shared screen, the speaker is asked in both languages and aloud in their language to say it again, and a human interpreter is offered only after the same speaker's third consecutive unclear turn
 
-#### Scenario: Tone failure
-- **WHEN** a translation fails its tone check on the first attempt and again on the retry
+#### Scenario: Translation verification failure
+- **WHEN** a translation fails a deterministic translation check on the first attempt and again on the retry
 - **THEN** the turn is escalated at once, not spoken, its translation is not shown on the shared screen, and a human interpreter is offered in both languages
 
 #### Scenario: Third unclear turn

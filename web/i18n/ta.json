@@ -1,4 +1,7 @@
 {
+  "transcriptReviewTitle": "நீங்கள் இதைத்தான் சொன்னீர்களா?",
+  "transcriptReviewConfirm": "ஆம், இதைத்தான் சொன்னேன்",
+  "transcriptReviewRepeat": "நான் மீண்டும் சொல்கிறேன்",
   "_reviewer": "pending",
   "checkingDose": "மருந்தளவு சரிபார்க்கப்படுகிறது",
   "pleaseRepeat": "தயவுசெய்து மீண்டும் சொல்லுங்கள்",

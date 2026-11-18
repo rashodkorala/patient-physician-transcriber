@@ -29,7 +29,7 @@ from trust import CultureCueDraft, NudgeDraft
 MEDICATIONS = ("aspirin", "nitroglycerin", "metformin", "amlodipine")
 # Markers that let the browser check (web/e2e/week2.mjs) drive blocked, unclear, and escalated turns.
 MISMATCH_MARKER = "(test: mismatch)"  # first number times ten on every attempt, so the turn is blocked
-TONE_MARKER = "(test: tone)"  # tone check fails on every attempt, so the turn is escalated at once
+TONE_MARKER = "(test: tone)"  # deterministic frame check fails on every attempt
 # ADR-003: confidence 0.3 on every attempt, so the turn is unclear, and the speaker's third in a row escalates.
 UNCLEAR_MARKER = "(test: unclear)"
 UNCLEAR_CONFIDENCE = 0.3
@@ -96,7 +96,7 @@ def translate(user: str) -> Draft:
         back_translation=f"{frame}{text}",
         tone_tags=[tone],
         confidence=UNCLEAR_CONFIDENCE if UNCLEAR_MARKER in text else 0.95,
-        affect_phrase=phrase,
+        affect_phrase="sounding confused" if TONE_MARKER in text else phrase,
     )
 
 

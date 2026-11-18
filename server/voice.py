@@ -16,7 +16,6 @@ relay's reporting frame, and certainty is carried by the words only.
 
 import asyncio
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
 from typing import Protocol
 
 from contracts import Language
@@ -33,22 +32,13 @@ DEFAULT_CONCURRENCY = 2
 LANGUAGE_CODES: dict[str, str] = {"pa-IN": "pa", "fr-CA": "fr", "en-CA": "en", "ta-LK": "ta"}
 
 
-@dataclass(frozen=True)
-class Delivery:
-    """How a line is said: an audio tag the model performs (never speaks) and a stability value."""
-
-    tag: str
-    stability: float
-
-
-# IDR-006: the one delivery for everything the interpreter says, whoever spoke and however they said it; the
-# former plain setting, so the interpreter sounds like an interpreter at work.
-DELIVERY = Delivery("[calm]", 0.55)
+# IDR-006: the same stability applies to every line, regardless of speaker or emotion.
+DELIVERY_STABILITY = 0.55
 
 
 def spoken_text(text: str) -> str:
-    """The tag goes first; square brackets in the text itself would be read as tags, so they become round."""
-    return f"{DELIVERY.tag} {text.replace('[', '(').replace(']', ')')}"
+    """Keep brackets in the source text from being interpreted as performance tags."""
+    return text.replace("[", "(").replace("]", ")")
 
 
 class VoiceUnavailable(Exception):
@@ -98,7 +88,7 @@ class ElevenLabsVoice:
             text=spoken_text(text),
             model_id=self.model,
             language_code=LANGUAGE_CODES[language],
-            voice_settings=VoiceSettings(stability=DELIVERY.stability),
+            voice_settings=VoiceSettings(stability=DELIVERY_STABILITY),
             output_format=OUTPUT_FORMAT,
         )
         # Pull the first chunk here, so a vendor failure is a clean error the browser can fall back

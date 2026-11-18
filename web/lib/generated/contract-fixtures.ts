@@ -201,6 +201,7 @@ export const visitStatePublic = {
 } satisfies VisitStatePublic;
 
 export const visitStateController = {
+  "transcriptReview": null,
   "patientLanguage": "pa-IN",
   "physicianLanguage": "en-CA",
   "consent": "2026-11-19T19:02:11.204000+00:00",

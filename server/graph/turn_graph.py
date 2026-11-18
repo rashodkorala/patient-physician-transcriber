@@ -572,7 +572,7 @@ def without_affect_phrase(translation: str, phrase: str) -> str:
 # ---------- graph ----------
 
 
-def build_turn_graph(model: Model, kb: KnowledgeBase):
+def build_turn_graph(model: Model, kb: KnowledgeBase, *, model_tone_check: bool):
     async def emit(config: RunnableConfig, stage: str) -> None:
         callback = (config.get("configurable") or {}).get("emit")
         if callback:
@@ -619,11 +619,10 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
             medications,
             medication_forms(medications, state.get("glossary", [])),
         )
-        # A back-translation in the wrong language leaves the tone check nothing to compare, so it is not asked.
+        # IDR-007: demo turns use the deterministic checks below without a second model request.
         unchecked = back_translation_problem(state, draft)
-        if unchecked:
-            tone = ToneCheck(meaning_preserved=False, certainty_preserved=True, warmth_preserved=True, issue="")
-        else:
+        tone = ToneCheck(meaning_preserved=True, certainty_preserved=True, warmth_preserved=True, issue="")
+        if model_tone_check and not unchecked:
             tone = await model.parse(
                 purpose="tone_check",
                 system=TONE_SYSTEM,
@@ -718,8 +717,8 @@ def build_turn_graph(model: Model, kb: KnowledgeBase):
 class TurnPipeline:
     """Runs the graph for one turn and assembles the CDR-002 TurnResult."""
 
-    def __init__(self, model: Model, kb: KnowledgeBase) -> None:
-        self.graph = build_turn_graph(model, kb)
+    def __init__(self, model: Model, kb: KnowledgeBase, *, model_tone_check: bool = True) -> None:
+        self.graph = build_turn_graph(model, kb, model_tone_check=model_tone_check)
 
     async def run(
         self,
