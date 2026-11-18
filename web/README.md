@@ -1,6 +1,6 @@
 # Web (Next.js)
 
-Screens for the demo: `/control` (physician laptop) and `/screen` (shared TV). See the repository README for how to run everything.
+Screens for the demo: `/control` (physician laptop), `/screen` (shared TV), `/patient` (patient phone or tablet), and `/record` (physician record). See the repository README for how to run everything.
 
 - `npm run build`: production build.
 - `npm run check:contracts`: type-checks `lib/contracts.ts` against the server's contract fixtures (CDR-001, CDR-002).

@@ -167,7 +167,7 @@ Visit state is in memory (ADR-007).
 | `server/` | FastAPI back end. `main.py` is the app and visit WebSocket, `graph/` the LangGraph turn pipeline, `chains/` the note, summary, and explain-back chains, `critical_values.py` the value comparison, `hash_chain.py` the record integrity chain, `kb/` the knowledge base, and `tests/` the pytest suite. |
 | `openspec/` | Behaviour. `specs/` holds accepted specs, `changes/` holds each change with its proposal, design, specs, and tasks, and `config.yaml` holds the rules for artifacts, apply, and archive. |
 | `openspec/tdr/` | Decisions. One folder per record type, the [registry](openspec/tdr/index.md), the [guide](openspec/tdr/README.md), and the templates. |
-| `docs/` | The [demo scripts](docs/demo-night-english-french-voice-script.md), the [speech test log](docs/speech-test.md), the [known gaps](docs/known-gaps.md), and product research. |
+| `docs/` | The [demo scripts](docs/demo-night-english-french-voice-script.md), the [speech test log](docs/speech-test.md), the [known gaps](docs/known-gaps.md), product research, the README screenshots in `images/`, and synthetic Tamil patient audio for solo rehearsal in `audio/`. |
 | `scripts/` | `dev.sh` starts the server and web app together, and `check_tdr.py` validates the decision records. |
 | `.github/pull_request_template.md` | The pull request checklist for OpenSpec tasks and decisions. |
 | `AGENTS.md` | The working rules for agents and humans. `CLAUDE.md` points to it. |
@@ -247,3 +247,8 @@ Each layer covers something different:
 - **Clinical and deployment readiness.** The prototype needs broader translation and medication validation, a production interpreter integration, access controls, durable records, and a privacy and deployment review. Visit state is in memory and clears on backend restart. Use fictional content on a trusted demo network.
 
 See the [known gaps](docs/known-gaps.md) and the [parked product roadmap](openspec/changes/add-multilingual-medical-consultation) for detail.
+
+## Licence
+
+Released under the [MIT licence](LICENSE).
+The software is a demo prototype and is not a medical device.

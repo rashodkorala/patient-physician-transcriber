@@ -7,6 +7,10 @@ server/.env
 server/.venv/
 __pycache__/
 .pytest_cache/
+.ruff_cache/
+
+# macOS
+.DS_Store
 
 # Web
 web/node_modules/
